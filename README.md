@@ -205,3 +205,9 @@ Comparisons against generated "golden" data files are skipped, because those fil
 Work in progress and built for learning: expect gaps, guesses (marked in the docs as inferences) and breaking changes.
 Issues about protocol details or server architecture are welcome; requests involving the official game, its servers,
 its client or anti-cheat are not.
+
+## License
+
+MIT (see [LICENSE](LICENSE)): you may use, change and share the code freely, as long as you keep the copyright
+notice, i.e. credit the original source (https://github.com/MrGreenCheezz/albion-local-server). The license covers this
+repository's own code only; it grants nothing about the game, its client, its data or its trademarks.
