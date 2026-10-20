@@ -143,6 +143,9 @@ public sealed record BuildingTemplate
     /// </summary>
     public bool Enchants => Kind is "meldbuilding";
 
+    /// <summary>Awakens weapons and modifies their traits (op 55 AwakenLegendaryItem, ACT 8): the client's component (cm2) is on cpj only (awakening SPEC §1).</summary>
+    public bool Awakens => Kind is "meldbuilding";
+
     /// <summary>Rerolls an item's quality (op 55 RerollQuality, ACT 6): the client's component (cmk) exists on the repair shop class cpl only.</summary>
     public bool RerollsQuality => Kind is "repairbuilding";
 

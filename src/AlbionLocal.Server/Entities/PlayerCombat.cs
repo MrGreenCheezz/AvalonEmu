@@ -60,6 +60,13 @@ public sealed class PlayerCombat
     /// </summary>
     public Dictionary<byte, Systems.MultiSlot> Multi { get; } = [];
 
+    /// <summary>
+    /// Its stored targets (stageN spells2, storetargets): a unit or a point (a spell area's centre) under a tag until a GameTimeStamp, oldest
+    /// first; a target="storedtarget" spell (the multispell follow-ups: AFTER_IMAGE_RETURN, SHOCKWAVE_PUNCH2, ICE_SCULPTURE_EXPLODE) is cast at
+    /// the newest of its storedtargettag (<see cref="Systems.SpellCasts.Stored"/>).
+    /// </summary>
+    public List<Systems.StoredTarget> Stored { get; } = [];
+
     /// <summary>The batch use from the inventory under way (UseConsumableFromInventory, <see cref="Systems.Consumables"/>); null when none.</summary>
     public Systems.Consumables.Batch? Batch { get; internal set; }
 
@@ -155,6 +162,12 @@ public sealed record PendingCast(SpellTemplate Spell, byte Slot, byte Counter, I
     public double CcAbilityPower { get; init; } = AbilityPower;
 
     public bool MountSpell { get; init; }
+
+    /// <summary>The 0-based extra slot it was cast from (the extra action bars, <see cref="Systems.ExtraBars"/>; wire slot 25), -1 for none.</summary>
+    public int ExtraIndex { get; init; } = -1;
+
+    /// <summary>The slot the plugins' args carry: 200 + <see cref="ExtraIndex"/> for an extra-slot cast (SpellSlot.Extra1..12), else <see cref="Slot"/>.</summary>
+    public byte HookSlot => ExtraIndex >= 0 ? (byte)(Plugin.Api.SpellSlots.ExtraBase + ExtraIndex) : Slot;
 }
 
 /// <summary>

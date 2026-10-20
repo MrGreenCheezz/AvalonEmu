@@ -181,6 +181,14 @@ public sealed record MobTemplate
     /// <summary>&lt;KillRewardBuff name target="threathistory"&gt;: applied to the players of its threat list at its death (the dragons' curse).</summary>
     public IReadOnlyList<(string Spell, string Target)> KillRewardBuffs { get; init; } = [];
 
+    /// <summary>
+    /// &lt;EscapeSpellSequence&gt;&lt;escapespell name target&gt; (self, escapeposition): what a tracking mob casts in order as it flees
+    /// (stageN spells2, <see cref="AI.BehaviourAI.Escape"/>); empty without one. <see cref="EscapeReference"/>: the mob whose sequence it uses.
+    /// </summary>
+    public IReadOnlyList<(string Spell, string Target)> EscapeSpells { get; init; } = [];
+
+    public string? EscapeReference { get; init; }
+
     public override string ToString() => $"{Name} ({Id})";
 }
 
@@ -299,6 +307,9 @@ public sealed class MobStore
                 SpawnSpells = [.. (e.Element("SpawnSpells")?.Elements("spawnspell") ?? []).Select(d => (string?)d.Attribute("name") ?? "").Where(n => n.Length > 0)],
                 KillRewardBuffs = [.. e.Elements("KillRewardBuff").Select(d => ((string?)d.Attribute("name") ?? "", ((string?)d.Attribute("target") ?? "threathistory").ToLowerInvariant()))
                     .Where(d => d.Item1.Length > 0)],
+                EscapeSpells = [.. (e.Element("EscapeSpellSequence")?.Elements("escapespell") ?? []).Select(d => ((string?)d.Attribute("name") ?? "", ((string?)d.Attribute("target") ?? "self").ToLowerInvariant()))
+                    .Where(d => d.Item1.Length > 0)],
+                EscapeReference = (string?)e.Element("EscapeSpellSequence")?.Attribute("reference"),
             });
         }
         numbers.Report();

@@ -1,0 +1,7 @@
+{
+  // A content pack (tools/AlbionLocal.ModKit/README.md). Name = the folder; Client = the client build the pack was written for.
+  "Name": "example-blade",
+  "Version": "1.0.0",
+  "Client": "albiononline-win32-full-1.32.030.345319",
+  "Description": "Clockwork Blade: a T6 one-handed sword with Clockwork Dash (a dash that leaves a slowing field)"
+}

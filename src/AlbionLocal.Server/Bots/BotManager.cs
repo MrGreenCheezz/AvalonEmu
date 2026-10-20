@@ -115,23 +115,23 @@ public sealed class BotManager(World world)
 
     public BotOptions Options => world.Config.Bots;
 
-    private (double Share, Progression? Board) _gear;
+    private readonly Dictionary<double, Progression> _gear = [];
 
     /// <summary>
-    /// The destiny board a bot wears its gear with (Bots:Gear:Mastery): the world's unlock-all one at 1, else a copy with every level × the
-    /// share (rounded); null without game data. Built once per share.
+    /// The destiny board a bot wears its gear with (Bots:Gear:Mastery; a companion's Companions:GearMastery, stageN botpower): the world's
+    /// unlock-all one at 1, else a copy with every level × the share (rounded); null without game data. Built once per share.
     /// </summary>
-    public Progression? GearProgression()
+    public Progression? GearProgression(double? share = null)
     {
-        var share = Options.GearMastery;
-        if (share >= 1 || world.UnlockAll is not { } all) return world.UnlockAll;
-        if (_gear.Board is null || _gear.Share != share)
+        var s = share ?? Options.GearMastery;
+        if (s >= 1 || world.UnlockAll is not { } all) return world.UnlockAll;
+        if (!_gear.TryGetValue(s, out var board))
         {
-            var board = all.Clone();
-            foreach (var (id, level) in all.Levels) board.Levels[id] = (int)Math.Round(level * share, MidpointRounding.AwayFromZero);
-            _gear = (share, board);
+            board = all.Clone();
+            foreach (var (id, level) in all.Levels) board.Levels[id] = (int)Math.Round(level * s, MidpointRounding.AwayFromZero);
+            _gear[s] = board;
         }
-        return _gear.Board;
+        return board;
     }
 
     public BotSettings Settings => world.BotSettings;
@@ -177,7 +177,7 @@ public sealed class BotManager(World world)
     public string? ZoneOf(Map map)
     {
         if (map.Template is not { } t || DungeonLayout.IsInstance(map.Cluster) || world.Expeditions.IsLive(map.Cluster) || CorruptedData.IsInstance(map.Cluster)
-            || HellgateData.IsInstance(map.Cluster) || Settings.Exclude.Contains(map.Cluster)) return null;
+            || HellgateData.IsInstance(map.Cluster) || ArenaIds.IsInstance(map.Cluster) || Settings.Exclude.Contains(map.Cluster)) return null;
         if (MistsIds.IsInstance(map.Cluster)) return world.Mists.Find(map.Cluster) is null ? null : "Mists";
         var type = t.Info.Type;
         if (type.StartsWith("PLAYERCITY_", StringComparison.Ordinal)) return "City";
@@ -197,16 +197,20 @@ public sealed class BotManager(World world)
     public void Update(TimeSpan now)
     {
         foreach (var gone in _maps.Keys.Where(m => m.Unloaded).ToList()) Unloaded(gone); // a map dropped by another system
-        if (!Enabled) return;
+        var enabled = Enabled;
         foreach (var map in world.Maps.Maps)
         {
             if (map.HumanCount == 0 && map.Bots.Count == 0) continue;
-            Arrivals(map, now);
-            Populate(map, now);
+            if (enabled)
+            {
+                Arrivals(map, now);
+                Populate(map, now);
+            }
             if (map.Bots.Count == 0) continue;
             foreach (var bot in map.Bots.Values.ToList())
             {
                 var info = bot.Bot!;
+                if (!enabled && info.Role != BotRole.Companion) continue; // stageN: hired companions walk and think with the world's bots off too
                 if (info.Fight.Defeated)
                 {
                     if (info.Fight.DespawnAt is { } at && now >= at) Despawn(bot, "defeated", BotRefill.Respawn);
@@ -217,9 +221,10 @@ public sealed class BotManager(World world)
                 // On a spell's forced path and 300 ms after it (stageJ pvp-spells SPEC §2.9) the brain waits: a stop or a walk now would cut the path short.
                 if (bot.Map != map || now < info.NextThink || SpellMovement.Holds(bot, world.GameNow)) continue;
                 // A fighting bot decides every Bots:Combat:TickMs (a swing interval is ~1 s), an idle one every Bots:ThinkSeconds.
-                info.NextThink = now + (info.Fight.Active ? TimeSpan.FromMilliseconds(Options.CombatTickMs) : Seconds(Options.ThinkSeconds));
+                info.NextThink = now + (info.Fight.Active || info.Role == BotRole.Companion ? TimeSpan.FromMilliseconds(Options.CombatTickMs) : Seconds(Options.ThinkSeconds));
                 // A corrupted dungeon's invader hunts the owner over the whole map, seen or not (stageL corrupted SPEC §4.5); a hellgate's enemy the party.
-                if (info.Fight.Active || info.Role is BotRole.Invader or BotRole.Hellgate || Active(map, bot)) info.Brain.Think(bot, now);
+                // StageN: a companion thinks wherever its owner is (it is never far from him).
+                if (info.Fight.Active || info.Role is BotRole.Invader or BotRole.Hellgate or BotRole.Arena or BotRole.Companion || Active(map, bot)) info.Brain.Think(bot, now);
             }
         }
     }
@@ -280,6 +285,8 @@ public sealed class BotManager(World world)
             if (slot.Role == BotRole.Drifter && !DriftersWanted(map)) continue; // stageL mists: Mists:DrifterNeedsRed
             if (spawned >= Options.SpawnPerPass || map.Bots.Count >= Options.MaxPerMap || _total >= Options.MaxTotal) break;
             var tier = Factory.TierFor(zone, map.Template.Name.Tier ?? 0, Random);
+            // StageN botpower: the patrols of red and black zones (the roads too) one tier above (Bots:Gear:RedZoneTierBonus).
+            if (slot.Role == BotRole.Patrol && RedOrBlack(zone)) tier = Math.Clamp(tier + Options.RedZoneTierBonus, 1, 8);
             GatherProfile? profile = null;
             if (slot.Role == BotRole.Gatherer && (profile = ProfileFor(map, tier)) is null)
             {
@@ -344,10 +351,16 @@ public sealed class BotManager(World world)
     /// <summary>Whether patrols may be on <paramref name="map"/>: its rule lets a Red player be fought (PvpAllowed, PvpForced, None).</summary>
     public bool PatrolsAllowed(Map map) => Pvp.RulesOf(world, map).Rule is PvpRule.PvpAllowed or PvpRule.PvpForced or PvpRule.None;
 
-    /// <summary>A group size of Bots:Patrol:GroupSize; on a road (zone class Roads) of Bots:Roads:PatrolGroupSize (stageL roads SPEC §5.6).</summary>
+    /// <summary>Whether the zone class <paramref name="zone"/> is a red or black zone, or a road (black) (stageN botpower).</summary>
+    public static bool RedOrBlack(string zone) => zone is "Red" or "Black" or "Roads";
+
+    /// <summary>
+    /// A group size of Bots:Patrol:GroupSize; on a road (zone class Roads) of Bots:Roads:PatrolGroupSize (stageL roads SPEC §5.6); in a red or
+    /// black zone of Bots:Patrol:RedGroupSize (stageN botpower).
+    /// </summary>
     private int GroupSize(string zone)
     {
-        var (min, max) = zone == "Roads" ? Options.RoadsPatrolGroupSize : Options.GroupSize;
+        var (min, max) = zone == "Roads" ? Options.RoadsPatrolGroupSize : zone is "Red" or "Black" ? Options.RedGroupSize : Options.GroupSize;
         return Math.Max(1, (int)Math.Round(min + Random.NextDouble() * (max - min)));
     }
 
@@ -516,6 +529,13 @@ public sealed class BotManager(World world)
 
     private TimeSpan Seconds((double Min, double Max) range) => TimeSpan.FromSeconds(range.Min + Random.NextDouble() * (range.Max - range.Min));
 
+    /// <summary>A whole number of <paramref name="range"/> (min..max, both included; stageN botpower).</summary>
+    private int Roll((double Min, double Max) range)
+    {
+        var (min, max) = ((int)Math.Round(range.Min), (int)Math.Round(range.Max));
+        return max <= min ? min : min + Random.Next(max - min + 1);
+    }
+
     // ---- what gatherers gather ----
 
     /// <summary>
@@ -574,7 +594,7 @@ public sealed class BotManager(World world)
     /// finds nothing to gather.
     /// </summary>
     public Player? Spawn(Map map, BotRole role, int tier, Vector2 at, float facing, BotSlot? slot = null, BotPoi? poi = null, GatherProfile? profile = null,
-        BotGroup? group = null, double healthFactor = 1, double damageFactor = 1)
+        BotGroup? group = null, double healthFactor = 1, double damageFactor = 1, bool? elite = null)
     {
         if (map.Template is null) return null;
         if (role == BotRole.Gatherer && (profile ??= ProfileFor(map, tier)) is null) return null;
@@ -594,10 +614,23 @@ public sealed class BotManager(World world)
             role == BotRole.Gatherer ? GathererFlag(map) : null);
         var session = WorldSession.ForBot(world);
         var inventory = new Inventory(character.EquipmentContainer, character.InventoryContainer);
-        foreach (var item in gear) inventory.Equipment.Put(Array.IndexOf(Inventory.SlotNames, item.Slot), session.NewBotItem(item));
+        // StageN botpower: a world bot's gear of quality Bots:Gear:Quality; a patrol or Drifter an elite with Bots:Gear:EliteChance (its
+        // weapon and armour enchanted where items.xml has the level, of Bots:Gear:EliteQuality).
+        var worldBot = role is BotRole.Patrol or BotRole.Drifter or BotRole.Gatherer;
+        // A GM's .bot spawn … elite (<paramref name="elite"/> true) forces it, for any role.
+        var isElite = elite ?? (Patrols(role) && slot is not null && Random.NextDouble() < Options.EliteChance);
+        if (isElite) gear = [.. gear.Select(g => Factory.Enchanted(g, Roll(Options.EliteEnchant)))];
+        foreach (var item in gear)
+            inventory.Equipment.Put(Array.IndexOf(Inventory.SlotNames, item.Slot),
+                session.NewBotItem(item, quality: !worldBot ? 1 : Roll(isElite ? Options.EliteQuality : Options.Quality)));
         // StageM bots: an armed gatherer's weapon waits in its bag (its tool has no spell slot); BotCombat.Arm swaps it in when attacked.
         if (role == BotRole.Gatherer && Factory.GathererWeapon(tier, Random) is { } weapon && inventory.Bag.FreeSlot() is var free and >= 0)
-            inventory.Bag.Put(free, session.NewBotItem(weapon));
+            inventory.Bag.Put(free, session.NewBotItem(weapon, quality: Roll(Options.Quality)));
+        // StageN botpower: healing potions in the potion slot (Bots:Combat:Potions), drunk by BotCombat's tactics when low.
+        if (worldBot && Roll(Options.Potions) is var potions and > 0 && Factory.ResolveAny("T{t}_POTION_HEAL", tier) is { Slot: "potion" } potion)
+            inventory.Equipment.Put(8, new Item(world.ObjectIds.Next(), potion, potions, 1, potion.FullDurabilityRaw, [], [], null));
+        if (Patrols(role) && Options.Food && Factory.ResolveAny("T{t}_MEAL_STEW", tier) is { Slot: "food" } meal)
+            inventory.Equipment.Put(9, new Item(world.ObjectIds.Next(), meal, 1, 1, meal.FullDurabilityRaw, [], [], null));
         IBotBrain brain = role switch
         {
             BotRole.Gatherer => new GathererBrain(this, profile!, (int)Math.Round(Options.GathererNodes.Min + Random.NextDouble() * (Options.GathererNodes.Max - Options.GathererNodes.Min))),
@@ -605,6 +638,7 @@ public sealed class BotManager(World world)
 
             BotRole.Invader => new InvaderBrain(this, b => b.World.Corrupted.TargetOf(b)),
             BotRole.Hellgate => new InvaderBrain(this, b => b.World.Hellgates.TargetOf(b)), // stageL hellgates: hunts the party
+            BotRole.Arena => new InvaderBrain(this, b => b.World.Arenas.TargetOf(b)), // stage N arena: hunts the other team
             _ => new CityBrain(this),
         };
         var stay = now + TimeSpan.FromMinutes(Options.StayMinutes.Min + Random.NextDouble() * (Options.StayMinutes.Max - Options.StayMinutes.Min));
@@ -616,7 +650,7 @@ public sealed class BotManager(World world)
         var info = new BotInfo
         {
             Role = role, Tier = tier, PersonaId = slot?.PersonaId ?? $"gm:{id}", Brain = brain, Avatar = avatar, Home = at, Slot = slot, SpawnedAt = now,
-            StayUntil = slot is null ? TimeSpan.MaxValue : stay, Group = group, HealthFactor = healthFactor, DamageFactor = damageFactor,
+            StayUntil = slot is null ? TimeSpan.MaxValue : stay, Group = group, HealthFactor = healthFactor, DamageFactor = damageFactor, Elite = isElite,
             NextThink = now + TimeSpan.FromSeconds(Random.NextDouble() * Options.ThinkSeconds.Max),
         };
         // StageM bots: what a gatherer carries from its spawn (Gear.GathererStartCarry), minted only by its defeat's bag like its harvests.
@@ -639,8 +673,9 @@ public sealed class BotManager(World world)
         (brain as CityBrain)?.Begin(poi, now);
         bot.Visibility.Join(map, at);
         bot.Visibility.AnnounceSelf(); // the humans already in range get its NewCharacter now (Join deferred it)
+        BotCombat.Eat(this, bot); // stageN botpower: its meal's buff (Bots:Combat:Food)
         Log.Debug("bots", string.Create(CultureInfo.InvariantCulture,
-            $"map {map.Cluster}: {role} bot '{name}' T{tier} ({info.PersonaId}) at ({at.X:0.#}, {at.Y:0.#}), {gear.Count} items, seen by {bot.Observers.Count}"));
+            $"map {map.Cluster}: {role} bot '{name}' T{tier}{(isElite ? " elite" : "")} ({info.PersonaId}) at ({at.X:0.#}, {at.Y:0.#}), {gear.Count} items, seen by {bot.Observers.Count}"));
         return bot;
     }
 
@@ -664,6 +699,7 @@ public sealed class BotManager(World world)
         info.Group?.Members.Remove(bot);
         _live.Remove(bot.Character.Name);
         _total--;
+        if (info.Role == BotRole.Companion) world.Companions.Gone(bot, why); // stageN: out of its owner's list and party
         if (info.Slot is { } slot && slot.Bot == bot)
         {
             var now = world.Clock.Now;
@@ -682,7 +718,7 @@ public sealed class BotManager(World world)
     /// <summary>Every bot of <paramref name="map"/> despawned (<see cref="Despawn"/>); returns how many.</summary>
     public int Clear(Map map, string why, BotRefill refill)
     {
-        var bots = map.Bots.Values.ToList();
+        var bots = map.Bots.Values.Where(b => !b.IsCompanion).ToList(); // stageN: hired companions go with their owner only (Companions)
         foreach (var bot in bots) Despawn(bot, why, refill);
         if (bots.Count > 0) Log.Info("bots", $"map {map.Cluster}: {bots.Count} bot(s) gone: {why}");
         return bots.Count;
@@ -696,6 +732,86 @@ public sealed class BotManager(World world)
     {
         foreach (var bot in map.Bots.Values.ToList()) Despawn(bot, "the map is unloaded", BotRefill.Now);
         _maps.Remove(map);
+    }
+
+    // ---- companions (stageN companions SPEC §1) ----
+
+    /// <summary>
+    /// StageN companions: a new companion bot of <paramref name="tier"/> wearing <paramref name="gear"/> (each item's spells chosen with
+    /// <paramref name="prefer"/> first) at <paramref name="at"/> on <paramref name="map"/>, thinking with <paramref name="brain"/>, as a GM's bot
+    /// (no slot, no stay): onto the map with full bars, into the view of the humans around. Null when no free name was found.
+    /// </summary>
+    public Player? SpawnCompanion(Map map, int tier, Vector2 at, float facing, IReadOnlyList<ItemTemplate> gear, Func<SpellTemplate, bool>? prefer,
+        IBotBrain brain, CompanionInfo companion)
+    {
+        if (BotNames.Next(Settings, Random, Taken) is not { } name) return null;
+        var now = world.Clock.Now;
+        var id = world.ObjectIds.Next();
+        var (character, avatar, _) = Factory.Make(BotRole.Companion, tier, map.Cluster, name, at, facing, Random);
+        var session = WorldSession.ForBot(world);
+        var inventory = new Inventory(character.EquipmentContainer, character.InventoryContainer);
+        foreach (var item in gear) inventory.Equipment.Put(Array.IndexOf(Inventory.SlotNames, item.Slot), session.NewBotItem(item, prefer));
+        var info = new BotInfo
+        {
+            Role = BotRole.Companion, Tier = tier, PersonaId = $"companion:{id}", Brain = brain, Avatar = avatar, Home = at, SpawnedAt = now,
+            NextThink = now, Companion = companion,
+        };
+        var bot = new Player(session, world, id, character, inventory, GearProgression(world.Config.Companions.GearMastery)) { Bot = info, Facing = facing, MoveStamp = world.GameNow };
+        session.AttachBot(bot);
+        Flagging.Arrive(bot, Pvp.RulesOf(world, map));
+        map.AddBot(bot);
+        bot.RecalculateStats(world.GameNow);
+        _live.Add(name);
+        _total++;
+        bot.Visibility.Join(map, at);
+        bot.Visibility.AnnounceSelf();
+        Log.Info("bots", string.Create(CultureInfo.InvariantCulture,
+            $"map {map.Cluster}: companion '{name}' ({companion.Kind}, T{tier}) of '{companion.OwnerName}' at ({at.X:0.#}, {at.Y:0.#}), {gear.Count} items"));
+        return bot;
+    }
+
+    /// <summary>
+    /// StageN companions: <paramref name="bot"/> is put at <paramref name="at"/> on <paramref name="map"/>: on its own map a Teleport (event 4) to
+    /// its observers; on another one it leaves its map as a despawn does (a Leave to who knows it, its fight, casts and toggles dropped) and joins
+    /// <paramref name="map"/> (NewCharacter to the humans around), standing with full bars when it was knocked down.
+    /// </summary>
+    public void PutCompanion(Player bot, Map map, Vector2 at, float facing)
+    {
+        if (bot.Bot is not { } info) return;
+        info.Motion.Reset();
+        if (bot.Map == map)
+        {
+            bot.Teleport(at, facing, Time);
+            return;
+        }
+        var down = bot.Combat.Down is not null;
+        if (bot.Map is { } from)
+        {
+            StopEmote(bot);
+            SpellCasts.EndToggles(bot, SpellCasts.ToggleEnd.Left);
+            Combat.Leave(bot);
+            bot.Visibility.LeavePlayers();
+            from.RemoveBot(bot);
+        }
+        bot.Combat.InCombat = false;
+        bot.Combat.Hit = false;
+        info.Fight.End();
+        bot.Character.Cluster = map.Cluster;
+        (bot.Character.PositionX, bot.Character.PositionY, bot.Character.Direction) = (at.X, at.Y, facing);
+        bot.Movement = new MovementState(at, at, 0, Time) { Direction = facing, Stamp = bot.NextMoveStamp() };
+        bot.Facing = facing;
+        Flagging.Arrive(bot, Pvp.RulesOf(world, map));
+        map.AddBot(bot);
+        var ticks = world.GameNow;
+        if (down)
+        {
+            bot.Health.Set(bot.Health.Max, ticks);
+            bot.Energy.Set(bot.Energy.Max, ticks);
+        }
+        bot.RecalculateStats(ticks, keep: true);
+        bot.Visibility.Join(map, at);
+        bot.Visibility.AnnounceSelf();
+        Log.Debug("bots", $"companion '{bot.Character.Name}' follows to {map.Cluster}");
     }
 
     // ---- names ----

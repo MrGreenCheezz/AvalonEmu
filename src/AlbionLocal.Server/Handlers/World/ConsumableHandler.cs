@@ -78,7 +78,9 @@ public sealed partial class WorldSession
     /// ids with [8]/[9] = 0, 6 0, 7 the spell slots with [12]/[13] = -1}, no keys 8 and 9, to the player and its observers, and no
     /// RegenerationPlayerComboChanged (consumables give no bars).
     /// </summary>
-    internal void SendConsumedEquipment(Player player) =>
+    internal void SendConsumedEquipment(Player player)
+    {
+        world.ExtraBars.Refresh(player, Plugin.Api.ExtraBarChangeSource.Equipment); // a used-up potion or food leaves the extra bars too
         SendAround(player, new CharacterEquipmentChangedEvent
         {
             ddn = player.Id,                               // [0]
@@ -87,4 +89,5 @@ public sealed partial class WorldSession
             bw9 = SpellSlots(player.Inventory),            // [7]
             Extra = new() { [6] = (byte)0 },               // [6] 0, as captured
         });
+    }
 }

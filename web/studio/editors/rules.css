@@ -1,0 +1,42 @@
+/* The no-code rules editor (editors/rules.mjs): "When → If → Do → Whom" blocks, step cards, the simulation. */
+
+.rules-group .rule-row .rule-glyph { width: 28px; text-align: center; font-size: 18px; color: var(--accent); flex: none; }
+.rules-group .rule-row.rule-off .rule-glyph, .rules-group .rule-row.rule-off .ename { color: var(--muted); }
+.dot.ok-dot { background: var(--ok); }
+.chip.ok-chip { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+
+.rules-view .rule-icon { width: 48px; height: 48px; border-radius: 10px; display: grid; place-items: center; font-size: 26px; background: var(--panel2); color: var(--accent); flex: none; }
+.rules-view .rule-name { font-size: 18px; font-weight: 600; min-width: 220px; width: min(520px, 100%); }
+.rules-view .title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.rules-view .sub { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.rule-block h3 { margin: 0 0 10px; font-size: 15px; display: flex; align-items: baseline; gap: 6px; }
+.rule-block .rule-word { text-transform: uppercase; letter-spacing: .06em; color: var(--accent); font-weight: 700; }
+.rule-block .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 12px; }
+
+.step-card { border: 1px solid var(--line); border-left: 3px solid var(--accent2); border-radius: 8px; padding: 8px 10px; margin: 8px 0; background: var(--panel); }
+.step-card.action-card { border-left-color: var(--accent); }
+.step-card.negated { border-left-color: var(--warn); }
+.step-card .step-head { align-items: center; gap: 6px; }
+.step-card .step-num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--chip); font-size: 12px; flex: none; }
+.step-card .rule-type { min-width: 220px; max-width: 100%; }
+.step-card .step-params { margin-top: 6px; }
+.step-card .num { width: 64px; }
+.step-card .not-toggle { font-weight: 600; }
+.step-card.has-blocker, .rule-block .field.has-blocker { outline: 1px solid var(--bad); }
+
+.rule-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.rule-gallery .rule-template { cursor: pointer; margin: 0; }
+.rule-gallery .rule-template:hover { border-color: var(--accent); }
+
+.rules-right h4 { margin: 12px 0 6px; }
+.sim-verdict { font-weight: 700; padding: 6px 10px; border-radius: 6px; margin: 8px 0 4px; }
+.sim-verdict.yes { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.sim-verdict.no { background: color-mix(in srgb, var(--bad) 15%, transparent); color: var(--bad); }
+.sim-list { margin: 6px 0; padding-left: 20px; }
+.sim-list li { margin: 3px 0; overflow-wrap: anywhere; }
+.sim-list li.pass { color: var(--ok); }
+.sim-list li.fail { color: var(--bad); }
+.sim-list.actions li { color: var(--fg); }
+.rule-json { width: 100%; min-height: 360px; }
+.rule-json-view pre { max-height: 360px; overflow: auto; }

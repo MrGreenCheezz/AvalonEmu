@@ -64,6 +64,12 @@ public sealed class AiLeaf(XElement e) : AiCond
 
     public XElement Element { get; } = e;
 
+    /// <summary>area (IfHighestArea, IfPlayersInArea, IfTargetIsInHighestArea): a named arc of the AI's TargetAreaDefinition.</summary>
+    public string? Area { get; } = (string?)e.Attribute("area");
+
+    /// <summary>The condition children of the leaf itself (IfTargetIsInHighestArea's IfTargetRange): the players an area counts; null = all.</summary>
+    public AiCond? Inner { get; init; }
+
     /// <summary><paramref name="v"/> against <see cref="Number"/> with <see cref="Op"/>.</summary>
     public bool Compare(double v) => Op.ToLowerInvariant() switch
     {
@@ -128,6 +134,9 @@ public sealed class AiSpell : AiNode
     public bool RelativeToCaster { get; init; }
 
     public bool NewSlot { get; init; }
+
+    /// <summary>&lt;RandomGroundTarget radius innerradius origin&gt; (stageN spells2): the ground point is a random free point of that ring around the target (origin="target") or the mob.</summary>
+    public (double Radius, double Inner, bool AtTarget)? RandomGround { get; init; }
 
     public string? SayText { get; init; }
 
@@ -232,6 +241,8 @@ public sealed class AiScript
         "ifistargettopofthreatlist", "iftotalnumberoftargetsonthreatlist", "ifmobdistancetohome", "ifspellactive", "ifvariable",
         "ifsummonedmobcount", "ifistargetcasting", "ifistargetchanneling", "ifownenergypercentage", "iftargetenergypercentage",
         "ifspellcategoryactive", "ifisanyfactionmemberinrange", "iftargettype",
+        // StageN spells2: damage taken, and the threat and player counts of the areas around the mob (the fire dragon).
+        "iftargettookdamage", "ifhighestarea", "ifplayersinarea", "iftargetisinhighestarea",
     };
 
     /// <summary>The mob whose &lt;AI&gt; this is after the references (the cache key).</summary>
@@ -247,6 +258,9 @@ public sealed class AiScript
     public (double First, double Min, double Max) IdleTimes { get; init; }
 
     public IReadOnlyDictionary<string, AiNode[]> Events { get; init; } = NoEvents;
+
+    /// <summary>&lt;TargetAreaDefinition spell&gt;: the spell whose spelleffectarea arcs name the areas of the area conditions (stageN spells2); null = none.</summary>
+    public string? AreaSpell { get; init; }
 
     /// <summary>The slot table (R7): spell names by slot.</summary>
     public IReadOnlyList<string> Slots { get; init; } = [];
@@ -285,7 +299,11 @@ public sealed class AiScript
         foreach (var n in idle) Number(n, slots);
         var idleTimes = ai.Element("IdleBehaviour") is { } ib
             ? (Num(ib, "idleTimeUntilFirstAction", 5), Num(ib, "idleTimeAfterActionStartMin", 1), Num(ib, "idleTimeAfterActionStartMax", 2)) : (0, 0, 0);
-        return new AiScript { Source = source, Vars = vars, Behaviour = behaviour, Idle = idle, IdleTimes = idleTimes, Events = events, Slots = slots, Unknown = unknown };
+        return new AiScript
+        {
+            Source = source, Vars = vars, Behaviour = behaviour, Idle = idle, IdleTimes = idleTimes, Events = events, Slots = slots, Unknown = unknown,
+            AreaSpell = (string?)ai.Element("TargetAreaDefinition")?.Attribute("spell"),
+        };
     }
 
     /// <summary>The slot numbering of R7 (b3x.o 0x1807f40a0), into <paramref name="slots"/>.</summary>
@@ -352,7 +370,8 @@ public sealed class AiScript
                 case "or": return new AiAny(parts());
                 case "and": return new AiAll(parts());
             }
-            var leaf = new AiLeaf(e);
+            var inner = e.Elements().Where(IsCondition).Select(Cond).ToArray();
+            var leaf = new AiLeaf(e) { Inner = inner.Length == 0 ? null : inner.Length == 1 ? inner[0] : new AiAll(inner) };
             if (!KnownLeaves.Contains(leaf.Kind) && !Systems.SpellConditions.Known.Contains(leaf.Tag)) Count(leaf.Tag);
             return leaf;
         }
@@ -366,7 +385,7 @@ public sealed class AiScript
             {
                 case "Spell":
                     foreach (var c in e.Elements().Where(c => !IsCondition(c) && c.Name.LocalName is not ("Event" or "RandomGroundTarget"))) Count("Spell/" + c.Name.LocalName);
-                    if (e.Element("RandomGroundTarget") is not null) Count("RandomGroundTarget");
+                    var rgt = e.Element("RandomGroundTarget");
                     return new AiSpell
                     {
                         When = when, Weight = weight, Events = events, Spell = (string?)e.Attribute("name") ?? "",
@@ -375,6 +394,8 @@ public sealed class AiScript
                         GroundAngle = Num(e, "groundtargetangle"),
                         RelativeToCaster = string.Equals((string?)e.Attribute("groundtargetrelativeto"), "caster", StringComparison.OrdinalIgnoreCase),
                         NewSlot = Flag(e, "isNewSpellSlot"), SayText = (string?)e.Attribute("saytext"),
+                        RandomGround = rgt is null ? null
+                            : (Num(rgt, "radius"), Num(rgt, "innerradius"), !string.Equals((string?)rgt.Attribute("origin"), "caster", StringComparison.OrdinalIgnoreCase)),
                     };
                 case "If":
                     var actions = Actions(e);

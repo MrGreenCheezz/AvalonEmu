@@ -1,0 +1,24 @@
+{
+  // example-spells' defaults; override keys in data/plugins/example-spells/config.json, then .plugins reload example-spells.
+
+  // (a) Clockwork Dash: the example-blade pack's spell (mods/example-blade). Without the pack, FallbackSpell gets the field instead.
+  "DashSpell": "CLOCKWORK_DASH",
+  "FallbackSpell": "SWORD_SPIN",
+  "SlowSpell": "CLOCKWORK_DASH_SLOW",            // the pack's 1 s slow; FallbackSlow without the pack
+  "FallbackSlow": "PASSIVE_SLOWPOISON_EFFECT_MOBS",
+  "FieldSeconds": 6,                              // the plugin's field lingers this long at the dash's aim point
+  "FieldRadius": 4,
+  "FieldTickSeconds": 0.5,
+
+  // (b) The gallop: this mount gallops with FastGallopBuff at night (server local time) or while the rider has WhenBuff on.
+  "Mount": "T5_MOUNT_HORSE",
+  "FastGallopBuff": "MOUNT_SPEEDBUFF_DIREWOLF_T8",
+  "NightFrom": 20,
+  "NightTo": 6,
+  "WhenBuff": "",                                 // a spells.xml buff name; "" = only at night
+
+  // (c) The sword: +DamageBonus to physical attack and spell damage while the wielder is below LowHealth of its maximum.
+  "Weapons": [ "_MAIN_SWORD", "_2H_CLAYMORE", "_2H_DUALSWORD", "_MAIN_SCIMITAR_MORGANA", "_2H_CLEAVER_HELL" ],
+  "LowHealth": 0.3,
+  "DamageBonus": 0.10
+}

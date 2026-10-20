@@ -15,7 +15,41 @@ public sealed partial class WorldSession
     /// Keys 9/10 are never null (c1r.af 0x180a1fa00 iterates them) and always full length: the client only
     /// overwrites the indices present, so a short array would leave stale choices.
     /// </summary>
-    private void SendItemObject(Item item) => SendEvent(ItemObject(item));
+    private void SendItemObject(Item item)
+    {
+        SendEvent(ItemObject(item));
+        if (item.Soul is not null) SendEvent(SoulEvent(item, Player?.Character.Id ?? Guid.Empty));
+    }
+
+    /// <summary>
+    /// <paramref name="item"/> to its holder <paramref name="p"/>: NewEquipmentItem and, for an awakened weapon, its soul (event 37), as
+    /// <see cref="SendItemObject"/> for the callers outside a session handler (death, wear).
+    /// </summary>
+    internal static void SendItemTo(Player p, Item item)
+    {
+        p.Session.Send(ItemObject(item));
+        if (item.Soul is not null) p.Session.Send(SoulEvent(item, p.Character.Id));
+    }
+
+    /// <summary>
+    /// NewEquipmentItemLegendarySoul (event 37, client class atm; stageN awakening SPEC §2): key 0 = the item object (c1r.ajv 0x180A203B0
+    /// makes or updates the item's soul c2b, c2b.t 0x180A37A60 copies the keys), 1 soul Guid, 2 Name, 3 Era, 4 AttunedToMe (for
+    /// <paramref name="viewer"/>), 5 AttunedPlayerName, 6 Strain (a7m), 7 Attunement (a7m), 8/9 the traits (uniquename, roll 0-1; "" = an
+    /// empty slot), 10/11 per slot the offered replacements of a trait generation (empty arrays elsewhere), 12/13 a7m (not identified, 0).
+    /// It must follow the NewEquipmentItem: that one with key 11 = 0 drops the soul (c1r.af 0x180A1FCA0).
+    /// </summary>
+    internal static NewEquipmentItemLegendarySoulEvent SoulEvent(Item item, Guid viewer)
+    {
+        var soul = item.Soul!;
+        return new NewEquipmentItemLegendarySoulEvent
+        {
+            ddn = item.Id, cyw = soul.Id, cyx = soul.Name, cyy = soul.Era, cyz = soul.AttunedTo(viewer), cy0 = soul.AttunedName,
+            cy1 = soul.Strain, cy2 = soul.Attunement,
+            cy3 = [.. soul.Traits.Select(t => t.Name)], cy4 = [.. soul.Traits.Select(t => t.Roll)],
+            cy5 = [.. soul.Traits.Select((_, k) => k == soul.PendingSlot ? soul.Pending.Select(t => t.Name).ToArray() : [])],
+            cy6 = [.. soul.Traits.Select((_, k) => k == soul.PendingSlot ? soul.Pending.Select(t => t.Roll).ToArray() : [])],
+        }.FillEmpty();
+    }
 
     /// <summary>
     /// The NewEquipmentItem of <see cref="SendItemObject"/>; <paramref name="inUse"/> sets key 3 (da0, c10.ao5), which the official
@@ -30,6 +64,7 @@ public sealed partial class WorldSession
             cyr = item.DurabilityRaw,     // [8] durability, a7m raw; 0 shows the item broken
             cys = item.Active,            // [9] spell id per active slot, -1 = none
             cyt = item.Passive,           // [10] spell id per passive slot, -1 = none
+            cyu = (byte)(item.Soul is null ? 0 : 1), // [11] LegendaryItemType (a6i): 1 = awakened; 0 drops the soul client-side
         }.FillEmpty();
 
     /// <summary>Saved spell choice (by name) or, for a new item, the official default selection.</summary>
@@ -82,8 +117,9 @@ public sealed partial class WorldSession
         slots[5] = Active(4, 0);
         if (world.Spells is { } spells)
         {
-            if (equipment[8] is { } potion) slots[12] = spells.ConsumeSpell(potion.Template.Name);
-            if (equipment[9] is { } food) slots[13] = spells.ConsumeSpell(food.Template.Name);
+            // A plugin's slot spell (Systems.SlotSpells) in place of the consumespell while that stack lies in the slot.
+            if (equipment[8] is { } potion) slots[12] = potion.ConsumeOverride ?? spells.ConsumeSpell(potion.Template.Name);
+            if (equipment[9] is { } food) slots[13] = food.ConsumeOverride ?? spells.ConsumeSpell(food.Template.Name);
         }
         return slots;
     }
@@ -93,7 +129,7 @@ public sealed partial class WorldSession
     /// index, 3 spell id). The client applies it locally first (cw6.u 0x1809df4e0) and expects no response.
     /// The official server re-sends the full NewEquipmentItem and, for an equipped item, CharacterEquipmentChanged
     /// with key 9 = true (also for passive changes); inventory items get only the NewEquipmentItem
-    /// (captures/albion_20261015_113433). The choice is stored on the item and saved with the character
+    /// (capture 113433). The choice is stored on the item and saved with the character
     /// (<see cref="Persistence.SaveScheduler.ChangeDelay"/> later).
     /// A rejected change re-sends the unchanged item so the client rolls its local change back (inferred
     /// from c1s.ajk; no rejection was captured).
@@ -119,19 +155,33 @@ public sealed partial class WorldSession
             if (equipped) SendEquipmentChanged(player, intoEquipment: false);
             return null;
         }
+        var before = (req.kd ? item.Active : item.Passive)[req.ke];
         (req.kd ? item.Active : item.Passive)[req.ke] = (short)req.kf;
+        item.Temporary?.Remove((req.kd, req.ke)); // the player's own choice ends a plugin's temporary one (no revert)
         SendItemObject(item);
         if (equipped) SendEquipmentChanged(player, intoEquipment: false, spellChanged: true);
         player.SaveItems();
         Log.Info(Name, $"'{item.Template.Name}' {(req.kd ? "active" : "passive")} slot {req.ke} = {spells.Name(req.kf)}");
+        if (equipped && before != req.kf) Systems.SlotSpells.PlayerChose(player, item, req.kd, req.ke, before);
         return null;
+    }
+
+    /// <summary>
+    /// A slot spell changed by the server (<see cref="Systems.SlotSpells"/>): the full NewEquipmentItem, then CharacterEquipmentChanged with the
+    /// new key 7 (the action bar: the client sets each slot's spell by its id, cp0.x8 0x180BDAB90 from crr.aft) and key 9 false (no spell change
+    /// cooldown in the client's item window, which only the player's own choice starts).
+    /// </summary>
+    internal void SendSlotSpellChange(Player player, Item item)
+    {
+        SendItemObject(item);
+        SendEquipmentChanged(player, intoEquipment: false);
     }
 
     /// <summary>
     /// Drag and drop between and inside the equipment and inventory containers. The client sends
     /// no response-expecting request; the official server answers with InventoryPutItem per moved
     /// object (revision = request key 5) and CharacterEquipmentChanged when the equipment changed
-    /// (captures/albion_20261015_113433), preceded by RegenerationPlayerComboChanged when the bars
+    /// (capture 113433), preceded by RegenerationPlayerComboChanged when the bars
     /// changed. An occupied target swaps the two objects. The client checks unlocks itself before
     /// sending the move (ItemNotUnlockedToEquip), so the server only checks the slot type
     /// (<see cref="Container.Fits"/>). An item leaving the equipment gets its script's OnUnequip, one entering it
@@ -256,6 +306,7 @@ public sealed partial class WorldSession
     {
         var now = GameTime.Now;
         if (player.RecalculateStats(now)) SendAround(player, Systems.Combat.PlayerCombo(player, now));
+        world.ExtraBars.Refresh(player, Plugin.Api.ExtraBarChangeSource.Equipment); // the extra bars (a change no OnEquip/OnUnequip saw)
         SendAround(player, new CharacterEquipmentChangedEvent
         {
             ddn = player.Id,                               // [0] player object id

@@ -18,6 +18,45 @@ public enum BotRole : byte
 
     /// <summary>StageL mists phase B (SPEC §6.9): a lone Red wanderer of a mists zone (a patrol of one; zone class Mists).</summary>
     Drifter,
+
+    /// <summary>StageN companions: a bot a player hired (.companion), in its party, following it and fighting its mobs (<see cref="Bots.Companions"/>).</summary>
+    Companion,
+
+    /// <summary>Stage N arena (SPEC §4.3): a player-bot filling an arena team's empty slot; it hunts the other team's players.</summary>
+    Arena,
+}
+
+/// <summary>StageN companions: what a hired companion does in its owner's party.</summary>
+public enum CompanionKind : byte
+{
+    Tank,
+    Healer,
+    Melee,
+    Ranged,
+}
+
+/// <summary>StageN companions: a hired companion's owner (the character it follows), its kind and its follow and taunt timers.</summary>
+public sealed class CompanionInfo
+{
+    public required Guid Owner { get; init; }
+
+    public required string OwnerName { get; init; }
+
+    public required CompanionKind Kind { get; init; }
+
+    /// <summary>Its place around the owner (0-3): the follow spot's angle.</summary>
+    public int Index { get; set; }
+
+    /// <summary>The distance to the owner when it last came nearer, and when (<see cref="World.Clock"/>): the stuck check.</summary>
+    public float BestDistance { get; set; } = float.MaxValue;
+
+    public TimeSpan BestAt { get; set; }
+
+    /// <summary>When its owner was last seen in game (<see cref="World.Clock"/>).</summary>
+    public TimeSpan OwnerSeen { get; set; }
+
+    /// <summary>When a tank may next pull a mob off another member by threat (<see cref="World.GameNow"/> ticks).</summary>
+    public long NextTaunt { get; set; }
 }
 
 /// <summary>A bot's emote under way: emotes.bin <see cref="Emote"/> since GameTimeStamp <see cref="Start"/>; a looping one is shown to every new observer.</summary>
@@ -81,6 +120,12 @@ public sealed class BotInfo
     public double HealthFactor { get; init; } = 1;
 
     public double DamageFactor { get; init; } = 1;
+
+    /// <summary>StageN botpower: an elite (Bots:Gear:EliteChance): enchanted gear of a better quality, a richer bag (Bots:Rewards:Elite*).</summary>
+    public bool Elite { get; init; }
+
+    /// <summary>StageN companions: the owner and kind of a <see cref="BotRole.Companion"/>; null for the other roles.</summary>
+    public CompanionInfo? Companion { get; init; }
 }
 
 /// <summary>
@@ -126,6 +171,14 @@ public sealed class BotCombatState
 
     /// <summary>Whether this fight's flight was rolled (once per fight).</summary>
     public bool FleeRolled { get; set; }
+
+    /// <summary>StageN botpower: GameTimeStamp until which a ranged bot steps back from its target (a kite, no swing meanwhile), and of its last one.</summary>
+    public long KiteUntil { get; set; }
+
+    public long KitedAt { get; set; }
+
+    /// <summary>StageN botpower: GameTimeStamp of its last look for a weaker target (Bots:Combat:FocusWeakest).</summary>
+    public long FocusAt { get; set; }
 
     /// <summary>The target's position at the last chase path and its GameTimeStamp (a new path every 1 s or 4 m).</summary>
     public Vector2 ChasedTo { get; set; }

@@ -121,7 +121,7 @@ public static class Mounts
     /// cooldown after its death over, no harvest, cast or station action under way, and its mounted buff in spells.xml. Returns
     /// why it is refused; null = accepted.
     /// </summary>
-    public static string? Check(Player p, long itemId)
+    public static string? Check(Player p, long itemId, bool remount = false)
     {
         if (p.Map is null || p.Combat.Down is not null) return "knocked down";
         if (p.Mount.State != MountState.None) return $"already {p.Mount.State}";
@@ -132,7 +132,7 @@ public static class Mounts
         if (now < p.Character.MountCooldownUntil) return $"on cooldown for {(p.Character.MountCooldownUntil - now) / (double)TimeSpan.TicksPerSecond:0.#} s";
         if (p.Harvest is not null || p.Combat.Cast is not null || p.Action is { Over: false }) return "a harvest, cast or station action is under way";
         if (Spell(p, item.Template.Mount!.MountedBuff) is null) return $"no mounted buff {item.Template.Mount.MountedBuff} in spells.xml";
-        return null;
+        return p.World.Plugins.MountCheck(p, item, remount); // the plugins' Mounts.OnCheckMount
     }
 
     /// <summary>
@@ -158,6 +158,7 @@ public static class Mounts
         p.Session.Send(Network.WorldSession.ItemObject(item, inUse: true));
         p.SendToObservers(new MountStartEvent { ddn = p.Id, csu = now, csv = item.Template.Index, csw = near });
         Log.Debug("mount", $"'{p.Character.Name}' mounts {item.Template.Name}{(near ? " (remount)" : "")}: {(pending.End - now) / TimeSpan.TicksPerMillisecond} ms");
+        world.Plugins.MountEvent(world.Plugins.Hooks.MountStart, p, item.Template, near ? "remount" : "mount"); // Mounts.OnMountStart
         SpellCasts.At(world, map, pending.End, () =>
         {
             if (p.Mount.Pending == pending && p.Map == map) Complete(p, pending);
@@ -205,6 +206,15 @@ public static class Mounts
         p.Character.MountedSince = t;
         world.Saves.MarkChanged(p.Character);
         Log.Info("mount", $"'{p.Character.Name}' is mounted on {item.Template.Name}");
+        if (world.Plugins.Hooks.Mounted.Any) // the plugins' Mounts.OnMounted: the gallop buff may be another spell, or none
+        {
+            var gallop = p.Mount.Speed?.Spell.Name;
+            var chosen = world.Plugins.Mounted(p, item.Template, gallop);
+            if (chosen != gallop)
+                p.Mount.Speed = chosen is null ? null : Spell(p, chosen) is not { } faster ? p.Mount.Speed
+                    : p.Mount.Speed is { } old ? old with { Spell = faster }
+                    : new MountSpeedBuff(faster, 5, SpellCasts.Seconds(4), SpellCasts.Seconds(4), SpellCasts.Seconds(2));
+        }
     }
 
     /// <summary>
@@ -219,6 +229,7 @@ public static class Mounts
         p.SendAround(new MountCancelEvent { ddn = p.Id });
         p.Session.Send(Network.WorldSession.ItemObject(pending.Item, inUse: false));
         Log.Debug("mount", $"'{p.Character.Name}' mount cancelled: {why}");
+        p.World.Plugins.MountEvent(p.World.Plugins.Hooks.MountCancel, p, pending.Item.Template, why); // Mounts.OnMountCancel
     }
 
     /// <summary>
@@ -272,6 +283,7 @@ public static class Mounts
         SpellEffects.Send(world, p);
         SpellEffects.Refresh(world, p);
         Log.Info("mount", $"'{p.Character.Name}' dismounts");
+        world.Plugins.MountEvent(world.Plugins.Hooks.Dismount, p, item?.Template, "dismount"); // Mounts.OnDismount
     }
 
     /// <summary>
@@ -380,6 +392,7 @@ public static class Mounts
     /// </summary>
     public static void Damage(Player p, long attacker, float damage, EffectType type, HitOrigin origin, short spell, long ticks, bool hostile = false)
     {
+        damage = (float)p.World.Plugins.MountDamage(p, p.Mount.Ridden ?? ItemOf(p)?.Template, attacker, damage); // Mounts.OnMountDamage
         var left = Math.Max(0, p.MountHealth.At(ticks) - damage);
         p.MountHealth.Set(left, Math.Max(ticks, p.MountHealth.Stamp));
         p.SendAround(new MountHealthUpdateEvent
@@ -430,6 +443,7 @@ public static class Mounts
             SpellCasts.Execute(new SpellCasts.SpellContext(p, map, forced, 0, Combat.AbilityPowerOf(p, item), null, at, t)
                 { CcAbilityPower = Combat.CcAbilityPowerOf(p, item) }, forced);
         Log.Info("mount", $"'{c.Name}''s mount died{(hostile ? " (hostile)" : "")}: no mount for {data?.ForcedDismountCooldown ?? 30} s");
+        world.Plugins.MountEvent(world.Plugins.Hooks.Dismount, p, item?.Template, "died"); // Mounts.OnDismount
     }
 
     /// <summary>
@@ -455,6 +469,7 @@ public static class Mounts
         Cancel(p, "knocked down");
         if (p.IsMounted)
         {
+            p.World.Plugins.MountEvent(p.World.Plugins.Hooks.Dismount, p, p.Mount.Ridden, "knockdown"); // Mounts.OnDismount
             Unride(p);
             p.Character.MountedSince = 0;
             p.World.Saves.MarkChanged(p.Character);
@@ -599,13 +614,18 @@ public static class Mounts
     /// Mounted (210, asz): 0 me, 1 <paramref name="t"/>, 2 the mount item's index (absent = dismounted), 4 the mount bar at t, 5 its
     /// regeneration, 6 t (Int64 ticks), 7 true, 8 <paramref name="quick"/> (remount / dismount), 9 <paramref name="full"/> (full mount,
     /// forced dismount, catch-up), 10 <paramref name="facing"/> (-1 on a mount: ≥ 0 would turn the player), 11 <paramref name="catchUp"/>.
-    /// Key 3 (the skin) is left out: no skins here.
+    /// Key 3: the mount skin number of the mount's category (stageN vanity SPEC §1.5), through Extra so that skin 0 goes out too; left out without one.
     /// </summary>
-    private static MountedEvent Mounted(Player p, long t, Item? item, bool quick, bool full, float facing, bool catchUp = false, bool hostile = false) => new()
+    private static MountedEvent Mounted(Player p, long t, Item? item, bool quick, bool full, float facing, bool catchUp = false, bool hostile = false)
     {
-        ddn = p.Id, csg = t, csh = item?.Template.Index ?? 0, csj = p.MountHealth.At(t), csk = p.MountHealth.RegenPerSecond, csl = t,
-        csm = true, csn = quick, cso = full, csp = facing, csq = catchUp, css = hostile,
-    };
+        var e = new MountedEvent
+        {
+            ddn = p.Id, csg = t, csh = item?.Template.Index ?? 0, csj = p.MountHealth.At(t), csk = p.MountHealth.RegenPerSecond, csl = t,
+            csm = true, csn = quick, cso = full, csp = facing, csq = catchUp, css = hostile,
+        };
+        if (item is not null && p.World.Vanity.MountSkinFor(p.Character, item.Template) is var skin and >= 0) e.Extra = new() { [3] = skin };
+        return e;
+    }
 
     /// <summary>CastSpell (19) of a mount buff on the player: {0 me, 1 me, 2 its position, 3 the spell, 4 t, 5 t}.</summary>
     private static CastSpellEvent CastSpell(Player p, SpellTemplate spell, Vector2 at, long t) =>

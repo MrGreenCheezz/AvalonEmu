@@ -35,17 +35,19 @@ public sealed class MountObject(long id, ClusterObject spawn, Player owner, Item
     /// </summary>
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
+        var skin = Owner.World.Vanity.MountSkinFor(Owner.Character, Item); // stageN vanity: the owner's skin of the mount's category
         yield return new NewMountObjectEvent
         {
             c69 = Id,                        // [0]
             c7a = Item.Index,                // [1]
-            c7b = -1,                        // [2] no skin
+            c7b = skin,                      // [2] the skin number, -1 = none (0 goes through Extra)
             c7c = Position,                  // [3]
             c7d = Direction,                 // [4]
             c7e = Owner.Character.Id,        // [5]
             c7g = 3,                         // [7]
             c7k = -1, c7l = -1, c7m = -1, c7n = -1, c7o = -1, // [11-15] no guild logo
             c7q = 1f,                        // [17]
+            Extra = skin == 0 ? new() { [2] = 0 } : null,
         };
     }
 }
@@ -82,7 +84,7 @@ public sealed class PlayerMount
     public ItemTemplate? Ridden { get; internal set; }
 
     /// <summary>The ridden mount's speed buff trigger (<see cref="MountSpeedBuff"/>); null = its mounted buff has none.</summary>
-    internal MountSpeedBuff? Speed { get; set; }
+    public MountSpeedBuff? Speed { get; internal set; }
 
     /// <summary>The mount object on the map; null when none stands.</summary>
     public MountObject? Object { get; internal set; }

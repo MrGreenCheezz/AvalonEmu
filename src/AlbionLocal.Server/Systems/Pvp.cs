@@ -73,6 +73,7 @@ public static class Pvp
         if (a.World.Corrupted.Opponents(a, b)) return Relation.Hostile; // stageL corrupted: the two sides of an invasion, whatever else
         if (a.World.Hellgates.Rivals(a, b)) return Relation.Hostile; // stageL hellgates phase B: the two parties of a match, during its fight
         if (a.IsBot || b.IsBot) return Bots.BotPvp.Of(a, b); // stage I: a bot is never in a duel or a party
+        if (a.World.Arenas.RelationOf(a, b) is { } arena) return arena; // stage N arena: the teams, Hostile only during a fight
         if (a.World.Duels.OpponentOf(a) == b) return Relation.Hostile;
         var guild = a.World.Guilds.Same(a.Character.Id, b.Character.Id);
         // StageL mists phase B (Pvp:Mode Official only): an active camp's free-for-all circle, guild mates kept apart under NoFriendlyFire.
@@ -317,7 +318,8 @@ public static class Pvp
         foreach (var item in p.Inventory.Equipment.Items.Concat(p.Inventory.Bag.Items).ToList())
         {
             if (!Death.Wear(item, rule, 1, random)) continue;
-            p.Session.Send(Network.WorldSession.ItemObject(item));
+            if (item.DurabilityRaw <= 0) p.World.Plugins.Broke(p, item, "knockdown"); // Items.OnBreak
+            Network.WorldSession.SendItemTo(p, item);
             worn = true;
         }
         if (worn)
@@ -428,8 +430,9 @@ public static class Pvp
         var before = target.Health.At(ticks);
         if (before <= 0) return;
         var crime = Engage(attacker, target, ticks, origin); // judged before the hit (a knockdown, a flag change)
-        if (attacker.IsBot) amount *= world.Config.Bots.DamageFactor * attacker.Bot!.DamageFactor; // stage I: Bots:Combat:DamageFactor, the bots' difficulty (stageL: an invader's own)
+        if (attacker.IsBot) amount *= world.Config.Bots.DamageFactor * world.Config.Bots.Difficulty * attacker.Bot!.DamageFactor; // stageN botpower: Bots:Difficulty // stage I: Bots:Combat:DamageFactor, the bots' difficulty (stageL: an invader's own)
         var damage = Math.Max(0, Combat.Rounded(amount * DefenseFactor(target, ticks)));
+        damage = Combat.Rounded(world.Plugins.Damage(attacker, null, target, null, AlbionLocal.Plugin.Api.DamageKind.PlayerToPlayer, origin == HitOrigin.OverTime, damage)); // the plugins' Damage
         if (target.Combat.Channel is { Info.DamageCancels: true } && !SpellEffects.NotInterruptible(target, ticks))
             SpellCasts.EndChannel(target, SpellCasts.ChannelEnd.Interrupted);
         if (hit is not null) target.SendAround(hit); // a spell's CastHit before its HealthUpdate, as against mobs
@@ -448,7 +451,9 @@ public static class Pvp
         if (damage > 0 || raw <= 0)
         {
             target.Health.Set(left, Math.Max(ticks, target.Health.Stamp));
+            if (damage > 0) SpellEffects.Damaged(target, type, ticks);
             update = Combat.HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
+            world.Plugins.HealthChanged(target, health, left, attacker.Id, spell); // Units.OnHealthChange
             Death.Hit(attacker, target, damage);
             if (target.IsBot) world.Bots.Hurt(target, attacker, damage, ticks); // stage I: the bot's retarget measure
         }
@@ -462,6 +467,8 @@ public static class Pvp
             SpellEffects.Trigger(target, "ReceiveDamage", attacker, ticks);
             if (origin != HitOrigin.OverTime) SpellEffects.Trigger(target, "ReceiveDirectDamage", attacker, ticks);
         }
+        // Stage N arena (SPEC §4.3): a defeat in an arena match is the arena's alone: no loot, wear or death, a ticket of the team.
+        else if (target.IsBot ? world.Arenas.BotDown(attacker, target, update) : world.Duels.OpponentOf(target) != attacker && world.Arenas.Down(attacker, target, update, ticks)) { }
         else if (target.IsBot)
         {
             // Stage I (bots SPEC §1.10): a bot's defeat is the bot manager's alone (its knockdown or death show, the despawn, the slot's respawn).

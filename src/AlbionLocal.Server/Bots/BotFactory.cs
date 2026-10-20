@@ -152,6 +152,18 @@ public sealed class BotFactory(World world)
     }
 
     /// <summary>
+    /// StageN botpower: an elite's <paramref name="item"/> at enchantment <paramref name="level"/> ("&lt;name&gt;@&lt;level&gt;"), else the
+    /// highest lower level items.xml has, for its weapon, offhand and armour (mainhand, offhand, head, armor, shoes); any other item as it is.
+    /// </summary>
+    public ItemTemplate Enchanted(ItemTemplate item, int level)
+    {
+        if (item.Slot is not ("mainhand" or "offhand" or "head" or "armor" or "shoes") || item.Enchantment > 0) return item;
+        for (var l = Math.Min(level, 4); l >= 1; l--)
+            if (world.Items.Find($"{item.Name}@{l}") is { IsEquipment: true } e && e.Slot == item.Slot) return e;
+        return item;
+    }
+
+    /// <summary>
     /// <paramref name="pattern"/> with {t} at <paramref name="tier"/>, else at the next lower tier that items.xml has; an equipment item
     /// with a slot of the equipment (a pattern without {t} as it is); null when none exists.
     /// </summary>

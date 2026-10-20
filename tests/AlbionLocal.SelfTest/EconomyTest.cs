@@ -30,12 +30,16 @@ public static class EconomyTest
         ("economy: op 55 at Thetford: repair (no response, the corrected burst), shop purchase (the captured order), failures {0 building, 1 ACT, 2 counter, 3 error} with RC 2202, a timed smelter batch", Stations),
         ("economy: salvage (ACT 3) at the repair shop: the T4 sword at half durability gives no silver (no itemvalue), 1-2 bars, 0-1 leather, kept over a relog; a worn sword; one destroyed meanwhile gives nothing; refusals; AccessStatus of the shop", Salvage),
         ("economy: enchanting (ACT 7) T4 sword .0 → .1 with 288 runes at the meld building (quality and spells kept, new object, saved), refused without runes; quality reroll (ACT 6) 1 → better at the repair shop (event 67, silver); crafting quality bonus", Enchanting),
+        ("economy: awakening (ACT 8) a T4 sword@4 at the meld building: silver and 2 + 2 tokens taken, NewEquipmentItem key 11 = 1 and event 37 with 3 traits, kept over a relog; a sword@3 refused (ItemEnchantmentTooLow)", Awakening),
+        ("economy: trait value reroll (ACT 8 sub 4): attunement and silver charged, event 552 old -> new (never lower), soul re-sent; an attuned TRAIT_HITPOINTS_MAX adds hitpointsmax", TraitReroll),
         ("economy: crafting: refine 10 T3 planks at the carpenter, craft a T4 sword at the forge (quality, returns, crafting fame into CRAFT_REFINE_WOOD_T4 / CRAFT_SWORDS)", Crafting),
         ("economy: content/spawns of the royal cities and Caerleon: 12 stations and a stable each on RealEstate plot centres, Martlock refines hide at its own +40 % bonus", CityStations),
         ("economy: a T3 horse crafted at a stable from a grown T3 horse + 20 T3 leather (the horse never returned)", StableCraft),
         ("economy: split 10 into 6 + 4 (revision echoed), stack all, destroy", Housekeeping),
         ("economy: bank: tab-0 Guid, RegisterToObject attaches the default tab (items first, 128 slots), deposit, relog, withdraw, shift+click both ways, relog; refusals (keys 0-2 echoed, out of range, slots, weight); two views; LoadoutReadHeaders echo", Bank),
         ("economy: market: DTO fields, empty market, fees and tax, filters and pages, offer bought and collected, buy order sold into (quick-sell query first) and aborted, overbuy refused, an offline seller's silver at its next Join", Market),
+        ("economy: market price history (op 95/96, econ SPEC §1): two buys of ore summed in the current hour, average 100; another city's and another quality's sales left out", PriceHistory),
+        ("economy: gathering extras (econ SPEC §2): T4 wood's bonus loot rolls its gathering tome; T1 fishing bait used from the bag: fishingspeed 0.5, 10 charges, the bite 1.5x faster, the 10th strike takes the buff", GatheringExtras),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -154,7 +158,7 @@ public static class EconomyTest
             World = new World(config ?? new ServerConfig { JoinByCharacterId = true }, Characters, Catalog, Client.GameData, Client.Spells)
             {
                 Sync = new object(), Clock = Clock, Clusters = Client.Clusters, MapSeed = 7, GameTicks = () => anchor + Clock.Now.Ticks,
-                Crafting = Client.Crafting, Stations = stations, CraftRandom = new Random(5),
+                Crafting = Client.Crafting, Legendary = Client.Legendary, Stations = stations, CraftRandom = new Random(5),
                 Journals = journals ?? JournalSettings.Default with { MerchantMarkets = new HashSet<string>() },
                 EventSettings = EventSettings.Default with { Merchant = new EventMerchant { Markets = [] } }, // no NPC ticket orders (stage I)
             };
@@ -480,6 +484,102 @@ public static class EconomyTest
         var boosted = Enumerable.Range(0, 20_000).Count(_ => WorldSession.RollQuality(random, weights, 100) > 1);
         Check(Math.Abs(plain / 20_000.0 - 0.311) < 0.015 && Math.Abs(boosted / 20_000.0 - 622 / 1311.0) < 0.015,
               $"quality bonus 100: the chance above normal 31.1 % → 47.4 % (got {plain / 200.0:0.#} %, {boosted / 200.0:0.#} %)");
+    }
+
+    /// <summary>
+    /// Awakening (stageN awakening SPEC §1-§2): a T4_MAIN_SWORD@4 with 2 UNIQUE_GVGTOKEN_GENERIC and 2 QUESTITEM_TOKEN_AVALON (100 × the T4
+    /// scaling 0.0208, rounded) and 6000000 × 0.0208 silver gets a soul with 3 traits after 1.5 s: tokens and silver gone, NewEquipmentItem key
+    /// 11 = 1, event 37 {0 the sword, 4 attuned to me, 8 three trait names}, saved over a relog. A T4 sword@3 is refused (enchantment &lt; 4).
+    /// </summary>
+    private static void Awakening()
+    {
+        using var town = new Town(meld: true);
+        var world = town.World;
+        var (session, peer, me) = town.Join("Awakener", 200_000, new InventoryItem("T4_MAIN_SWORD@4"), new InventoryItem("UNIQUE_GVGTOKEN_GENERIC", 3),
+            new InventoryItem("QUESTITEM_TOKEN_AVALON", 2), new InventoryItem("T4_MAIN_SWORD@3"));
+        var meld = town.Station("T8_MELDBUILDING");
+        var sword = me.Inventory.Bag[0]!;
+        var (price, resources) = session.AwakenCost(world.Legendary!, sword);
+        void Op55(ActionOnBuildingStartRequest req)
+        {
+            lock (world.Sync) session.OnRequest(Request(req, 7), encrypted: false);
+        }
+        int Count(Player p, string name) => p.Inventory.Bag.Items.Where(i => i.Template.Name == name).Sum(i => i.Count);
+        var silver = me.Character.Silver;
+        var mark = peer.Events.Count;
+        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 8, q = 1, s = [sword.Id], ab = 0, ae = price });
+        town.Run(2);
+        var events = Since(peer, mark);
+        var item = events.LastOrDefault(e => e.Code == EventCodes.NewEquipmentItem && L(e.P, 0) == sword.Id).P;
+        var soul = events.LastOrDefault(e => e.Code == EventCodes.NewEquipmentItemLegendarySoul).P;
+        Check(price == (long)Math.Round(6_000_000 * 0.020755693m * Pricing.A7m) && resources.All(r => r.Count == 2) && resources.Count == 2
+              && sword.Soul is { Traits.Length: 3 } && sword.Soul.Traits.Select(t => t.Name).Distinct().Count() == 3
+              && sword.Soul.Traits.All(t => t.Roll is >= 0.01 and <= 0.03) && me.Character.Silver == silver - price
+              && Count(me, "UNIQUE_GVGTOKEN_GENERIC") == 1 && Count(me, "QUESTITEM_TOKEN_AVALON") == 0 && me.Action is null
+              && item is not null && L(item, 11) == 1 && soul is not null && L(soul, 0) == sword.Id && soul[4] is true
+              && soul[8] is string[] names && names.SequenceEqual(sword.Soul.Traits.Select(t => t.Name)) && soul[9] is double[] { Length: 3 },
+              $"awakened: 3 traits rolled 0.01-0.03, {price / 10000.0} silver and 2 + 2 tokens taken, key 11 = 1, event 37 (got {sword.Soul?.Traits.Length} traits; {Show(events.Where(e => e.Code is EventCodes.NewEquipmentItem or EventCodes.NewEquipmentItemLegendarySoul))})");
+        var answers = peer.Responses.Count;
+        var low = me.Inventory.Bag[3]!;
+        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 8, q = 2, s = [low.Id], ab = 0, ae = price });
+        Check(Answers(peer, answers) is [{ ReturnCode: WorldSession.StationComponentError } bad] && L(bad.Parameters, 3) == (byte)AwakenError.ItemEnchantmentTooLow && low.Soul is null,
+              "a T4 sword@3: RC 2202 ItemEnchantmentTooLow");
+        var traits = sword.Soul!.Traits;
+        lock (world.Sync) peer.Disconnect();
+        world.Saves.Flush();
+        var (_, again, back) = town.Rejoin(me.Character.Id);
+        var kept = back.Inventory.Bag[0];
+        Check(kept is { Template.Name: "T4_MAIN_SWORD@4", Soul: { } s } && s.Traits.SequenceEqual(traits) && s.AttunedTo(me.Character.Id)
+              && Since(again, 0).Any(e => e.Code == EventCodes.NewEquipmentItemLegendarySoul && L(e.P, 0) == kept.Id),
+              $"after a relog: the soul with the same traits, sent with the Join items (got {kept}, soul {kept?.Soul is not null}, {string.Join(", ", kept?.Soul?.Traits.Select(t => $"{t.Name} {t.Roll}") ?? [])} vs {string.Join(", ", traits.Select(t => $"{t.Name} {t.Roll}"))})");
+    }
+
+    /// <summary>
+    /// A trait value reroll (sub 4) on slot 0 of an awakened T4 sword@4 whose soul holds 1000 attunement: 6667 × 0.0208 attunement and × 33
+    /// silver charged, event 552 {2 the sword, 3 slot 0, 4 old, 5 new ≥ old}, the soul re-sent. Then the sword worn with TRAIT_HITPOINTS_MAX at
+    /// roll 1 adds hitpointsmax to the passives; attuned to someone else it adds none.
+    /// </summary>
+    private static void TraitReroll()
+    {
+        using var town = new Town(meld: true);
+        var world = town.World;
+        var (session, peer, me) = town.Join("Reroller", 100_000, new InventoryItem("T4_MAIN_SWORD@4"));
+        var meld = town.Station("T8_MELDBUILDING");
+        var sword = me.Inventory.Bag[0]!;
+        var data = world.Legendary!;
+        lock (world.Sync)
+            sword.Soul = new ItemSoul
+            {
+                AttunedId = me.Character.Id, AttunedName = me.Character.Name, Attunement = 1000 * Pricing.A7m,
+                Traits = [new SoulTrait("TRAIT_HITPOINTS_MAX", 0.02), new SoulTrait("TRAIT_CC_RESIST", 0.02), new SoulTrait("TRAIT_ABILITY_DAMAGE", 0.02)],
+            };
+        var (attunement, silverCost) = WorldSession.TraitCost(data, sword, data.RerollBase);
+        var silver = me.Character.Silver;
+        var mark = peer.Events.Count;
+        lock (world.Sync)
+            session.OnRequest(Request(new ActionOnBuildingStartRequest
+                { wf = world.GameNow, o = meld.Id, p = 8, q = 1, s = [sword.Id], ab = 4, ac = 0, ae = silverCost, af = attunement }, 7), encrypted: false);
+        town.Run(1.5);
+        var done = Since(peer, mark).FirstOrDefault(e => e.Code == EventCodes.RerollItemTraitValueFinished).P;
+        var roll = sword.Soul.Traits[0].Roll;
+        Check(attunement == (long)Math.Round(6667 * 0.020755693m * Pricing.A7m) && silverCost == (long)Math.Round(attunement * 33m)
+              && done is not null && L(done, 2) == sword.Id && !done.ContainsKey(3) && (double)done[4]! == 0.02 && (double)done[5]! == roll && roll > 0.02
+              && sword.Soul.Attunement == 1000 * Pricing.A7m - attunement && me.Character.Silver == silver - silverCost
+              && Since(peer, mark).Any(e => e.Code == EventCodes.NewEquipmentItemLegendarySoul && L(e.P, 0) == sword.Id),
+              $"reroll slot 0: {attunement / 10000.0} attunement and {silverCost / 10000.0} silver, 0.02 -> {roll} (got {Show(Since(peer, mark).Where(e => e.Code == EventCodes.RerollItemTraitValueFinished))})");
+        double Hp()
+        {
+            lock (world.Sync) return Passives.Of(me).Buffs.GetValueOrDefault("hitpointsmax");
+        }
+        lock (world.Sync)
+        {
+            me.Inventory.Bag.Take(0);
+            me.Inventory.Equipment.Put(0, sword);
+            sword.Soul = sword.Soul with { Traits = [new SoulTrait("TRAIT_HITPOINTS_MAX", 1), .. sword.Soul.Traits[1..]] };
+        }
+        var attuned = Hp();
+        lock (world.Sync) sword.Soul = sword.Soul with { AttunedId = Guid.NewGuid() };
+        Check(attuned >= 260 * 0.99 && Hp() == 0, $"TRAIT_HITPOINTS_MAX at roll 1: hitpointsmax {attuned:0.#} (at least 260 before the IP scaling); attuned to another: {Hp()}");
     }
 
     private static void Crafting()
@@ -828,5 +928,72 @@ public static class EconomyTest
         Check(Call(againSession, againPeer, new AuctionFetchFinishedAuctionsRequest { bqs = market.Id }) is { ReturnCode: 0 } && mine.Length == 1
               && again.Inventory.Bag.Items.Single(i => i.Template == oreType).Count == 2 && world.Market!.FinishedOf(sellerId).Count == 0,
               "A collects all its finished entries: the 2 ore of its buy order");
+    }
+
+    private static void PriceHistory()
+    {
+        var oreType = Catalog.Find("T4_ORE")!;
+        using var town = new Town();
+        var world = town.World;
+        var (sellerSession, sellerPeer, seller) = town.Join("Seller", 1000, new InventoryItem("T4_ORE", 5));
+        var (buyerSession, buyerPeer, _) = town.Join("Buyer", 1000);
+        var market = town.Station("MARKETPLACE");
+        OperationResponse Call(WorldSession s, FakePeer p, AlbionRequest req)
+        {
+            var before = p.Responses.Count;
+            lock (world.Sync) s.OnRequest(Request(req, 3), encrypted: false);
+            return p.Responses.Skip(before).Last();
+        }
+        Call(sellerSession, sellerPeer, new AuctionCreateOfferRequest { bqs = market.Id, bn5 = 5, bn6 = seller.Inventory.Bag[0]!.Id, bn7 = 100 * Pricing.A7m, bn8 = 24 });
+        var id = world.Market!.OrdersOf(seller.Character.Id).Single().Id;
+        Call(buyerSession, buyerPeer, new AuctionBuyOfferRequest { bqs = market.Id, bn2 = 2, bn3 = id });
+        Call(buyerSession, buyerPeer, new AuctionBuyOfferRequest { bqs = market.Id, bn2 = 1, bn3 = id });
+        world.Market.Batch(b => b.AddSale(new MarketSale("ELSEWHERE", "T4_ORE", 1, 7, Pricing.A7m, DateTime.UtcNow))); // another city's market
+        var stats = Call(buyerSession, buyerPeer, new AuctionGetItemAverageStatsRequest { bqs = market.Id, bor = (short)oreType.Index, bos = 1, bot = 0 });
+        var week = Call(buyerSession, buyerPeer, new AuctionGetItemAverageStatsRequest { bqs = market.Id, bor = (short)oreType.Index, bos = 2, bot = 1 });
+        var average = Call(buyerSession, buyerPeer, new AuctionGetItemAverageValueRequest { bqs = market.Id, bou = (short)oreType.Index, bov = 1, bow = 2 });
+        var now = DateTime.UtcNow.Ticks;
+        Check(stats.Parameters[0] is long[] and [3] && stats.Parameters[1] is long[] and [300 * Pricing.A7m] && stats.Parameters[2] is long[] and [var hour]
+              && now - hour < TimeSpan.TicksPerHour && hour % TimeSpan.TicksPerHour == 0 && L(average.Parameters, 0) == 100 * Pricing.A7m
+              && (!week.Parameters.TryGetValue(0, out var none) || none is long[] { Length: 0 }),
+              "24 h chart: one bucket (this hour) of 3 ore for 300 silver; the 4-week average 100; quality 2 has no sales; the other city's 7 are not counted");
+    }
+
+    private static void GatheringExtras()
+    {
+        var wood = Client.Clusters!.Harvestables.Find("WOOD")!.Tiers[4];
+        var tables = Client.Clusters.Loot;
+        var rolls = Enumerable.Range(0, 50).SelectMany(i => tables.RollMob(wood.LootOf(0)!, new Random(i), 10000)).ToList();
+        Check(wood.Loot?.Element("LootListReference")?.Attribute("name")?.Value == "T4_WOOD_SKILLBOOK" && wood.LootOf(1) is not null
+              && rolls.Count > 0 && rolls.All(r => r.Item == "T4_SKILLBOOK_GATHER_WOOD"),
+              "WOOD T4 <Loot>: T4_WOOD_SKILLBOOK (chance 0.002, rare states too); rolled (×10000) it gives T4_SKILLBOOK_GATHER_WOOD only");
+
+        using var town = new Town();
+        var world = town.World;
+        var (session, _, me) = town.Join("Angler", 100, new InventoryItem("T1_FISHINGBAIT", 2));
+        var bait = me.Inventory.Bag[0]!;
+        lock (world.Sync) session.OnRequest(Request(new UseConsumableFromInventoryRequest { ah5 = bait.Id, ah6 = 1 }, 3), encrypted: false);
+        town.Run(1);
+        double speed;
+        int charges;
+        lock (world.Sync)
+        {
+            speed = me.Effects.Sum("fishingspeed", world.GameNow);
+            charges = me.Effects.Spells.FirstOrDefault(a => a.Spell.Category == Fishing.BaitCharges)?.Stacks ?? 0;
+        }
+        var zone = world.Fishing.Freshwater with { BiteMin = 6, BiteMax = 6 };
+        var rod = Catalog.Find("T3_2H_TOOL_FISHINGROD")!;
+        Check(bait.Count == 1 && speed == 0.5 && charges == 10
+              && Fishing.BiteDelay(zone, rod, new Random(1)).TotalSeconds / Fishing.BiteDelay(zone, rod, new Random(1), speed).TotalSeconds is > 1.47 and < 1.48,
+              $"T1_FISHINGBAIT used: FISHINGBAIT_LEVEL1_USE fishingspeed 0.5 for 600 s, FISHINGBAIT_LEVEL1_CHARGE with 10 charges; the bite (1 + 0.05 + 0.5) / 1.05 faster (got {speed}, {charges})");
+        lock (world.Sync)
+        {
+            for (var i = 0; i < 9; i++) Fishing.ConsumeBait(me);
+            charges = me.Effects.Spells.FirstOrDefault(a => a.Spell.Category == Fishing.BaitCharges)?.Stacks ?? 0;
+            speed = me.Effects.Sum("fishingspeed", world.GameNow);
+            Fishing.ConsumeBait(me);
+            Check(charges == 1 && speed == 0.5 && me.Effects.Sum("fishingspeed", world.GameNow) == 0 && me.Effects.Spells.All(a => !a.Spell.Category.StartsWith("fishingbait")),
+                  "9 strikes leave 1 charge and the buff; the 10th takes both");
+        }
     }
 }

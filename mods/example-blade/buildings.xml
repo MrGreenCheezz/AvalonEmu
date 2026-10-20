@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- buildings.bin: the warrior's forges (T6-T8) craft the blade, in the weapons tab next to the broadsword. -->
+<patch>
+  <add uniquename="T6_FORGE" path="craftingitemlist">
+    <craftitem uniquename="T6_MAIN_CLOCKWORKBLADE" displaygroup="6" category="@BUILDING_ITEMS_CATEGORY_WEAPONS" />
+  </add>
+  <add uniquename="T7_FORGE" path="craftingitemlist">
+    <craftitem uniquename="T6_MAIN_CLOCKWORKBLADE" displaygroup="6" category="@BUILDING_ITEMS_CATEGORY_WEAPONS" />
+  </add>
+  <add uniquename="T8_FORGE" path="craftingitemlist">
+    <craftitem uniquename="T6_MAIN_CLOCKWORKBLADE" displaygroup="6" category="@BUILDING_ITEMS_CATEGORY_WEAPONS" />
+  </add>
+</patch>

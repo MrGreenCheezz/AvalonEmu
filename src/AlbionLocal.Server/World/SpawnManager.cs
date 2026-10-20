@@ -106,10 +106,13 @@ public static class SpawnManager
         var template = point.Template ?? (point.Block is { AllowUpgradeByChest: true } camp && world.Config.Roads.Chests
             ? camp.PickAt(map.Random, slot.ChestLevel ?? camp.LowestLevel, world.Rates.ChampionWeight) : point.Block?.Pick(map.Random, world.Rates.ChampionWeight));
         if (template is null) return null;
+        var variant = world.ModDrops.ReplaceFor(template.Name, map.Random); // a content pack's mob variant turns up instead now and then (studio phase 3)
         var mob = new Mob(world.ObjectIds.Next(), point, template, Mob.FlaggingOf(template, point.Tile, cluster ?? map.Template?.Name), world.GameNow, world.Now)
         {
-            Slot = slot, World = world, HealthFactor = map.MobHealthFactor, DamageFactor = map.MobDamageFactor, // stageH: an expedition's group scaling
+            Slot = slot, World = world, HealthFactor = map.MobHealthFactor * (variant?.HealthFactor ?? 1), DamageFactor = map.MobDamageFactor * (variant?.DamageFactor ?? 1), // stageH: an expedition's group scaling
+            FameFactor = variant?.FameFactor ?? 1, Variant = variant?.Id,
         };
+        if (variant is not null) Log.Info("mods", $"pack {variant.Pack}: {template.Name} spawns as the variant {variant.Id}");
         slot.Mob = mob;
         LevelBuff(map, mob, world);
         if (mob.LevelBuff is null && mob.HealthFactor != 1) mob.Health.Fill(Systems.SpellEffects.MobMaxHealth(mob, world.GameNow), template.HitPointsRegeneration, world.GameNow);
@@ -144,7 +147,7 @@ public static class SpawnManager
     /// </summary>
     public static Mob SpawnAt(Map map, MobTemplate template, Vector2 position, float direction, World world, string? behavior = null,
         IReadOnlyList<Waypoint>? waypoints = null, double healthFactor = 1, double damageFactor = 1, Systems.WorldEvents.Run? worldEvent = null,
-        SpellTemplate? levelBuff = null, double fameFactor = 1)
+        SpellTemplate? levelBuff = null, double fameFactor = 1, string? variant = null)
     {
         var point = new MobSpawnPoint
         {
@@ -154,7 +157,7 @@ public static class SpawnManager
         };
         var mob = new Mob(world.ObjectIds.Next(), point, template, Mob.FlaggingOf(template, "", map.Template?.Name), world.GameNow, world.Now)
         {
-            World = world, HealthFactor = healthFactor, DamageFactor = damageFactor, Event = worldEvent, FameFactor = fameFactor,
+            World = world, HealthFactor = healthFactor, DamageFactor = damageFactor, Event = worldEvent, FameFactor = fameFactor, Variant = variant,
         };
         if (levelBuff is not null)
         {

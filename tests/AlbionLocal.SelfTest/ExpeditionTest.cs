@@ -28,6 +28,7 @@ public static class ExpeditionTest
         ("expeditions: client tables = exp_tables.json (categories, agent 4, 26 playable), Mine-SOLO objects and start, spawn aliases, rewards exist", Data),
         ("expeditions: Thetford T3 register (10858/10856), Join channel (279, 10 s, push {0, 1}), instance 251/252/315, 260/261, kills, checkpoints, death, bonus rewards, finish exit, timeout", Live),
         ("expeditions: T4_VETERAN queue of two, party leader invites (262, 273), one instance for 2 (x0.70), hardcore level 2 by token (10864, buff 02, x2.516, D3 token, level 3 open)", Groups),
+        ("expeditions (econ SPEC §3): hardcore level 18 completed spawns HARCORE_EXPEDITION_LVL_18 at the map's HCE_FINAL_REWARD point; a T6 Avalonian elite map from the bag opens T6_AVALON_ELITE_CONSUMABLE level 1 on an ELITE marker", Leftovers),
     ];
 
     private static ClusterStore Store => Client.Clusters!;
@@ -444,6 +445,70 @@ public static class ExpeditionTest
         Check(h.Character.Silver - silver == (long)Math.Round(50000 * 10000 * 2.516) && Bag().Any(n => n.StartsWith("QUESTITEM_EXP_TOKEN_D3_", StringComparison.Ordinal))
               && h.Character.Expeditions is { Hardcore: 3 } && exps.HardcoreLevel(h.Character, hard!.Category) == 3,
               $"level 2 completed in the bonus time: 50000 x 2.516 silver, a D3 token, level 3 open (got {(h.Character.Silver - silver) / 10000})");
+        world.Dispose();
+        characters.Dispose();
+        try { Directory.Delete(dir, true); } catch (IOException) { }
+    }
+
+    private static void Leftovers()
+    {
+        var dir = NewDir();
+        var characters = Repository(dir);
+        var clock = new ManualClock();
+        var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, Client.Items, Client.GameData, Client.Spells)
+        {
+            Sync = new object(), Clock = clock, Clusters = Store, MapSeed = 9, LoadCluster = id => Task.FromResult(Store.Get(id)),
+        };
+        world.MobAi = false;
+        void Tick(double seconds)
+        {
+            clock.Advance(TimeSpan.FromSeconds(seconds));
+            lock (world.Sync) world.Update();
+        }
+        var elite = Store.Get("2326"); // T6 black zone with ELITE markers
+        var marker = elite.DungeonMarkers.First(m => m.Type == "ELITE");
+        var c = StarterKit.Default.NewCharacter("X" + Guid.NewGuid().ToString("N")[..10]);
+        (c.Cluster, c.PositionX, c.PositionY) = ("2326", marker.Position.X + 3, marker.Position.Y);
+        c.Inventory = [new InventoryItem("T6_RANDOM_DUNGEON_ELITE_TOKEN_D1", 1)];
+        Check(characters.Create(c), "character created");
+        var (s, peer, _) = Join(world, c.Id);
+        var me = s.Player!;
+
+        // Level 18 (§3.1): the instance, the player in it, the completion: the bonus chest at the spawn point.
+        var data = Store.Expeditions;
+        var cat = data.CategoryAt(10)!;
+        var e = data.ExpeditionAt(20)!;
+        var template = Store.Get(e.World);
+        var point = template.LootChests.FirstOrDefault(p => p.SpawnBehaviour == Expeditions.BonusChestSpawnpoint);
+        var exps = world.Expeditions;
+        ExpeditionInstance instance;
+        lock (world.Sync)
+        {
+            instance = exps.Create(e, cat, 18);
+            exps.Send(me, instance, new DungeonReturn("2326", c.PositionX, c.PositionY, 0), "test");
+        }
+        Tick(0.2);
+        (s, peer, _) = Join(world, c.Id);
+        me = s.Player!;
+        Tick(0.2);
+        lock (world.Sync) exps.Finish(instance);
+        var chest = me.Map?.Objects.Values.OfType<LootChest>().FirstOrDefault();
+        Check(cat.Name == "T6_HARDCORE" && Expeditions.LevelOf(instance) is { BonusChest: true } && point is not null && me.Map?.Cluster == instance.Id
+              && chest is not null && chest.Template.Name == "HARCORE_EXPEDITION_LVL_18" && Vector2.Distance(chest.Position, point.Position) < 0.01f,
+              $"{e.Name} level 18 completed: spawnbonuslootchest → the HCE_FINAL_REWARD chest at {point?.Position} (got {chest?.Template.Name} at {chest?.Position})");
+        lock (world.Sync) exps.Close(instance, "test");
+        Tick(0.2);
+
+        // The Avalonian elite map (§3.2): used in 2326, its exit within 0-3 clusters of the same archetype (only clusters already read).
+        (s, peer, _) = Join(world, c.Id);
+        me = s.Player!;
+        var map = me.Inventory.Bag.Items.First(i => i.Template.Name == "T6_RANDOM_DUNGEON_ELITE_TOKEN_D1");
+        lock (world.Sync) s.OnRequest(Request(new UseConsumableFromInventoryRequest { ah5 = map.Id, ah6 = 1 }, 30), encrypted: false);
+        for (var i = 0; i < 5; i++) Tick(0.2);
+        var exits = world.Maps.Maps.SelectMany(world.Dungeons.ExitsOf).Where(x => x.FromMap).ToList();
+        Check(peer.Responses[^1].ReturnCode == 0 && exits is [{ Name: "T6_AVALON_ELITE_CONSUMABLE", Level: 1, Marker.Type: "ELITE" } x0] && map.Count == 0
+              && x0.Info.Dungeons is [("AVALON_RANDOM_DUNGEON_ELITE", 6, _)],
+              $"T6_RANDOM_DUNGEON_ELITE_TOKEN_D1 used: T6_AVALON_ELITE_CONSUMABLE (AVALON_RANDOM_DUNGEON_ELITE, level 1) on an ELITE marker (got RC {peer.Responses[^1].ReturnCode}, {string.Join("; ", exits.Select(x => $"{x.Name} L{x.Level} {x.Marker?.Type} in {x.Map?.Cluster}"))})");
         world.Dispose();
         characters.Dispose();
         try { Directory.Delete(dir, true); } catch (IOException) { }

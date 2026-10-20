@@ -13,6 +13,17 @@ public static class Log
 
     public static LogLevel Level { get; set; } = LogLevel.Info;
 
+    /// <summary>How many of the last lines <see cref="Recent"/> keeps in memory.</summary>
+    public const int RecentLines = 500;
+
+    private static readonly Queue<string> Last = new();
+
+    /// <summary>The last <paramref name="count"/> lines written (at most <see cref="RecentLines"/>), oldest first: the checker's failure excerpt.</summary>
+    public static string[] Recent(int count)
+    {
+        lock (Gate) return [.. Last.Skip(Math.Max(0, Last.Count - count))];
+    }
+
     public static void Write(LogLevel level, string source, string message)
     {
         if (level < Level) return;
@@ -90,6 +101,8 @@ public static class Log
         lock (Gate)
         {
             var line = $"{DateTime.Now:HH:mm:ss.fff} {level,-5} [{source}] {message}";
+            Last.Enqueue(line);
+            if (Last.Count > RecentLines) Last.Dequeue();
             var old = Console.ForegroundColor;
             Console.ForegroundColor = level switch
             {

@@ -29,6 +29,9 @@ public sealed record MarketOrder(long Id, Guid Owner, string Type, string Locati
 public sealed record MarketFinished(long Id, Guid Owner, long OrderId, string Type, string Location, string ItemName, int Quality, int Amount,
     long UnitPrice, long Silver, DateTime Created, DateTime Expires, Guid Reference, InventoryItem? Item);
 
+/// <summary>One sale at a city's market (econ SPEC §1): <see cref="Amount"/> of <see cref="ItemName"/> at <see cref="UnitPrice"/> (a7m raw), for the price history.</summary>
+public sealed record MarketSale(string Location, string ItemName, int Quality, int Amount, long UnitPrice, DateTime At);
+
 /// <summary>The writes of one market operation, all or nothing (<see cref="IMarketStore.Batch"/>).</summary>
 public interface IMarketBatch
 {
@@ -45,6 +48,9 @@ public interface IMarketBatch
     void SetFinishedAmount(long entry, int amount);
 
     void DeleteFinished(long entry);
+
+    /// <summary>Records a sale for the price history (and drops the sales older than <see cref="IMarketStore.HistoryDays"/>).</summary>
+    void AddSale(MarketSale sale);
 
     /// <summary>Silver (a7m raw) for a character that is not in the world, added to it at its next Join (<see cref="IMarketStore.TakeCredits"/>).</summary>
     void Credit(Guid character, long silver);
@@ -75,6 +81,12 @@ public interface IMarketStore
 
     /// <summary>Takes (and deletes) the silver owed to <paramref name="character"/>: the sum, 0 = none.</summary>
     long TakeCredits(Guid character);
+
+    /// <summary>How long the sales are kept: the chart's longest span (4 weeks) and a day.</summary>
+    public const int HistoryDays = 29;
+
+    /// <summary>The sales of <paramref name="itemName"/> at <paramref name="location"/> since <paramref name="since"/> (quality 0 = any), newest first.</summary>
+    IReadOnlyList<MarketSale> Sales(string location, string itemName, int quality, DateTime since);
 
     /// <summary>The open orders whose end is at or before <paramref name="now"/>, oldest first (the expiry sweep, stageJ mail SPEC §4.2).</summary>
     IReadOnlyList<MarketOrder> ExpiredOrders(DateTime now);

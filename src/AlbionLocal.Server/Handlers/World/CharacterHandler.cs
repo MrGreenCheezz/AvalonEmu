@@ -36,6 +36,8 @@ public sealed partial class WorldSession
             Log.Warn(Name, $"join into an expedition that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.Hellgates.ReturnIfClosed(c)) // stageL: the same for a hellgate that is gone (hellgates SPEC §5.7)
             Log.Warn(Name, $"join into a hellgate that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
+        if (world.Arenas.ReturnIfClosed(c)) // stage N: the same for an arena match that is gone (arena SPEC §4.2)
+            Log.Warn(Name, $"join into an arena that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.Corrupted.ReturnIfClosed(c)) // stageL: the same for a corrupted dungeon that is gone (SPEC §4.2 step 9)
             Log.Warn(Name, $"join into a corrupted dungeon that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.Mists.ReturnIfClosed(c)) // stageL: the same for a mists zone that is gone (mists SPEC §6.6)
@@ -84,7 +86,7 @@ public sealed partial class WorldSession
         // A second Join on one connection (never captured): the old player leaves first, so that what its OnLogout
         // changes in the items is in the character the new item objects are made from. The scripts of the new one run
         // after JoinFinished (AfterResponse).
-        if (Player is { } old) Leave(old);
+        if (Player is { } old) Leave(old, clusterChange: false);
         // A reconnect: the player of the old connection (up to its 30 s timeout) shares the
         // live character but has an inventory of its own. A harvest it had under way would finish into that one and save
         // it over the character (FinishHarvest, Player.SaveItems), so it ends here, without an event: its client is gone.
@@ -197,8 +199,9 @@ public sealed partial class WorldSession
         r.a8g = new int[5];                          // [6]
         r.a8h = new int[5];                          // [7]
         r.a9h = new long[5];                         // [43] a7m per ReSpecFameType (ctp+0x580)
-        r.ba7 = new long[6];                         // [105] a7m[6] (ctp.af(a7m[]) → ctp+0x588): by faction [inference], not the StandingType standings (87 after JoinFinished)
-        r.bba = Enumerable.Repeat(-1, 7).ToArray();  // [108] -1 = none, as captured
+        r.ba7 = new long[6];                         // [105] a7m[6] (ctp.af(a7m[]) → ctp+0x588): the standing by faction (index FlaggingStatus − 1, bcj.a)
+        world.Factions.JoinKeys(c, r);               // [104] the currencies by index (faction points, FAVOR), [105] (stageN faction SPEC §2)
+        r.bba = Systems.Vanity.Wardrobe(c);          // [108] the wardrobe skin numbers by EquipmentSlot, -1 = none (stageN vanity SPEC §1.4)
         // StageJ focus-lp (SPEC §5.3): premium (90 the end, 91 the days), the focus bar (27, 28, 30, 31; settled now), the learning points
         // (37-40; paid up to now) and the use flags (32 AutoUseActionFocusForCrafting, 99 AutoUseLearningPoints, 100 the respec silver).
         var gameNow = world.GameNow;
@@ -270,7 +273,7 @@ public sealed partial class WorldSession
 
     /// <summary>
     /// Creates the character's item objects in their containers (<see cref="Inventory.Load"/>: equipment slots first,
-    /// then the inventory slots). As the official server does (captures/albion_103829), the items go out before the
+    /// then the inventory slots). As the official server does (capture 103829), the items go out before the
     /// Join response, which lists the ids in keys 52/55; c15.m then finds the objects by id. NewEquipmentItem (30) /
     /// NewSimpleItem (32) build the object (cjb.bl → c10.af(id, type, count)). Entries that do not become objects
     /// (unknown name, a kind without its New*Item yet) are kept by the inventory so that saving does not drop them.
@@ -318,15 +321,16 @@ public sealed partial class WorldSession
         {
             // Clamped: a saved fame over the maxfame (a lowered maxfame, an edited database) is a full one that Journals.Fill skips.
             JournalFame = type.IsJournal ? Math.Clamp(saved.Fame ?? Item.DefaultFame(type), 0, type.Journal!.MaxFame) : 0,
+            Soul = type.IsEquipment ? saved.Soul : null,
         };
     }
 
     /// <summary>
-    /// A new item of <paramref name="count"/> × <paramref name="type"/> (quality 1, full durability, the default spell choice
+    /// A new item of <paramref name="count"/> × <paramref name="type"/> (of <paramref name="quality"/>, full durability, the default spell choice
     /// for this session's player), not sent and in no container: a mob's loot (stage 5c), sent when its bag is opened.
     /// </summary>
-    internal Item NewItem(ItemTemplate type, int count) =>
-        MakeItem(type, new InventoryItem(type.Name, count), SpellUsable(Player?.Progression));
+    internal Item NewItem(ItemTemplate type, int count, int quality = 1) =>
+        MakeItem(type, new InventoryItem(type.Name, count) { Quality = quality }, SpellUsable(Player?.Progression));
 
     /// <summary>An item object to this client: NewEquipmentItem (30) for equipment, else <see cref="CountEvent"/> (NewSimpleItem or NewJournalItem).</summary>
     internal void SendItem(Item item)
@@ -340,9 +344,16 @@ public sealed partial class WorldSession
     /// a journal NewJournalItem (35) {0, 1, 2 count, 8 its fame a7m raw; 6 "", 7 0} (stageH journals SPEC §A.2: the client updates count
     /// and fame of a known journal object in place, cjb.bm 0x180aa8e90; key 7 is the c1p durability-like slot, 0, Q-A3).
     /// </summary>
-    internal static AlbionEvent CountEvent(Item item) => item.Template.IsJournal
-        ? new NewJournalItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, c27 = item.JournalFame }.FillEmpty()
-        : new NewSimpleItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count }.FillEmpty();
+    internal static AlbionEvent CountEvent(Item item) => item.Template switch
+    {
+        { IsJournal: true } => new NewJournalItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, c27 = item.JournalFame }.FillEmpty(),
+        // Furniture: NewFurnitureItem (33) {0, 1, 2 count, 4 durability a7m, 6 crafter "", 7 0} as captured (103829: key 4 686.98, 7 1350000 for a
+        // chest; the beds and tables have no durability: key 4 0); labourers SPEC §1.4.
+        { IsFurniture: true } => new NewFurnitureItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, da1 = item.Template.FullDurabilityRaw, c0i = "" }.FillEmpty(),
+        // A labourer contract: NewLaborerItem (36) {0, 1, 2 count} (the auz base only; SPEC §1.4).
+        { IsLabourerContract: true } => new NewLaborerItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count }.FillEmpty(),
+        _ => new NewSimpleItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count }.FillEmpty(),
+    };
 
     /// <summary>
     /// Logout from the settings menu (op 128, no fields, no request id). The client runs the countdown itself

@@ -161,6 +161,8 @@ public sealed class CommandRegistry
     /// </summary>
     public void Execute(CommandContext ctx, string line)
     {
+        // A plugin's command (server/plugins/README.md) when its path is longer than any built-in one the line starts with.
+        if (ctx.World.Plugins.TryRun(ctx, line)) return;
         try
         {
             var (command, args) = Parse(ctx, line);

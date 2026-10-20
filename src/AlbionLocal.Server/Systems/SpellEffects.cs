@@ -144,17 +144,66 @@ public sealed class EffectList
 
     public int Count => _spells.Count;
 
+    /// <summary>
+    /// GameTimeStamp and type of the last damage on its health (stageN spells2: the &lt;AI&gt; IfTargetTookDamage); 0 = none yet. Set by
+    /// <see cref="SpellEffects.Damaged"/> from the three damage paths (player → mob, mob → player, player → player).
+    /// </summary>
+    public long DamagedAt { get; internal set; }
+
+    public EffectType DamagedType { get; internal set; }
+
     /// <summary>A player's worn passives as last worked out (<see cref="Passives.Of"/>); null until then and for mobs.</summary>
     internal PassiveSet? Passive { get; set; }
 
     /// <summary>The buff sums of a player's worn passives by attribute (<see cref="Passives"/>: a passive buff counts as a buffovertime); null for mobs.</summary>
     internal Func<IReadOnlyDictionary<string, double>>? PassiveBuffs { get; init; }
 
-    /// <summary>Nothing to add up: no spells and no passive buffs (the fast path of the sums and factors).</summary>
-    public bool Idle => _spells.Count == 0 && (PassiveBuffs?.Invoke().Count ?? 0) == 0;
+    /// <summary>Nothing to add up: no spells, no passive buffs and no plugin modifiers (the fast path of the sums and factors).</summary>
+    public bool Idle => _spells.Count == 0 && _modifierSums is null && (PassiveBuffs?.Invoke().Count ?? 0) == 0;
 
-    /// <summary>Drops the spells that have ended by <paramref name="now"/>; returns how many.</summary>
-    public int Prune(long now) => _spells.RemoveAll(s => !s.Live(now));
+    /// <summary>The unit whose list this is (the plugins' buff hooks); null for a list outside any unit.</summary>
+    internal IUnit? Owner { get; init; }
+
+    /// <summary>Whether the plugins listen to entries leaving this list (Buffs.OnRemove).</summary>
+    private bool Watched => Owner switch { Player p => p.World.Plugins.WantsBuffRemove, Mob { World: { } w } => w.Plugins.WantsBuffRemove, _ => false };
+
+    /// <summary>Drops the spells that have ended by <paramref name="now"/>; returns how many (the plugins' OnRemove "expired" for each).</summary>
+    public int Prune(long now)
+    {
+        if (_spells.Count == 0) return 0;
+        if (!Watched) return _spells.RemoveAll(s => !s.Live(now));
+        var gone = _spells.Where(s => !s.Live(now)).ToList();
+        if (gone.Count == 0) return 0;
+        _spells.RemoveAll(gone.Contains);
+        Plugins.PluginHost.BuffsEnded(Owner!, gone, AlbionLocal.Plugin.Api.BuffEnd.Expired);
+        return gone.Count;
+    }
+
+    // ---- the plugins' stat modifiers (IGameplay.SetModifier)
+
+    private Dictionary<(string Plugin, string Source, string Attribute), double>? _modifiers;
+    private Dictionary<string, double>? _modifierSums;
+
+    internal void SetModifier(string plugin, string source, string attribute, double value)
+    {
+        (_modifiers ??= [])[(plugin, source, attribute)] = value;
+        Resum();
+    }
+
+    /// <summary>Clears the modifiers of <paramref name="plugin"/> (of <paramref name="source"/> and <paramref name="attribute"/> when given); whether any went.</summary>
+    internal bool ClearModifiers(string plugin, string? source, string? attribute)
+    {
+        if (_modifiers is null) return false;
+        var keys = _modifiers.Keys.Where(k => k.Plugin == plugin && (source is null || k.Source == source) && (attribute is null || k.Attribute == attribute)).ToList();
+        foreach (var k in keys) _modifiers.Remove(k);
+        if (keys.Count > 0) Resum();
+        return keys.Count > 0;
+    }
+
+    private void Resum()
+    {
+        _modifierSums = _modifiers is { Count: > 0 } ? _modifiers.GroupBy(k => k.Key.Attribute).ToDictionary(g => g.Key, g => g.Sum(x => x.Value)) : null;
+    }
 
     /// <summary>The sub-effects in force at <paramref name="now"/>, with their spell.</summary>
     public IEnumerable<(ActiveSpell Spell, SubEffect Sub)> On(long now)
@@ -173,7 +222,8 @@ public sealed class EffectList
     /// player's passive buffs on it (stageD effects batch 2, <see cref="Passives"/>).
     /// </summary>
     public double Sum(string attribute, long now) =>
-        On(now).Where(x => x.Sub.Attribute == attribute).Sum(x => x.Sub.Value * x.Spell.Stacks) + (PassiveBuffs?.Invoke().GetValueOrDefault(attribute) ?? 0);
+        On(now).Where(x => x.Sub.Attribute == attribute).Sum(x => x.Sub.Value * x.Spell.Stacks) + (PassiveBuffs?.Invoke().GetValueOrDefault(attribute) ?? 0)
+        + (_modifierSums?.GetValueOrDefault(attribute) ?? 0);
 
     /// <summary>The entry of <paramref name="spell"/> by <paramref name="caster"/>; null = none.</summary>
     public ActiveSpell? Find(short spell, long caster) => _spells.FirstOrDefault(s => s.Spell.Id == spell && s.Caster == caster);
@@ -185,15 +235,19 @@ public sealed class EffectList
     internal bool Remove(ActiveSpell s)
     {
         s.Cancelled = true;
-        return _spells.Remove(s);
+        if (!_spells.Remove(s)) return false;
+        if (Watched) Plugins.PluginHost.BuffsEnded(Owner!, [s], AlbionLocal.Plugin.Api.BuffEnd.Removed);
+        return true;
     }
 
     /// <summary>Every spell gone (death, reset, knockdown), a forced movement under way with them; the diminishing returns stay.</summary>
     public void Clear()
     {
         foreach (var s in _spells) s.Cancelled = true;
+        var gone = Watched && _spells.Count > 0 ? _spells.ToList() : null;
         _spells.Clear();
         Forced = null;
+        if (gone is not null) Plugins.PluginHost.BuffsEnded(Owner!, gone, AlbionLocal.Plugin.Api.BuffEnd.Cleared);
     }
 }
 
@@ -371,11 +425,14 @@ public static class SpellEffects
         var list = unit.Effects;
         list.Prune(world.GameNow);
         var entry = list.Find(spell.Id, caster);
+        var isNew = entry is null;
+        var before = entry?.Stacks ?? 0;
         if (entry is null)
         {
             entry = new ActiveSpell
             {
                 Spell = spell, Caster = caster, Subs = [.. spell.Effects.Select((node, i) => new SubEffect(node, i))], Pending = pending,
+                Stacks = (byte)Math.Clamp(Math.Min(spell.StartCharges, spell.StackLimit), 1, byte.MaxValue), // startcharges (the bait's 10 charges)
             };
             list.Add(entry);
         }
@@ -392,6 +449,7 @@ public static class SpellEffects
             foreach (var end in entry.Subs.Where(s => s.Active && s.DurationMs > 0).Select(entry.EndOf).Distinct())
                 SpellCasts.At(world, map, end, () => Expired(world, unit));
         if (!entry.Pending) Interrupt(unit, world.GameNow);
+        world.Plugins.BuffApplied(unit, entry, isNew, before); // the plugins' Buffs.OnApply / OnStackChange
         return entry;
     }
 
@@ -417,7 +475,12 @@ public static class SpellEffects
         foreach (var s in list.Spells.Where(match).ToList())
         {
             changed = true;
-            if (charges > 0 && s.Stacks > charges) s.Stacks -= (byte)charges;
+            if (charges > 0 && s.Stacks > charges)
+            {
+                var before = s.Stacks;
+                s.Stacks -= (byte)charges;
+                world.Plugins.BuffStacks(unit, s, before); // the plugins' Buffs.OnStackChange
+            }
             else list.Remove(s);
         }
         if (changed && unit is Player { Combat.Toggles.Count: > 0 } owner) SpellCasts.ToggleEntriesGone(owner);
@@ -517,7 +580,7 @@ public static class SpellEffects
         var e = attacker.Effects;
         var boss = attacker is Mob { DamageFactor: var f } ? f : 1;
         var name = $"{(type == EffectType.Magic ? "magic" : "physical")}{(spell ? "spell" : "attack")}damagebonus";
-        var worn = spell && attacker is Player { World.Config.GearDamageBonus: true } p && (p.Bot is null || p.World.Config.Bots.GearDamageBonus)
+        var worn = spell && attacker is Player { World.Config.GearDamageBonus: true } p && (p.Bot is null || (p.IsCompanion ? p.World.Config.Companions.GearDamageBonus : p.World.Config.Bots.GearDamageBonus))
             ? Combat.Worn(p, name) : 0;
         if (e.Idle) return Math.Max(0, 1 + worn) * boss;
         var bonus = worn + e.Sum(name, now);
@@ -680,6 +743,14 @@ public static class SpellEffects
 
     /// <summary>No auto-attack: stunned or cannotattack.</summary>
     public static bool CannotAttack(IUnit unit, long now) => unit.Effects.Count > 0 && (unit.Effects.Has("cannotattack", now) || unit.Effects.Has("stun", now));
+
+    /// <summary>Damage of <paramref name="type"/> came off <paramref name="unit"/>'s health at <paramref name="ticks"/> (IfTargetTookDamage).</summary>
+    public static void Damaged(IUnit unit, EffectType type, long ticks)
+    {
+        if (ticks < unit.Effects.DamagedAt) return;
+        unit.Effects.DamagedAt = ticks;
+        unit.Effects.DamagedType = type;
+    }
 
     /// <summary>invincibility: damage on the unit is ignored (no HealthUpdate).</summary>
     public static bool Invincible(IUnit unit, long now) => unit.Effects.Count > 0 && unit.Effects.Has("invincibility", now);

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using AlbionLocal.Photon;
+using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
 using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Protocol;
@@ -9,7 +10,7 @@ namespace AlbionLocal.Server.Network;
 
 /// <summary>
 /// Gathering the static harvestables (stage 4a, ARCHITECTURE.md §8 step 14; the rules in <see cref="Harvesting"/>), as the
-/// official server answers it in captures/albion_20261016_002835 (analysis/work/cap002835/harvest/HARVEST.md §1, §3, §5).
+/// official server answers it in capture 002835 (analysis/work/cap002835/harvest/HARVEST.md §1, §3, §5).
 /// The burst goes to the harvester; 59, 60 and 61 also to everyone in view of the harvester whose client knows the node, as the
 /// official server sends them (stage I, <see cref="Harvesting.ToWatchers"/>; a newcomer gets the catch-up 59 after the NewCharacter),
 /// 46 to everyone in view of the node (<see cref="Harvesting.SendState"/>).
@@ -183,7 +184,9 @@ public sealed partial class WorldSession
         Harvesting.SendState(map, node);                                            // 1. HarvestableChangeState
         if (h.Tool is { } tool)
         {
+            var toolBefore = tool.DurabilityRaw;
             tool.DurabilityRaw = Math.Max(0, tool.DurabilityRaw - Harvesting.DurabilityLoss(world.GameData, tier.Tier, item, baseAmount));
+            if (toolBefore > 0 && tool.DurabilityRaw <= 0) world.Plugins.Broke(player, tool, "gathering"); // Items.OnBreak
             SendItemObject(tool);                                                   // 2. the tool, key 8 = the new durability
         }
         // 3. The fame (T2+; T1 has famevalue 0 and gets none): the destiny board's 151/152 of the resource's nodes, then
@@ -197,6 +200,7 @@ public sealed partial class WorldSession
         // PVE-DESIGN step 11: the journal's gather missions (600 before the fame, as captured) and the gather bounties count the items received.
         Systems.AlbionJournal.Gathered(player, item, total);
         world.Bounties.Gathered(player, item, total);
+        world.Plugins.Harvested(player, item.Name, total, "gather"); // the plugins' Harvested
         world.Guilds.Gathered(player, item, total); // guilds SPEC §10.6: the gather contracts
         world.GuildGoals.OnGather(player, item, total); // stage I: the weekly guild goals
         if (fame > 0) Systems.Destiny.Award(player, fame, Systems.Destiny.Harvest(item), source: item);
@@ -212,6 +216,8 @@ public sealed partial class WorldSession
             bag.Put(slot, added);
             SendEvent(new InventoryPutItemEvent { ckw = added.Id, ckx = slot, cky = bag.Id });               //    + InventoryPutItem
         }
+        // The bonus loot (econ SPEC §2.1): the tier's <Loot> rolled once (× Rates:Loot), the items that fit after the resource; keys 9/10.
+        var extras = BonusLoot(player, tier.LootOf(node.RareState), map.Random);
         var finished = new HarvestFinishedEvent
         {
             HarvesterId = player.Id,               // [0]
@@ -221,15 +227,45 @@ public sealed partial class WorldSession
             ItemId = item.Index,                   // [4] items.xml id (T1_WOOD 947)
             Amount = (short)Math.Min(short.MaxValue, amount),              // [5] base amount
             ChargesLeft = node.Charges,            // [8] left out at 0
-            BonusLootItems = [],                   // [9] no bonus loot
-            Extra = new() { [6] = (short)Math.Min(short.MaxValue, bonus), [7] = (short)Math.Min(short.MaxValue, premium), [10] = Array.Empty<byte>() }, // [6] yield bonus, [7] premium bonus, [10] bonus loot counts
+            BonusLootItems = [.. extras.Select(e => e.Item.Name)], // [9] the bonus loot's uniquenames
+            Extra = new() { [6] = (short)Math.Min(short.MaxValue, bonus), [7] = (short)Math.Min(short.MaxValue, premium) }, // [6] yield bonus, [7] premium bonus
         };
+        if (extras.Count > 0) finished.BonusLootCounts = [.. extras.Select(e => e.Count)]; // [10] their counts
+        else finished.Extra![10] = Array.Empty<byte>();                                       //      none: the official empty byte[]
         SendEvent(finished);
         Harvesting.ToWatchers(player, node, finished); // stage I: the "+N" over its head and the node's charges for the players in view
         if (added is not null) world.Scripts.OnItemAdded(player, added);
         player.SaveItems();
         Log.Info(Name, $"'{player.Character.Name}' harvested {amount}{(bonus > 0 ? $" + {bonus}" : "")}{(premium > 0 ? $" + {premium} premium" : "")} x {item.Name} from {node}: {node.Charges}/{node.FullCharges} charges left"
             + (h.Tool is { } t ? string.Create(CultureInfo.InvariantCulture, $", {t.Template.Name} at {t.DurabilityRaw / 10000.0:0.####}") : "")
-            + (added is not null ? $", new stack in inventory #{slot}" : ""));
+            + (added is not null ? $", new stack in inventory #{slot}" : "")
+            + (extras.Count > 0 ? $", bonus loot {string.Join(", ", extras.Select(e => $"{e.Count} x {e.Item.Name}"))}" : ""));
+    }
+
+    /// <summary>
+    /// One roll of a harvest's bonus loot (<see cref="HarvestableTier.LootOf"/>; loot.xml through <see cref="LootTables.RollMob"/>, the
+    /// chances × Rates:Loot): the items the server can create that fit the inventory now, given at once (<see cref="GiveItem"/>).
+    /// loot.xml not read: none.
+    /// </summary>
+    private List<(ItemTemplate Item, int Count)> BonusLoot(Player player, System.Xml.Linq.XElement? loot, Random random)
+    {
+        var given = new List<(ItemTemplate, int)>();
+        if (loot is null) return given;
+        LootTables? tables;
+        try { tables = world.Clusters?.Loot; }
+        catch (Exception e) when (e is InvalidDataException or IOException) { tables = null; }
+        if (tables is null) return given;
+        foreach (var (name, amount) in tables.RollMob(loot, random, world.Rates.Loot, world.Config.LootBlackMarketChance, blackMarketSoftCap: world.Config.LootBlackMarketSoftCap))
+        {
+            if (world.Items.Find(name) is not { CanCreate: true } type || amount <= 0) continue;
+            if (!Fits(player.Inventory.Bag, [(type, amount)]))
+            {
+                Log.Info(Name, $"'{player.Character.Name}' bonus loot {amount} x {name} does not fit the inventory: not given");
+                continue;
+            }
+            GiveItem(player, type, amount);
+            given.Add((type, amount));
+        }
+        return given;
     }
 }

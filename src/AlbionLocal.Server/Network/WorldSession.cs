@@ -57,7 +57,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
     /// passives</b> (a passive's pulses and on-hit procs would cast areas with the bot as caster that hit mobs, and mobs never fight bots).
     /// Not sent.
     /// </summary>
-    internal Item NewBotItem(ItemTemplate type)
+    internal Item NewBotItem(ItemTemplate type, Func<Data.SpellTemplate, bool>? prefer = null, int quality = 1)
     {
         var usable = SpellUsable(world.UnlockAll);
         var (active, _) = Selection(type.Name, new InventoryItem(type.Name, 1), usable);
@@ -67,10 +67,12 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
                 if (active[i] >= 0) continue;
                 // StageM bots: never a spell it may not cast in a fight (OUTOFCOMBATHEAL), and a fighting one (damage, cc, movement) first.
                 var choice = slots.Active[i].Where(c => usable(c) && spells.Template(c) is not { UsableInCombat: false }).ToArray();
-                if (choice.Where(c => spells.Template(c) is { } t && FightingSpell(t)).ToArray() is { Length: > 0 } fighting) choice = fighting;
+                // StageN companions: a kit by role (a tank's taunt, a healer's heals) before the rest.
+                if (prefer is not null && choice.Where(c => spells.Template(c) is { } t && prefer(t)).ToArray() is { Length: > 0 } preferred) choice = preferred;
+                else if (choice.Where(c => spells.Template(c) is { } t && FightingSpell(t)).ToArray() is { Length: > 0 } fighting) choice = fighting;
                 if (choice.Length > 0) active[i] = choice[world.Bots.Random.Next(choice.Length)];
             }
-        return new Item(world.ObjectIds.Next(), type, 1, 1, type.FullDurabilityRaw, active, [], null);
+        return new Item(world.ObjectIds.Next(), type, 1, Math.Clamp(quality, 1, 5), type.FullDurabilityRaw, active, [], null); // stageN botpower: Bots:Gear:Quality
     }
 
     /// <summary>
@@ -115,7 +117,8 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         CancelLogout();
         if (Player is { Map: not null } downed) Systems.Death.Abandoned(downed); // stageE E3: knocked down in a lethal cluster, it dies
         var dead = Player is { Combat.Down.Kind: KnockdownKind.Dead } ? Player : null; // stageE E3: it joins at its respawn point
-        if (Player is { } player) Leave(player);
+        if (Player is { } gone) world.Plugins.PlayerLogout(gone); // the plugins' PlayerLogout, still on its map
+        if (Player is { } player) Leave(player, clusterChange: false);
         // Out of its party unless another connection still plays the character (a reconnect; stageD party SPEC §7 flow 3).
         // Its guild's members see it go offline the same way (stageH guilds SPEC §3.5), and its chat channels and friends (stageJ chat SPEC §2.2).
         if (Character is { } member && world.Parties.Online(member.Id) is null)
@@ -127,6 +130,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         }
         if (Character is { } c)
         {
+            world.ExtraBars.LoggedOut(c.Id); // the next login's mod says hello again
             Player?.StorePosition(DateTime.UtcNow);
             if (dead is not null) Systems.Death.Departed(world, dead);
             c.LastLeftAt = DateTime.UtcNow.Ticks;
@@ -142,8 +146,9 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
     /// stage 7 SPEC §3), then off the map (the last one out starts the map's idle time), and its chat connection off the map's Area
     /// channel at once (<see cref="Systems.ChatHub.LeftMap"/>: at a cluster change before the ChangeCluster response, as official).
     /// </summary>
-    private void Leave(Player player)
+    private void Leave(Player player, bool clusterChange = true)
     {
+        world.Plugins.ZoneLeave(player, clusterChange); // the plugins' ZoneLeave, still on its map
         if (world.Scripts.PlayerHooks.Count > 0)
         {
             world.Scripts.OnLogout(player);
@@ -235,10 +240,12 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         player.Visibility.FlushLists();
         var scripted = false;
         for (var slot = 0; slot < Inventory.EquipmentSlots; slot++)
-            if (player.Inventory.Equipment[slot] is { } item) scripted |= world.Scripts.OnEquip(player, item);
+            if (player.Inventory.Equipment[slot] is { } item) scripted |= world.Scripts.OnEquip(player, item, login: true);
+        world.ExtraBars.Joined(player); // stageN extra bars: built from the gear; a character whose mod said hello gets them again
+        var firstJoin = world.FirstJoin(player.Character); // once per Join (the hooks' and the plugins' first login)
         if (world.Scripts.PlayerHooks.Count > 0)
         {
-            world.Scripts.OnLogin(player, world.FirstJoin(player.Character));
+            world.Scripts.OnLogin(player, firstJoin);
             scripted = true;
         }
         if (scripted) player.SaveItems();
@@ -252,10 +259,15 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         world.Expeditions.Joined(player); // stageH: in an instance 263 kind 7, 260, 261; reward items that wait
         world.Corrupted.Joined(player); // stageL: in a corrupted instance 450 (the tracker), the arrival buff, the chat line
         world.Hellgates.Joined(player); // stageL: in a hellgate 454 and 453 (the tracker)
+        world.Arenas.Joined(player); // stage N: in an arena match its arrival (the countdown once all are in)
         world.Mists.Joined(player); // stageL: in a mists zone 521 (the return portal, the border exits' target, the shutdown), the chat line
         world.StaticDungeons.Joined(player); // stageN: 499, the events and values of the dungeon here and of those entered from here
         world.Roads.Joined(player); // stageL roads phase B: the thrown-out line
         world.Dungeons.Arrived(player); // stageH: the dungeon of the day's chat line on its floor
+        world.Islands.Joined(player); // stageN labourers: on an island the houses unlocked for the build menu (224)
+        // The plugins last, with the client in the world and every system's arrival done: PlayerLogin after a login, ZoneEnter every Join.
+        if (!_arrived) world.Plugins.PlayerLogin(player, firstJoin);
+        world.Plugins.ZoneEnter(player, _arrived);
     }
 
     /// <summary>Whether the last Join was the arrival of a cluster change (a PendingTransfer, and not the first Join after a Login).</summary>

@@ -1,0 +1,9 @@
+{
+  "name": "bounty-hunter",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Every few minutes a bounty on an elite mob in a populated zone: silver, fame and a leaderboard (example plugin)",
+  "apiVersion": 1,
+  "enabled": false,
+  "dependencies": []
+}

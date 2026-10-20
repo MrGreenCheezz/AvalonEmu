@@ -228,6 +228,26 @@ public static class SpellMovement
     }
 
     /// <summary>
+    /// A plugin's forced move of <paramref name="unit"/> (server/plugins/README.md "Actions"): kind 0 dash, 1 teleport, 2 knockback, 4 pull to
+    /// <paramref name="to"/> at <paramref name="speed"/> from now, stopped by the walls (<see cref="Stopped"/>), sent as ForcedMovement with
+    /// spell -1. A mob immune to forced movement is not knocked back or pulled. False when there is nowhere to go.
+    /// </summary>
+    public static bool Force(World world, IUnit unit, byte kind, Vector2 to, float speed, long source)
+    {
+        if (unit.Map is not { } map || !float.IsFinite(to.X) || !float.IsFinite(to.Y)) return false;
+        if (kind is 2 or 4 && unit is Mob { Template.ImmuneToForcedMovement: true }) return false;
+        var now = world.GameNow;
+        var here = PositionOf(unit, now);
+        to = Stopped(world, map, here, to);
+        var length = Vector2.Distance(here, to);
+        if (length < 0.01f) return false;
+        var jump = kind == TeleportKind || speed <= 0;
+        var end = jump ? now : now + (long)Math.Round(length / speed * 1000) * TimeSpan.TicksPerMillisecond;
+        Start(world, unit, new ForcedMove(jump ? TeleportKind : kind, now, end, here, to, jump ? 0 : speed, -1, 0), source, null);
+        return true;
+    }
+
+    /// <summary>
     /// The unit on its path: ForcedMovement to it and its observers, its sample set without event 3, its end at the end time. A path
     /// without time (a teleport) puts it at the end at once: a fresh sample there, the saved position, the cells in view.
     /// </summary>

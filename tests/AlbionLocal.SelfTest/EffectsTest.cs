@@ -52,9 +52,9 @@ public static class EffectsTest
               $"effect lists: FIRESTAFFBOLT2 2, FLAMEDASH {flame.Effects.Count} (dash at 1), THROWINGBLADES {blades.Effects.Count} (areas at 1-3), ACID_BOMB without its 3 projectiles");
         var tags = Client.Spells!.EffectTags();
         var run = tags.Keys.Count(SpellCasts.Supported.Contains);
-        Check(tags.Keys.All(SpellTemplate.Registered.Contains) && SpellTemplate.Registered.Count == 131 && SpellTemplate.Timed.Count == 59 && tags.Count == 125 && run == 78
+        Check(tags.Keys.All(SpellTemplate.Registered.Contains) && SpellTemplate.Registered.Count == 131 && SpellTemplate.Timed.Count == 59 && tags.Count == 125 && run == 82
               && tags.Keys.Count(SpellCasts.NoOps.Contains) == 2,
-              $"only registered tags (131) are listed, 59 timed; the start-up report: {run} of {tags.Count} kinds run (26 + the 3 inventory item tags of stageD consumables + DISMOUNTED's cannotattackplayers + 24 of stageD effects batch 2/3 + 18 of batch 3 + resurrect of stageN + 5 of stageN spells-bosses: learning point books, gathering tomes, fishing fame, repair kits, fame buffs; castspellaftermoving runs only for mounts, not counted), the 2 unlocks as no-ops");
+              $"only registered tags (131) are listed, 59 timed; the start-up report: {run} of {tags.Count} kinds run (26 + the 3 inventory item tags of stageD consumables + DISMOUNTED's cannotattackplayers + 24 of stageD effects batch 2/3 + 18 of batch 3 + resurrect of stageN + 5 of stageN spells-bosses: learning point books, gathering tomes, fishing fame, repair kits, fame buffs + 4 of stageN spells2: storetargets, removestoredtargets, and activaterandomdungeon and castspellaftermoving, which ran outside the list), the 2 unlocks as no-ops");
         var e = Client.GameData!.Effects;
         Check(e.CcFactorPlayers == 0.7 && e.CcFactorMobs == 0.5 && e.DiminishingMax == 0.8 && e.Diminishing["stun"] == (0.3, 5) && e.Diminishing["knockback"] == (0.08, 10)
               && e.Diminishing["slow"] == (0.3, 10) && Math.Abs(e.HitPointProgression - 0.663445601) < 1e-12 && e.BaseLoad == 25,

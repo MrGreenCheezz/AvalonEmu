@@ -16,6 +16,7 @@ public static class GeneralCommands
         var shown = ctx.World.Commands.Commands
             .Where(c => c.Level <= ctx.Level && (ctx.Console || !c.ConsoleOnly) && words.Select((w, i) => i < c.Words.Length && c.Words[i].Equals(w, StringComparison.OrdinalIgnoreCase)).All(x => x))
             .Select(c => c.Help.Length > 0 ? $"{c.Usage} - {c.Help}" : c.Usage)
+            .Concat(ctx.World.Plugins.HelpLines(ctx.Level, words)) // the plugins' commands
             .ToList();
         if (shown.Count == 0) throw new CommandError($"no command .{string.Join(" ", words)}; .help lists them");
         ctx.Reply(string.Join("\n", shown));

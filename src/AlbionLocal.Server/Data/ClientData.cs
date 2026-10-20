@@ -22,7 +22,7 @@ public sealed record ClientData(ItemStore Items, GameData? GameData, SpellData? 
     public const string RecordFile = "clientdata.json";
 
     /// <summary>The GameData files the tables come from.</summary>
-    public static readonly string[] FileNames = ["items.bin", "spells.bin", "gamedata.bin", "characters.bin", "achievements.bin", "craftingmodifiers.bin"];
+    public static readonly string[] FileNames = ["items.bin", "spells.bin", "gamedata.bin", "characters.bin", "achievements.bin", "craftingmodifiers.bin", "legendaryitems.bin"];
 
     /// <summary>The client build: the first line of the client's version.txt ("albiononline-win32-full-1.32.030.345319"); null = unknown.</summary>
     public string? Build { get; init; }
@@ -40,6 +40,9 @@ public sealed record ClientData(ItemStore Items, GameData? GameData, SpellData? 
     /// <summary>craftingmodifiers.bin: the crafting and refining bonus per city (stage 6); <see cref="CraftingModifiers.None"/> for hand-made tables.</summary>
     public CraftingModifiers Crafting { get; init; } = CraftingModifiers.None;
 
+    /// <summary>legendaryitems.bin: awakened weapons and their traits (stageN awakening SPEC); null for hand-made tables.</summary>
+    public LegendaryData? Legendary { get; init; }
+
     /// <summary>
     /// Reads the tables from <paramref name="folder"/> and logs the build, the hashes and the load time. A missing folder
     /// or file, or one that does not decrypt or parse, throws <see cref="InvalidDataException"/> naming it: the server
@@ -55,6 +58,8 @@ public sealed record ClientData(ItemStore Items, GameData? GameData, SpellData? 
         var items = ItemStore.Load(files["items.bin"]);
         var gameData = GameData.FromClient(items, files["gamedata.bin"].Root(), files["characters.bin"].Root(), files["achievements.bin"].Elements());
         var spells = SpellData.FromClient(files["spells.bin"].Elements(), items);
+        // A modkit build (tools/AlbionLocal.ModKit): the new items and spells must have the ids it gave them, the official ones theirs.
+        Mods.ModState.Verify(folder, items, spells, files.Values.ToDictionary(f => f.Name, f => f.Sha256));
         watch.Stop();
         var build = ReadBuild(folder);
         if (build is null) Log.Warn("data", $"client build unknown: no version.txt in or above {folder}");
@@ -76,6 +81,7 @@ public sealed record ClientData(ItemStore Items, GameData? GameData, SpellData? 
             Build = build,
             Hashes = files.Values.ToDictionary(f => f.Name, f => f.Sha256),
             Crafting = CraftingModifiers.Load(files["craftingmodifiers.bin"]),
+            Legendary = LegendaryData.Load(files["legendaryitems.bin"]),
             Clusters = new ClusterStore(folder, clusters),
         };
     }

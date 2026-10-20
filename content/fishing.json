@@ -1,5 +1,5 @@
 // Fishing tunables (analysis/work/stageG/fishing/SPEC.md; Content/FishingSettings). The official values live in the
-// server-only fishing.xml, which the client can parse but does not ship: what is measured in the capture 20261016_002835 is
+// server-only fishing.xml, which the client can parse but does not ship: what is measured in the capture 002835 is
 // marked so, everything else is an [assume] to tune. Read at server start; every key is optional, a missing key keeps the
 // built-in value shown here. A bad file is logged and the built-in values are used.
 {

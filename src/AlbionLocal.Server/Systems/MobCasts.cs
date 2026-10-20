@@ -224,6 +224,7 @@ public static class MobCasts
             ddn = mob.Id, bvw = targetId, bvx = cast.WirePoint, bvy = spell.Id, bvz = cast.End, bv0 = hit, Extra = new() { [6] = cast.Counter, [7] = (short)0 },
         });
         cast.Owner?.OnCastEvent(cast, "onCastSuccessful");
+        world.Plugins.MobCastDone(mob, spell, cast.Ground ? null : cast.Target, aim); // the plugins' Spells.OnCast
         SpellCasts.At(world, map, hit, () =>
         {
             if (mob.Map != map || mob.Dead || mob.Removed) return;
@@ -249,6 +250,7 @@ public static class MobCasts
         if (cast.Over) return;
         cast.Over = true;
         var mob = cast.Caster;
+        if (!cast.Finished) mob.World?.Plugins.MobCastCancelled(mob, cast.Spell, cast.Ground ? null : cast.Target, cast.Point, interrupted); // Spells.OnCancel
         if (!cast.Finished) mob.SendAround(new CastCancelEvent { ddn = mob.Id, buo = interrupted, bup = cast.Counter, Extra = new() { [9] = (byte)0 } });
         else if (cast.Channel is not null) mob.SendAround(new ChannelingEndedEvent { ddn = mob.Id, bwu = 2, bwv = cast.Counter });
         foreach (var area in cast.Areas.ToList()) Remove(area);
@@ -397,7 +399,7 @@ public static class MobCasts
     }
 
     private static IUnit? UnitById(MobHit c, long id) =>
-        id == c.Caster.Id ? c.Caster : c.Map.Players.Values.FirstOrDefault(p => p.Id == id) as IUnit ?? c.Map.Objects.GetValueOrDefault(id) as Mob;
+        id == c.Caster.Id ? c.Caster : c.Map.Fighters.FirstOrDefault(p => p.Id == id) as IUnit ?? c.Map.Objects.GetValueOrDefault(id) as Mob;
 
     /// <summary>
     /// The first pass over <paramref name="spell"/>: the conditions, the timed sub-effects to list and the units reached (any effect
@@ -459,6 +461,11 @@ public static class MobCasts
             if (tag == "dash") // stageN spells-bosses: the mob's own charge or leap, at its target or the ground point
             {
                 if (Holds(plan, c, node, c.Caster)) Dash(c, spell, node, i);
+                continue;
+            }
+            if (tag == "changeaggro") // stageN spells2: the mob's own threat (and its friends'), not per target unit
+            {
+                if (Holds(plan, c, node, c.Caster)) ChangeAggro(c, node);
                 continue;
             }
             foreach (var unit in Targets(c, node))
@@ -524,6 +531,57 @@ public static class MobCasts
         }
     }
 
+    /// <summary>
+    /// changeaggro of a mob's spell (stageN spells2, 42 uses): <c>value</c> threat (negative: taken off, never below 0) for players on mobs.
+    /// The players: with effectarearadius the valid ones within it of the target (else the point), the nearest maxeffectareatargets of them;
+    /// else the context's player. The mobs: the caster, and with aggroradius (not who="onlycaster") every living mob of its faction within
+    /// it (the heretics' alarm traps call their camp). target friendother / self (the hellhounds' and the chests' alerts): the mobs of
+    /// <c>faction</c> (self or missing: the caster's) within effectarearadius (else aggroradius), the caster too for self, take the
+    /// value on the caster's threat list (else its target). An idle mob starts to fight (<see cref="AI.MobAI.AddThreat"/>) [inference: the
+    /// tag's client class bjs has no server half].
+    /// </summary>
+    private static void ChangeAggro(MobHit c, XElement node)
+    {
+        var value = SpellTemplate.Float(node, "value");
+        var target = ((string?)node.Attribute("target") ?? "enemy").ToLowerInvariant();
+        var radius = SpellTemplate.Float(node, "effectarearadius");
+        var aggro = SpellTemplate.Float(node, "aggroradius");
+        var caster = c.Caster;
+        var now = c.Ticks;
+        var faction = (string?)node.Attribute("faction") is { Length: > 0 } f && !f.Equals("self", StringComparison.OrdinalIgnoreCase) ? f : caster.Template.Faction;
+        bool Kin(Mob m) => !m.Dead && !m.Removed && m.Attackable && string.Equals(m.Template.Faction, faction, StringComparison.OrdinalIgnoreCase);
+        List<Player> players;
+        List<Mob> mobs;
+        if (target is "friendother" or "self")
+        {
+            players = [.. caster.Threat.Keys.Where(p => Valid(p, c.Map, now))];
+            if (players.Count == 0 && c.Target is Player t && Valid(t, c.Map, now)) players.Add(t);
+            var reach = radius > 0 ? radius : aggro;
+            mobs = [.. c.Map.Objects.Values.OfType<Mob>().Where(m => (m != caster || target == "self") && Kin(m)
+                && Vector2.Distance(m.Position, caster.Position) <= reach + m.Template.CollisionRadius)];
+        }
+        else
+        {
+            if (radius > 0)
+            {
+                var center = PositionOf(c.Target) ?? c.Point;
+                players = [.. c.Map.Fighters.Where(p => Valid(p, c.Map, now) && Vector2.Distance(p.PositionAt(DateTime.UtcNow), center) <= radius + c.World.CollisionRadius)
+                    .OrderBy(p => Vector2.Distance(p.PositionAt(DateTime.UtcNow), center))];
+                if (SpellTemplate.Float(node, "maxeffectareatargets") is > 0 and var most) players = [.. players.Take((int)most)];
+            }
+            else players = c.Target is Player p && Valid(p, c.Map, now) ? [p] : [];
+            mobs = [caster];
+            if (aggro > 0 && !string.Equals((string?)node.Attribute("who"), "onlycaster", StringComparison.OrdinalIgnoreCase))
+                mobs.AddRange(c.Map.Objects.Values.OfType<Mob>().Where(m => m != caster && Kin(m) && Vector2.Distance(m.Position, caster.Position) <= aggro + m.Template.CollisionRadius));
+        }
+        foreach (var m in mobs)
+            foreach (var p in players)
+            {
+                if (value < 0 && !m.Threat.ContainsKey(p)) continue; // nothing to take off: an idle mob is not pulled by it
+                if (m.Attackable || m == caster) m.AI.AddThreat(p, value);
+            }
+    }
+
     /// <summary>A dash of the mob (<see cref="SpellMovement.MobDash"/>): to its target (not itself) or the point; the endeffect runs at the end point.</summary>
     private static void Dash(MobHit c, SpellTemplate spell, XElement node, int index)
     {
@@ -552,7 +610,7 @@ public static class MobCasts
         if (radius > 0 && target is "enemy" or "")
         {
             var center = PositionOf(c.Target) ?? c.Point;
-            return [.. c.Map.Players.Values.Where(p => Valid(p, c.Map, now)
+            return [.. c.Map.Fighters.Where(p => Valid(p, c.Map, now)
                 && Vector2.Distance(p.PositionAt(DateTime.UtcNow), center) <= radius + c.World.CollisionRadius)];
         }
         if (target == "enemy") return c.Target is Player p && Valid(p, c.Map, now) ? [p] : [];
@@ -587,7 +645,7 @@ public static class MobCasts
             // hit (Combat.DamagePlayer: no bot, same map, not untouchable, invincible or nothittable, alive) and the player is in combat.
             // Flat drains (MOB_HERETIC_SHADOWMASK_INSANITY_EFFECT −5/−25/−125, whose health punishments wait for IfTargetEnergyPercentage)
             // stay logged below: whether their raw values scale with the mob's AP is not settled.
-            if (drained.IsBot || drained.Map is null || drained.Map != c.Caster.Map || drained.Combat.Untouchable || SpellEffects.Invincible(drained, c.Ticks)
+            if (drained.IsBot && !drained.IsCompanion || drained.Map is null || drained.Map != c.Caster.Map || drained.Combat.Untouchable || SpellEffects.Invincible(drained, c.Ticks)
                 || SpellEffects.NotHittable(drained, c.Ticks) || drained.Health.At(c.Ticks) <= 0) return;
             Combat.EnterCombat(drained, c.Caster, hit: true);
             SpellCasts.DrainEnergy(drained, -Relative(change * c.Ap / 100, drained.Energy.At(c.Ticks), drained.Energy.Max), spell, c.Caster.Id, c.Ticks, origin);
@@ -604,8 +662,13 @@ public static class MobCasts
             var value = Relative(Combat.SpellChange(change, c.Ap) * SpellEffects.DealtFactor(c.Caster, spell: true, type, vsPlayer: true, c.Ticks),
                 p.Health.At(c.Ticks), p.Health.Max);
             var resistance = SpellTemplate.Bool(node, "ignorearmor") ? 1 : Combat.ResistanceOf(p, type);
+            var plugins = p.World.Plugins; // Spells.OnDamageEarly / OnDamageLate
+            if (plugins.DamageEarly(c.Caster, spell, p, -value * resistance, heal: false, energy: false, origin == HitOrigin.OverTime, origin == HitOrigin.Area, type == EffectType.Magic) is not { } damage) return;
+            var late = plugins.WantsDamageLate(spell);
+            var before = late ? Plugins.PluginHost.HealthOf(p, p.World.GameNow) : 0;
             // reflectdamage="never" (321 nodes; stageJ pvp-spells phase 0): the player's reflectdamageactive does not answer this hit.
-            Combat.DamagePlayer(c.Caster, p, -value * resistance, type, origin, spell.Id, c.Ticks, reflectable: (string?)node.Attribute("reflectdamage") != "never");
+            Combat.DamagePlayer(c.Caster, p, damage, type, origin, spell.Id, c.Ticks, reflectable: (string?)node.Attribute("reflectdamage") != "never");
+            if (late) plugins.DamageLate(c.Caster, spell, p, before, heal: false, energy: false, origin == HitOrigin.OverTime, origin == HitOrigin.Area, type == EffectType.Magic);
             return;
         }
         if (change > 0 && unit is Mob m)
@@ -629,6 +692,7 @@ public static class MobCasts
         var after = Math.Min(mob.Health.Max, before + Math.Max(0, origin == HitOrigin.OverTime ? (float)amount : Combat.Rounded(amount)));
         mob.Health.Set(after, Math.Max(ticks, mob.Health.Stamp));
         map.SendToObservers(mob, Combat.HealthUpdate(mob.Id, ticks, after - before, after, EffectType.Magic, origin, mob.Id, spell));
+        mob.World?.Plugins.HealthChanged(mob, before, after, mob.Id, spell); // Units.OnHealthChange
     }
 
     /// <summary>attributechangeovertime: count ticks from initialinterval after the hit, every interval, origin 5, while its entry on the unit stays (removeonleave, a reset, a death end it).</summary>
@@ -854,7 +918,7 @@ public static class MobCasts
         var max = (int)SpellTemplate.Float(node, "maxeffectareatargets");
         var radius = world.CollisionRadius;
         var inside = new HashSet<long>();
-        foreach (var p in map.Players.Values.ToList())
+        foreach (var p in map.Fighters.ToList())
         {
             if (!Valid(p, map, at) || !SpellAreas.Inside(area.Shapes, area.Reach, area.Origin, area.Yaw, area.Start, p.PositionAt(DateTime.UtcNow), radius, at, zeroOff: true)) continue;
             inside.Add(p.Id);
@@ -867,7 +931,7 @@ public static class MobCasts
         }
         if (SpellTemplate.Bool(node, "removeonleave") && area.Effect is { } left)
             foreach (var id in area.InsideLast.Where(id => !inside.Contains(id)))
-                TakeOff(world, map.Players.Values.FirstOrDefault(p => p.Id == id), left, mob);
+                TakeOff(world, map.Fighters.FirstOrDefault(p => p.Id == id), left, mob);
         area.InsideLast.Clear();
         area.InsideLast.UnionWith(inside);
         if (max > 0 && area.Hits >= max && SpellTemplate.Bool(node, "deletewhenmaxtargetshit")) Remove(area);
@@ -918,7 +982,7 @@ public static class MobCasts
         var interval = SpellTemplate.Float(node, "interval");
         var unique = SpellTemplate.Bool(node, "onlyuniquetargets");
         var hit = new HashSet<long>();
-        Player? Nearest(Vector2 from, IUnit? last, long now) => c.Map.Players.Values
+        Player? Nearest(Vector2 from, IUnit? last, long now) => c.Map.Fighters
             .Where(p => p != last && Valid(p, c.Map, now) && !(unique && hit.Contains(p.Id))
                 && Vector2.Distance(p.PositionAt(DateTime.UtcNow), from) <= reach + c.World.CollisionRadius)
             .OrderBy(p => Vector2.DistanceSquared(p.PositionAt(DateTime.UtcNow), from)).FirstOrDefault();
@@ -944,7 +1008,7 @@ public static class MobCasts
         if (area.Map is not { } map) return;
         if (SpellTemplate.Bool(area.Node, "removeonleave") && area.Effect is { } effect && area.Owner.World is { } world)
             foreach (var id in area.InsideLast)
-                TakeOff(world, map.Players.Values.FirstOrDefault(p => p.Id == id), effect, area.Owner);
+                TakeOff(world, map.Fighters.FirstOrDefault(p => p.Id == id), effect, area.Owner);
         map.RemoveObject(area);
         Log.Debug("ai", $"area #{area.Id} of {area.Holder} left");
     }
@@ -985,7 +1049,7 @@ public static class MobCasts
             var on = mob.Map == map && !mob.Dead && sub.Generation == generation && mob.Effects.Contains(entry) && entry.On(sub, now);
             var inside = new HashSet<long>();
             if (on)
-                foreach (var p in map.Players.Values.ToList())
+                foreach (var p in map.Fighters.ToList())
                 {
                     if (!Valid(p, map, now) || Vector2.Distance(mob.Position, p.PositionAt(DateTime.UtcNow)) > radius + world.CollisionRadius) continue;
                     inside.Add(p.Id);
@@ -994,7 +1058,7 @@ public static class MobCasts
                 }
             if (leave)
                 foreach (var id in last.Where(id => !inside.Contains(id)))
-                    TakeOff(world, map.Players.Values.FirstOrDefault(p => p.Id == id), spell, mob);
+                    TakeOff(world, map.Fighters.FirstOrDefault(p => p.Id == id), spell, mob);
             last = inside;
             if (on) map.Timers.At(world.Clock.Now + world.Config.TickTime, Tick);
         }

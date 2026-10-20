@@ -56,7 +56,7 @@ public sealed record EventType
     /// <summary>The share of the event's damage a player needs for a reward (0: every player that hit one of its mobs).</summary>
     public double RewardMinShare { get; init; } = 0.05;
 
-    /// <summary>Factor on the reward chest's loot (× the cluster's moblootfactor × Rates:Loot, as the open-world chests).</summary>
+    /// <summary>Factor on the reward chest's loot (× Rates:Loot, as the open-world chests).</summary>
     public double RewardFactor { get; init; } = 2;
 
     /// <summary>Fame for each rewarded player (in fame points; × Rates:Fame, to the destiny board as a kill of the cluster's tier).</summary>

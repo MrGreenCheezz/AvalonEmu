@@ -126,7 +126,7 @@ public static class SpellTargets
         var fc = Pvp.IsFaction(caster.Flag);
         switch (unit)
         {
-            case Mob m when caster.IsBot:
+            case Mob m when caster.IsBot && !caster.IsCompanion: // stageN companions fight mobs as players do
                 return new Facts(false, false, false, false, false, m.Dead, false, false, false, fc, false);
             case Mob m:
                 return new Facts(false, m.Attackable, false, false, m.Attackable && !SpellEffects.NotTargetable(m, now), m.Dead, false, false,
@@ -153,7 +153,8 @@ public static class SpellTargets
     {
         if (a == b) return true;
         var world = a.World;
-        if (b.Map is null || b.Map != a.Map || b.Combat.Down is not null || a.IsBot != b.IsBot) return false;
+        // StageN companions count as players here: a companion heals its party and the party's spells reach it.
+        if (b.Map is null || b.Map != a.Map || b.Combat.Down is not null || (a.IsBot && !a.IsCompanion) != (b.IsBot && !b.IsCompanion)) return false;
         if (world.Config.PvpDuelIsolation && (world.Duels.Of(a) is not null || world.Duels.Of(b) is not null)) return false;
         if (Pvp.Of(a, b) == Relation.Hostile || OfficialOf(a, b) == Relation.Hostile) return false;
         return world.Config.PvpFriendlySpells switch

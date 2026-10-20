@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- items.bin: a new T6 sword. mesh/uisprite reuse the broadsword's model and icon (a new item cannot have its own). -->
+<patch>
+  <add>
+    <weapon uniquename="T6_MAIN_CLOCKWORKBLADE" mesh="T6_MAIN_SWORD" uisprite="MAIN_SWORD" maxqualitylevel="5" abilitypower="138" slottype="mainhand"
+            shopcategory="weapons" shopsubcategory1="sword" shopsubcategory2="sword_sword" attacktype="melee" mainhandanimationtype="sword"
+            attackdamage="35" attackspeed="1.35" twohanded="false" attackrange="3" tier="6" weight="11.4" activespellslots="3" passivespellslots="1"
+            durability="30375" durabilityloss_attack="1" durabilityloss_spelluse="1" durabilityloss_receivedattack="1" durabilityloss_receivedspell="1"
+            unlockedtocraft="true" unlockedtoequip="true" hitpointsmax="50" itempower="920" hitpointsregenerationbonus="0.05" physicalspelldamagebonus="0"
+            magicspelldamagebonus="0" itempowerprogressiontype="mainhand" focusfireprotectionpenetration="0"
+            uicraftsoundstart="Play_ui_action_craft_metal_start" uicraftsoundfinish="Play_ui_action_craft_metal_finish" craftingcategory="sword"
+            healmodifier="0" canbeovercharged="true" masterymodifier="0.1" combatspecachievement="COMBAT_SWORDS_SWORD"
+            physicalattackdamagebonus="0" magicattackdamagebonus="0">
+      <craftingrequirements silver="0" time="2" craftingfocus="3939">
+        <craftresource uniquename="T6_METALBAR" count="16" />
+        <craftresource uniquename="T6_LEATHER" count="8" />
+        <craftresource uniquename="T6_RUNE" count="10" />
+      </craftingrequirements>
+      <SocketPreset name="MAINHAND" />
+      <craftingspelllist>
+        <craftspell uniquename="HEROICSTRIKE2" slots="1" />
+        <craftspell uniquename="CLEAVE" slots="1" />
+        <craftspell uniquename="CLOCKWORK_DASH" slots="2" />
+        <craftspell uniquename="SWORD_SPIN" slots="2" />
+        <craftspell uniquename="INTERRUPT2" slots="2" />
+        <craftspell uniquename="HAMSTRINGSWORD" slots="2" />
+        <craftspell uniquename="PARRY" slots="2" />
+        <craftspell uniquename="MIGHTYBLOW" slots="3" />
+        <craftspell uniquename="PASSIVE_BLEEDCHANCE" />
+        <craftspell uniquename="PASSIVE_REDUCE_DMG_SWORD" />
+        <craftspell uniquename="PASSIVE_HEROICSTACK" />
+      </craftingspelllist>
+      <AudioInfo name="ITEM_SWORD" />
+    </weapon>
+  </add>
+</patch>

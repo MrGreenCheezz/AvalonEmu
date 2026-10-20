@@ -40,6 +40,7 @@ internal sealed class TemplateLayout
         "hellgateshrine", // stageL hellgates: a Hell Den's hellgate shrine (NewHellgateShrine, SPEC §3.1)
         "arearestrictionsettings", // stageL hellgates phase B: the HellgateFxManager's restricted area (SPEC §2.4)
         "treasurespawnpoint", "mistswispspawn", "unrestrictedpvpzone", // stageL mists phase B: the dungeon's treasures, the wisp spawns, the camps' FFA circles
+        "warcamp", // stage N arena: an arena team's camp and its spawn positions (SPEC §3)
     };
 
     public required string Reference { get; init; }
@@ -56,6 +57,19 @@ internal sealed class TemplateLayout
 
     /// <summary>Stage I bots: the &lt;roads nodes links&gt; graphs of the template (bots-world SPEC §1.2: any layer, never by its name).</summary>
     public IReadOnlyList<LocalRoad> Roads { get; init; } = [];
+
+    /// <summary>
+    /// Islands phase 5 (stageN islands5 SPEC §1): the buildable 10 × 10 m ground cells, tiles.xml groundtype BuildingAndFertile (the
+    /// &lt;BIOME&gt;_GROUND_UNIVERSAL[_CORNER|_END|_MID|_SIDE] tiles; the _INACTIVE_ ones are Normal), top level or in a layergroup layer.
+    /// </summary>
+    public IReadOnlyList<LocalCell> BuildCells { get; init; } = [];
+
+    /// <summary>Whether tile <paramref name="name"/> is buildable island ground (<see cref="BuildCells"/>).</summary>
+    public static bool IsBuildGround(string name) =>
+        name.EndsWith("_GROUND_UNIVERSAL", StringComparison.Ordinal) || name.Contains("_GROUND_UNIVERSAL_", StringComparison.Ordinal)
+        && (name.EndsWith("_CORNER", StringComparison.Ordinal) || name.EndsWith("_END", StringComparison.Ordinal)
+            || name.EndsWith("_MID", StringComparison.Ordinal) || name.EndsWith("_SIDE", StringComparison.Ordinal))
+        && !name.Contains("_INACTIVE", StringComparison.Ordinal);
 
     /// <summary>StageL mists (SPEC §6.3 step 4, V10): the template's collider bounds (colBoundsMin, colBoundsMax), a mists zone's a80.d/e; null without.</summary>
     public System.Numerics.Vector2? ColBoundsMin { get; init; }
@@ -82,6 +96,7 @@ internal sealed class TemplateLayout
         var tiles = new List<LocalTile>();
         var colliders = new List<LocalCollider>();
         var roads = new List<LocalRoad>();
+        var cells = new List<LocalCell>();
         var layerNames = new Dictionary<string, string>(StringComparer.Ordinal);
         void Tile(XElement e, string? layer)
         {
@@ -89,6 +104,7 @@ internal sealed class TemplateLayout
             var (x, y, z) = TileMath.V3((string?)e.Attribute("pos"));
             var yaw = TileMath.YawOf(e);
             if (index.Collision(name) is { } grid) colliders.Add(new LocalCollider(layer, grid, x, z, yaw));
+            if (IsBuildGround(name)) cells.Add(new LocalCell(layer, x, z));
             var (kept, count) = Merge(index.Components(name), [.. e.Elements()], TileKinds.Contains);
             foreach (var (k, c) in kept)
                 tiles.Add(new LocalTile(n + k, layer, name, x, y, z, yaw, c));
@@ -150,7 +166,7 @@ internal sealed class TemplateLayout
         }
         return new TemplateLayout
         {
-            Reference = reference, Folder = folder, Members = members, Tiles = tiles, LayerNames = layerNames, Colliders = colliders, Roads = roads,
+            Reference = reference, Folder = folder, Members = members, Tiles = tiles, LayerNames = layerNames, Colliders = colliders, Roads = roads, BuildCells = cells,
             ColBoundsMin = TileMath.V2((string?)root.Attribute("colBoundsMin")), ColBoundsMax = TileMath.V2((string?)root.Attribute("colBoundsMax")),
         };
     }
@@ -206,6 +222,9 @@ internal readonly record struct LocalTile(int Index, string? Layer, string Tile,
 /// (null = always placed). A compound's child is already placed through the compound.
 /// </summary>
 internal readonly record struct LocalCollider(string? Layer, TileCollision Grid, double X, double Z, double Yaw);
+
+/// <summary>Islands phase 5: a buildable ground cell's centre in the template frame; <see cref="Layer"/> as <see cref="LocalCollider.Layer"/>.</summary>
+internal readonly record struct LocalCell(string? Layer, double X, double Z);
 
 /// <summary>
 /// Stage I bots (bots-world SPEC §1.2): one &lt;roads nodes="x z;x z;…" links="0 1;1 2;…"/&gt; in the template frame; <see cref="Layer"/> = its

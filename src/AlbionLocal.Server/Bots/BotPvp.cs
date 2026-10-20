@@ -18,6 +18,8 @@ public static class BotPvp
     public static Relation Of(Player a, Player b)
     {
         if (a.IsBot && b.IsBot) return Relation.Friendly;
+        // StageN companions: a hired companion is never in a PvP fight, either way (it fights the mobs of its party only).
+        if (a.IsCompanion || b.IsCompanion) return Relation.Friendly;
         if ((a.Bot ?? b.Bot)!.Role == BotRole.City) return Relation.Friendly;
         // StageL corrupted (SPEC §4.5): an invader is Hostile to the owner of the run it invades, both ways, while the invasion lasts;
         // Neutral to everyone else (a GM watching), whatever the zone or the flags.
@@ -27,6 +29,9 @@ public static class BotPvp
         // versus mode is the consent); Neutral to everyone else.
         if ((a.Bot ?? b.Bot)!.Role == BotRole.Hellgate)
             return a.World.Hellgates.Opponents(a, b) ? Relation.Hostile : Relation.Neutral;
+        // Stage N arena (SPEC §4.3): an arena bot is Hostile to the other team's players during a fight; Neutral to everyone else.
+        if ((a.Bot ?? b.Bot)!.Role == BotRole.Arena)
+            return a.World.Arenas.Opponents(a.IsBot ? a : b, a.IsBot ? b : a) ? Relation.Hostile : Relation.Neutral;
         var world = a.World;
         var rules = Pvp.RulesOf(world, a.Map);
         var mode = world.Config.PvpMode;

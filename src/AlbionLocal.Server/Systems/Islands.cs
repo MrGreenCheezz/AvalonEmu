@@ -32,7 +32,8 @@ public sealed partial class Islands
         foreach (var i in store.LoadIslands()) _islands[i.Id] = i;
         foreach (var b in store.LoadIslandBuildings().Where(b => _islands.ContainsKey(b.Island))) _buildings[b.Id] = b;
         foreach (var f in store.LoadFarmables().Where(f => _buildings.ContainsKey(f.Building))) _crops[f.Id] = f;
-        if (_islands.Count > 0) Log.Info("world", $"{_islands.Count} island(s) loaded, {_buildings.Count} building(s), {_crops.Count} crop(s)");
+        foreach (var l in store.LoadLabourers().Where(l => _buildings.ContainsKey(l.Building))) _labourers[l.Id] = l;
+        if (_islands.Count > 0) Log.Info("world", $"{_islands.Count} island(s) loaded, {_buildings.Count} building(s), {_crops.Count} crop(s) and furniture, {_labourers.Count} labourer(s)");
     }
 
     /// <summary>Islands:Enabled.</summary>
@@ -139,6 +140,7 @@ public sealed partial class Islands
             _islands.Remove(i.Id);
             foreach (var b in _buildings.Values.Where(b => b.Island == i.Id).ToList()) _buildings.Remove(b.Id);
             foreach (var f in _crops.Values.Where(f => f.Island == i.Id).ToList()) _crops.Remove(f.Id);
+            foreach (var l in _labourers.Values.Where(l => l.Island == i.Id).ToList()) _labourers.Remove(l.Id);
         }
     }
 

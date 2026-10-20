@@ -32,9 +32,18 @@ public interface IIslandStore
 
     /// <summary>Removes a crop (harvested or destroyed).</summary>
     void DeleteFarmable(Guid id);
+
+    /// <summary>Every labourer of every island's houses (schema v33).</summary>
+    IReadOnlyList<IslandLabourer> LoadLabourers();
+
+    /// <summary>Stores <paramref name="labourer"/> (hired or changed).</summary>
+    void SaveLabourer(IslandLabourer labourer);
+
+    /// <summary>Removes a dismissed labourer.</summary>
+    void DeleteLabourer(Guid id);
 }
 
-/// <summary><see cref="IIslandStore"/> in the character database (schema v19: islands; v20: island_buildings, island_farmables; v28: the animals' nutrition and growth).</summary>
+/// <summary><see cref="IIslandStore"/> in the character database (schema v19: islands; v20: island_buildings, island_farmables; v28: the animals' nutrition and growth; v33: island_labourers).</summary>
 public sealed partial class SqliteCharacterRepository : IIslandStore
 {
     public IReadOnlyList<Island> LoadIslands()
@@ -99,7 +108,7 @@ public sealed partial class SqliteCharacterRepository : IIslandStore
         {
             using var upsert = Command("""
                 INSERT INTO island_buildings (id, island, name, x, z, rotation, built) VALUES ($id, $island, $name, $x, $z, $rot, $built)
-                ON CONFLICT (id) DO UPDATE SET x = $x, z = $z, rotation = $rot
+                ON CONFLICT (id) DO UPDATE SET name = $name, x = $x, z = $z, rotation = $rot
                 """, null, ("$id", b.Id.ToString()), ("$island", b.Island.ToString()), ("$name", b.Name), ("$x", (double)b.X), ("$z", (double)b.Z),
                 ("$rot", (double)b.Rotation), ("$built", b.Built));
             upsert.ExecuteNonQuery();
@@ -149,6 +158,52 @@ public sealed partial class SqliteCharacterRepository : IIslandStore
         lock (_sync)
         {
             using var delete = Command("DELETE FROM island_farmables WHERE id = $id", null, ("$id", id.ToString()));
+            delete.ExecuteNonQuery();
+        }
+    }
+
+    public IReadOnlyList<IslandLabourer> LoadLabourers()
+    {
+        lock (_sync)
+        {
+            var list = new List<IslandLabourer>();
+            using var select = Command("""
+                SELECT id, island, building, type, name, x, z, rotation, hired, fame, happiness, happiness_at, journal, job_start, job_end, job_yield
+                FROM island_labourers ORDER BY hired, rowid
+                """, null);
+            using var r = select.ExecuteReader();
+            while (r.Read())
+                list.Add(new IslandLabourer(Guid.Parse(r.GetString(0)), Guid.Parse(r.GetString(1)), Guid.Parse(r.GetString(2)), r.GetString(3), r.GetString(4),
+                    (float)r.GetDouble(5), (float)r.GetDouble(6), (float)r.GetDouble(7), r.GetInt64(8))
+                {
+                    Fame = r.GetInt64(9), Happiness = r.GetDouble(10), HappinessAt = r.GetInt64(11), Journal = r.IsDBNull(12) ? null : r.GetString(12),
+                    JobStart = r.GetInt64(13), JobEnd = r.GetInt64(14), JobYield = r.GetDouble(15),
+                });
+            return list;
+        }
+    }
+
+    public void SaveLabourer(IslandLabourer l)
+    {
+        lock (_sync)
+        {
+            using var upsert = Command("""
+                INSERT INTO island_labourers (id, island, building, type, name, x, z, rotation, hired, fame, happiness, happiness_at, journal, job_start, job_end, job_yield)
+                VALUES ($id, $island, $building, $type, $name, $x, $z, $rot, $hired, $fame, $happiness, $hat, $journal, $start, $end, $yield)
+                ON CONFLICT (id) DO UPDATE SET type = $type, hired = $hired, x = $x, z = $z, rotation = $rot, fame = $fame, happiness = $happiness, happiness_at = $hat,
+                    journal = $journal, job_start = $start, job_end = $end, job_yield = $yield
+                """, null, ("$id", l.Id.ToString()), ("$island", l.Island.ToString()), ("$building", l.Building.ToString()), ("$type", l.Type), ("$name", l.Name),
+                ("$x", (double)l.X), ("$z", (double)l.Z), ("$rot", (double)l.Rotation), ("$hired", l.Hired), ("$fame", l.Fame), ("$happiness", l.Happiness),
+                ("$hat", l.HappinessAt), ("$journal", (object?)l.Journal ?? DBNull.Value), ("$start", l.JobStart), ("$end", l.JobEnd), ("$yield", l.JobYield));
+            upsert.ExecuteNonQuery();
+        }
+    }
+
+    public void DeleteLabourer(Guid id)
+    {
+        lock (_sync)
+        {
+            using var delete = Command("DELETE FROM island_labourers WHERE id = $id", null, ("$id", id.ToString()));
             delete.ExecuteNonQuery();
         }
     }

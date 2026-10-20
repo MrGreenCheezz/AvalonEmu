@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- localization.bin: names and descriptions. Items: @ITEMS_<uniquename>[_DESC]; spells: their namelocatag / descriptionlocatag. -->
+<patch>
+  <entry tuid="@ITEMS_T6_MAIN_CLOCKWORKBLADE">
+    <text lang="EN-US">Master's Clockwork Blade</text>
+    <text lang="RU-RU">Заводной клинок (мастер)</text>
+  </entry>
+  <entry tuid="@ITEMS_T6_MAIN_CLOCKWORKBLADE_DESC">
+    <text lang="EN-US">A broadsword with a wound-up spring in the hilt. Its Clockwork Dash leaves the ground behind it grinding slow.</text>
+    <text lang="RU-RU">Палаш с заведённой пружиной в рукояти. Его Заводной рывок оставляет за собой вязкую, замедляющую землю.</text>
+  </entry>
+  <entry tuid="@SPELLS_CLOCKWORK_DASH">
+    <text lang="EN-US">Clockwork Dash</text>
+    <text lang="RU-RU">Заводной рывок</text>
+  </entry>
+  <entry tuid="@SPELLS_CLOCKWORK_DASH_DESC">
+    <text lang="EN-US">Dash to the target location. On arrival, deal 95 physical damage to nearby enemies and leave a field for 4 s that slows enemies inside by 35%.</text>
+    <text lang="RU-RU">Рывок в выбранную точку. По прибытии наносит 95 ед. физического урона врагам рядом и оставляет на 4 с поле, замедляющее врагов в нём на 35%.</text>
+  </entry>
+</patch>

@@ -48,22 +48,35 @@ public sealed class World : IDisposable
         Dungeons = new Systems.RandomDungeons(this);
         WorldChests = new Systems.WorldChests(this);
         StaticDungeons = new Systems.StaticDungeons(this);
+        Checks = new Systems.Checklist(this);
         Bosses = new Systems.WorldBosses(this);
         Events = new Systems.WorldEvents(this);
         Invasions = new Systems.PlayerInvasions(this);
         Expeditions = new Systems.Expeditions(this);
         Corrupted = new Systems.CorruptedDungeons(this);
         Hellgates = new Systems.Hellgates(this);
+        Arenas = new Systems.Arenas(this);
+        Ratings = new Systems.Ratings(this);
+        Tournament = new Systems.Tournament(this);
         Roads = new Systems.AvalonRoads(this, characters as IRoadStore);
         Mists = new Systems.Mists(this);
+        Factions = new Systems.Factions(this);
         FakeCasts = new Systems.FakeSlotCasts(this);
+        ExtraBars = new Systems.ExtraBars(this);
         Shrines = new Systems.BuffShrines(this);
         Bounties = new Systems.Bounties(this);
+        Hunts = new Systems.Hunts(this);
+        Vanity = new Systems.Vanity(this);
         Islands = new Systems.Islands(this, characters as IIslandStore);
         Chat = new Systems.ChatHub(this);
         Social = new Systems.Social(this, characters as ISocialStore);
         Bots = new Bots.BotManager(this);
+        Companions = new Bots.Companions(this);
+        Plugins = new Plugins.PluginHost(this);
     }
+
+    /// <summary>The C# plugins (Plugins:*, server/plugins/README.md): loaded by ServerHost with Plugins:Enabled; none in a bare World.</summary>
+    public Plugins.PluginHost Plugins { get; }
 
     public ServerConfig Config { get; }
 
@@ -92,6 +105,9 @@ public sealed class World : IDisposable
 
     /// <summary>The crafting and refining bonus per city (craftingmodifiers.bin); none in hand-made test tables.</summary>
     public CraftingModifiers Crafting { get; init; } = CraftingModifiers.None;
+
+    /// <summary>Awakened weapons and their traits (legendaryitems.bin, stageN awakening SPEC); null = no awakening (hand-made tables).</summary>
+    public LegendaryData? Legendary { get; init; }
 
     /// <summary>Buildings content/spawns adds to the clusters (stage 6: ownerless crafting stations).</summary>
     public StationSpawns Stations { get; init; } = StationSpawns.None;
@@ -173,6 +189,9 @@ public sealed class World : IDisposable
     /// <summary>The static dungeons: their events and value on the world map and in 499 (stageN static-dungeons SPEC).</summary>
     public Systems.StaticDungeons StaticDungeons { get; }
 
+    /// <summary>The client checker: content/checks.json, the .check setup runs, data/checks-results.json (stageN checker).</summary>
+    public Systems.Checklist Checks { get; init; }
+
     /// <summary>The world bosses: the WORLDBOSS spawn points' and content/bosses.json's, their schedule, announcements and loot (stageH bosses SPEC §4.1, §6.1).</summary>
     public Systems.WorldBosses Bosses { get; }
 
@@ -191,14 +210,29 @@ public sealed class World : IDisposable
     /// <summary>StageL: the hellgates: the Hell Den shrines, the channels and locks, the instances, their objectives, enemy teams and chests (stageL hellgates SPEC).</summary>
     public Systems.Hellgates Hellgates { get; }
 
+    /// <summary>Stage N: the arena queues and matches (analysis/work/stageN/arena/SPEC.md, <see cref="Systems.Arenas"/>).</summary>
+    public Systems.Arenas Arenas { get; }
+
+    /// <summary>Stage N: the duel and arena ladders (<see cref="Systems.Ratings"/>, schema v32).</summary>
+    public Systems.Ratings Ratings { get; }
+
+    /// <summary>Stage N: the GM's duel tournament (<see cref="Systems.Tournament"/>).</summary>
+    public Systems.Tournament Tournament { get; }
+
     /// <summary>StageL: the Roads of Avalon: the portal network of the open world and the roads, its portals, charges and links (stageL roads SPEC).</summary>
     public Systems.AvalonRoads Roads { get; }
 
     /// <summary>StageL: the Mists: the open world's mists portals' enter cast, the zones behind them, their objects, treasures and ways out (stageL mists SPEC).</summary>
     public Systems.Mists Mists { get; }
 
+    /// <summary>StageN: faction warfare's PvE side: enlisting, faction points and standing, the faction trader's gates (stageN faction SPEC).</summary>
+    public Systems.Factions Factions { get; }
+
     /// <summary>The server casts of CharacterSpellSlot.FakeSpell (25): the corrupted dungeon entrance, the mists entrance, the loot chest opening (stageM chest-slot25 NOTES).</summary>
     public Systems.FakeSlotCasts FakeCasts { get; }
+
+    /// <summary>The extra action bars (analysis/work/stageN/extrabars/SPEC.md): the worn items' extra spells, the overrides, the mod's channel.</summary>
+    public Systems.ExtraBars ExtraBars { get; }
 
     /// <summary>StageN: the buff shrines of the dungeon rooms and open-world clusters (NewShrine, UseShrine; stageN shrines SPEC).</summary>
     public Systems.BuffShrines Shrines { get; }
@@ -230,6 +264,9 @@ public sealed class World : IDisposable
     /// <summary>The world boss settings (content/bosses.json; the built-in ones without it).</summary>
     public BossSettings BossSettings { get; init; } = BossSettings.Default;
 
+    /// <summary>The content packs' server-only drops (Mods:Packs, mods/&lt;pack&gt;/server/drops.json; none by default).</summary>
+    public Mods.ModDrops ModDrops { get; init; } = Mods.ModDrops.None;
+
     /// <summary>worldbosses.xml (or its regional variant, BossSettings.DataFile), read at the start; null = no world bosses (hand-made test worlds).</summary>
     public WorldBossData? BossData { get; init; }
 
@@ -245,11 +282,20 @@ public sealed class World : IDisposable
     /// <summary>Stage I: the player bots (analysis/work/stageI/bots/SPEC.md): their population per map, spawns, walks and brains.</summary>
     public Bots.BotManager Bots { get; }
 
+    /// <summary>StageN companions: the bots players hired (.companion; analysis/work/stageN/companions/SPEC.md).</summary>
+    public Bots.Companions Companions { get; }
+
     /// <summary>Stage I: the bots' tables (content/bots.json; the built-in ones without it).</summary>
     public BotSettings BotSettings { get; init; } = BotSettings.Default;
 
     /// <summary>The server bounties: the daily and weekly picks, their counts and rewards (PVE-DESIGN.md §2.I).</summary>
     public Systems.Bounties Bounties { get; }
+
+    /// <summary>The hunts / tracking: tracking toolkits, wild tracks, the hunts' quest chains and escapes (stageN hunts SPEC).</summary>
+    public Systems.Hunts Hunts { get; }
+
+    /// <summary>StageN vanity: the cosmetics' drops, the wardrobe and the mount skins (analysis/work/stageN/vanity/SPEC.md).</summary>
+    public Systems.Vanity Vanity { get; }
 
     /// <summary>The logged-in accounts' selected character, login time and Join count (SPEC stage 3 §4.4), set by the login sessions.</summary>
     public AccountStates Accounts { get; } = new();
@@ -445,14 +491,19 @@ public sealed class World : IDisposable
         // Stage I: the bot populations, walks and brains, guarded so that a fault there never costs the tick its keepalives and saves.
         try { Bots.Update(now); }
         catch (Exception e) { Log.Error("bots", $"bot update failed: {e}"); }
+        try { Companions.Update(); } // stageN: companions follow their owners over cluster changes, left behind or stuck
+        catch (Exception e) { Log.Error("bots", $"companion update failed: {e}"); }
         Expeditions.Update(); // stageH: ready timeouts, the Join and exit channels, instance timeouts and closing
         FakeCasts.Update(); // the slot-25 server casts: the corrupted dungeon and mists enter casts, the chest openings
         Corrupted.Update(); // stageL: the corrupted instances' time limits and closing
         Shrines.Update(); // stageN: the buff shrines' respawns and faction locks
+        Checks.Update(); // stageN checker: the .check setup lines that are due
         Hellgates.Update(); // stageL: the shrine channels and locks, the hellgate instances' objectives, wipes, time limits and closing
+        Arenas.Update(); // stage N: the arena queues, ready checks, countdowns, respawns, results and closing
         Roads.Update(); // stageL: the road network's build, its expiries, charge-ups, rescue links and batched saves
         Mists.Update(); // stageL: the zone builds, return portals, treasures, warnings, shutdowns and empty zones
         Bounties.Update(); // PVE-DESIGN step 11: a new day's bounties announced
+        Hunts.Update(); // stageN hunts: find casts, track readings, hunt timeouts, escapes and fled targets
         Systems.MarketExpiry.Update(this, now); // stageJ mail: once a minute the expired market orders and mails
         Systems.LearningPoints.Update(this, now); // stageJ focus-lp: once a minute the learning points of the online players
         // World timers: the keepalive of every joined connection, then the saves that are due.
@@ -468,13 +519,16 @@ public sealed class World : IDisposable
         Dungeons.UpdateExits(); // stageM exit: the click-and-channel entries at random dungeon portals (every tick)
         Dungeons.Update(now); // stageG: exit rerolls, despawns and refills, dungeons that close
         Saves.Update(now);
+        // The plugins' timers, Tick and storage writes (each call guarded: a plugin's fault never costs the tick).
+        try { Plugins.Update(now); }
+        catch (Exception e) { Log.Error("plugins", $"plugin update failed: {e}"); }
         if (Config.MapIdleUnload > TimeSpan.Zero)
             // A floor of a live random dungeon stays until the dungeon closes (its own empty lifetime, RandomDungeons.Close).
             // So does an expedition instance's map (Expeditions.Close), a corrupted dungeon's (CorruptedDungeons.Close), a hellgate's (Hellgates.Close)
             // and a mists zone's (Mists.Close).
             // And an open-world map holding a dungeon map's portal, until the portal goes (dungeon-maps SPEC §4).
             foreach (var map in Maps.Maps.Where(m => m.EmptySince is { } since && now - since >= Config.MapIdleUnload && !Dungeons.IsLive(m.Cluster)
-                         && !Expeditions.IsLive(m.Cluster) && !Corrupted.IsLive(m.Cluster) && !Hellgates.IsLive(m.Cluster) && !Mists.IsLive(m.Cluster)
+                         && !Expeditions.IsLive(m.Cluster) && !Corrupted.IsLive(m.Cluster) && !Hellgates.IsLive(m.Cluster) && !Arenas.IsLive(m.Cluster) && !Mists.IsLive(m.Cluster)
                          && !Dungeons.HoldsMapExit(m)).ToList())
             {
                 Bots.Unloaded(map); // stage I: its bots go first (the unload counts humans only)
@@ -584,7 +638,7 @@ public sealed class World : IDisposable
     /// dungeon's variant of its map for its difficulty (stageL corrupted SPEC §4.2 step 4, <see cref="ClusterVariant"/>), a hellgate's world.xml map, an island's
     /// template of its current level (stageH islands SPEC §1.6), else itself.
     /// </summary>
-    private string TemplateOf(string cluster) => Expeditions.WorldOf(cluster) ?? Corrupted.TemplateOf(cluster) ?? Hellgates.WorldOf(cluster) ?? Islands.WorldOf(cluster) ?? cluster;
+    private string TemplateOf(string cluster) => Expeditions.WorldOf(cluster) ?? Corrupted.TemplateOf(cluster) ?? Hellgates.WorldOf(cluster) ?? Arenas.WorldOf(cluster) ?? Islands.WorldOf(cluster) ?? cluster;
 
     /// <summary>The map's objects from <paramref name="template"/> (once), then the players already on it get theirs.</summary>
     private void Populate(Map map, ClusterTemplate template)

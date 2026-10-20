@@ -47,7 +47,7 @@ public static class AlbionTests
         OpcodeTable.Build(typeof(LoginSession), typeof(WorldSession), typeof(ChatSession));
         var login = OpcodeTable.For(typeof(LoginSession));
         var game = OpcodeTable.For(typeof(WorldSession));
-        Check(login.Handlers.Count == 8 && game.Handlers.Count == 165 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+        Check(login.Handlers.Count == 8 && game.Handlers.Count == 196 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.Join) is { Status: SessionStatus.Connected } && login.Find(OperationCodes.SelectCharacter) is { Status: SessionStatus.Authed }
               && login.Find(OperationCodes.GetGameServerByCluster) is { Status: SessionStatus.Authed } && game.Find(OperationCodes.ChangeCluster) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.HarvestStart) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.HarvestCancel) is { Status: SessionStatus.InWorld }
@@ -329,8 +329,9 @@ public static class AlbionTests
         var shipped = ServerConfig.Load(Path.Combine(DataDir(), "..", "config", "albionlocal.json"), []);
         Check(shipped == none with { }, "config/albionlocal.json holds exactly the defaults");
         var realItems = Client.Items;
-        Check(System.Text.Json.JsonSerializer.Serialize(StarterKit.Load(Path.Combine(DataDir(), "..", "content", "starter.json"), realItems))
-              == System.Text.Json.JsonSerializer.Serialize(StarterKit.Default), "content/starter.json holds exactly the built-in kit, all items known");
+        var shippedKit = StarterKit.Load(Path.Combine(DataDir(), "..", "content", "starter.json"), realItems);
+        Check(shippedKit is { Equipment: [null, null, null, null, null, { Name: "T2_BAG" }, { Name: "T2_CAPE" }, { Name: "T2_MOUNT_MULE" }, ..], Inventory.Count: 5 }
+              && shippedKit.Inventory.All(i => i is { Name: ['T', '1', '_', ..] }), "content/starter.json: the T2 bag, cape and mule, the five T1 tools, all items known");
         var starter = Path.Combine(dir, "starter.json");
         File.WriteAllText(starter, """{ "Equipment": { "mainhand": "T4_MAIN_SWROD", "head": "T4_ORE", "cape": "T4_CAPE" }, "Inventory": ["T4_ORE", "NO_SUCH"] }""");
         Check(StarterKit.Load(starter, realItems) is { Equipment: [null, null, null, null, null, null, { Name: "T4_CAPE" }, ..], Inventory: [{ Name: "T4_ORE" }, null] }
@@ -552,6 +553,7 @@ public static class AlbionTests
             ChatEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
             SavesPath = dir,
             ContentPath = Path.Combine(DataDir(), "..", "content"),
+            StarterPath = Path.Combine(dir, "no-starter.json"), // the built-in T4 kit the tests are written for, not the shipped one
             ClientGameDataPath = Path.Combine(dir, "no-client-data"), // never read: the client data is handed in
             LogoutTime = logoutTime ?? TimeSpan.FromSeconds(10),
             JoinByCharacterId = true, // the tests' Joins name the character
@@ -582,8 +584,21 @@ public static class AlbionTests
     /// <summary>How long <see cref="Client"/> took to load.</summary>
     internal static TimeSpan ClientLoadTime => LoadedClient.Value.Time;
 
-    /// <summary>The default Paths:ClientGameData taken from the server folder (the parent of <see cref="DataDir"/>).</summary>
-    internal static string ClientGameDataDir() => Path.GetFullPath(ServerConfig.DefaultClientGameData, Path.Combine(DataDir(), ".."));
+    /// <summary>
+    /// The default Paths:ClientGameData taken from the server folder (the parent of <see cref="DataDir"/>); when the modkit modded
+    /// game-local (tools/AlbionLocal.ModKit), the official GameData beside it instead (only read), so that the golden checks
+    /// (11971 items, 9326 spells, …) keep comparing the official data.
+    /// </summary>
+    internal static string ClientGameDataDir() => GameDataDir.Value;
+
+    private static readonly Lazy<string> GameDataDir = new(() =>
+    {
+        var local = Path.GetFullPath(ServerConfig.DefaultClientGameData, Path.Combine(DataDir(), ".."));
+        var pristine = Server.Mods.ModPaths.PristineFor(local, ClientData.FileNames);
+        if (pristine is null) Console.WriteLine("      (game-local is modded and no official GameData was found beside it: the golden checks see the modded data)");
+        else if (pristine != local) Console.WriteLine($"      (game-local is modded by the modkit: the tests read the official GameData {pristine})");
+        return pristine ?? local;
+    });
 
     /// <summary>A hand-made item table from rows in the data/items.tsv layout (index, uniquename, kind, slot, tier, durability).</summary>
     internal static ItemStore Items(params string[] rows) => new(rows.Select(TsvTemplate));
@@ -642,7 +657,7 @@ public static class AlbionTests
         return slots;
     }
 
-    /// <summary>Gear sets from captures/albion_20261015_114814 Joins (no destiny levels needed for the second).</summary>
+    /// <summary>Gear sets from capture 114814 Joins (no destiny levels needed for the second).</summary>
     private static void StatVectors()
     {
         var (_, data) = RealData();

@@ -112,11 +112,14 @@ public sealed partial class WorldSession
     private AlbionResponse? PlaceableObjectPlace(PlaceableObjectPlaceRequest req)
     {
         if (Player is not { } p || p.Map is not { } map) return null;
+        // Labourers SPEC §2.3, §1.3: a labourer (the house menu's hire: no item; or a labourer contract) and furniture have their own way.
+        if (world.Islands.LabourerType(req.x8) is not null) return PlaceLabourer(p, map, req);
         if (p.Inventory.Bag.Find(req.x7) is not { } stack)
         {
             Log.Info(Name, $"'{p.Character.Name}' places object {req.x7}: not in the inventory");
             return null;
         }
+        if (stack.Template.IsFurniture) return PlaceFurniture(p, map, stack, req);
         var (building, slot, why) = world.Islands.CheckPlant(p, stack.Template, req.x8, req.x9);
         if (building is null)
         {
@@ -214,7 +217,7 @@ public sealed partial class WorldSession
         else if (crop.Island.Owner != p.Character.Id) why = $"{crop} is not the player's";
         else if (!world.Islands.InReach(p, crop)) why = $"{crop} is out of reach";
         else if (!world.Islands.Ripe(crop.Crop, farm, world.GameNow)) why = $"{crop} is not grown yet";
-        else if (world.Islands.HarvestOf(crop, map.Random, Systems.Premium.CropYieldFactor(p)) is not { } harvest) why = "loot.xml is not read";
+        else if (world.Islands.HarvestOf(crop, map.Random, world.Islands.YieldFactor(crop, Systems.Premium.CropYieldFactor(p))) is not { } harvest) why = "loot.xml is not read";
         else if (!Fits(p.Inventory.Bag, harvest.Items.Select(i => (i.Item, i.Count)))) why = "the harvest does not fit the inventory";
         else
         {
@@ -326,9 +329,12 @@ public sealed partial class WorldSession
     }
 
     /// <summary>
-    /// FarmableGetProduct (op 76, sp {0 the animal, 1 the product index, 2 a bool [meaning unknown, logged]}): a grown own animal in reach whose
-    /// production is complete gives the product's lootlist (eggs, milk, …) and fame; its production starts again (FarmableObjectInfo), then
-    /// the response sq {0 the item names, 1 their counts}. Refused (not ready, no such product, inventory full): RC 1.
+    /// FarmableGetProduct (op 76, sp {0 the animal, 1 the product index, 2 "take all"}): a grown own animal in reach whose production is
+    /// complete gives the product's lootlist (eggs, milk, …) × the island yield bonus and the owner's premium factor
+    /// (<see cref="Systems.Islands.YieldFactor"/>) and its fame; its production starts again (FarmableObjectInfo), then the response sq {0 the
+    /// item names, 1 their counts}. Key 2 is the client's per-item-type setting "FARMABLE_TAKE_ALL&lt;item type&gt;" (gg5.ay 0x180C5F130,
+    /// default true; islands5 SPEC §2.3): with it every other ready animal of the same item in the same building and in reach gives its product
+    /// too, as far as the inventory takes it. Refused (not ready, no such product, inventory full): RC 1.
     /// </summary>
     [Handles(OperationCodes.FarmableGetProduct, Status = SessionStatus.InWorld)]
     private AlbionResponse? FarmableGetProduct(FarmableGetProductRequest req)
@@ -337,21 +343,116 @@ public sealed partial class WorldSession
         var (animal, why) = OwnAnimal(p, req.li);
         if (animal is not null)
         {
-            if (world.Islands.ProductOf(animal, req.lj, map.Random) is not { } product) why = $"{animal} has no product {req.lj} ready";
+            var premium = Systems.Premium.CropYieldFactor(p);
+            if (world.Islands.ProductOf(animal, req.lj, map.Random, world.Islands.YieldFactor(animal, premium)) is not { } product) why = $"{animal} has no product {req.lj} ready";
             else if (!Fits(p.Inventory.Bag, product.Items.Select(i => (i.Item, i.Count)))) why = "the product does not fit the inventory";
             else
             {
+                var taken = new List<(FarmableObject Animal, List<(Data.ItemTemplate Item, int Count)> Items, long Fame)> { (animal, product.Items, product.Fame) };
+                if (req.lk)
+                    foreach (var other in map.Objects.Values.OfType<FarmableObject>().Where(o => o != animal && o.Seed == animal.Seed && o.Crop.Building == animal.Crop.Building
+                                 && o.Island.Owner == p.Character.Id && world.Islands.InReach(p, o)).ToList())
+                    {
+                        if (world.Islands.ProductOf(other, req.lj, map.Random, world.Islands.YieldFactor(other, premium)) is not { } more) continue;
+                        if (!Fits(p.Inventory.Bag, taken.SelectMany(t => t.Items).Concat(more.Items).Select(i => (i.Item, i.Count)))) break;
+                        taken.Add((other, more.Items, more.Fame));
+                    }
                 Systems.Mounts.BeforeAction(p, "collects");
-                foreach (var (item, count) in product.Items) GiveItem(p, item, count);
-                var fame = Game.Rates.ScaleFame(product.Fame, world.Rates.Fame);
-                if (fame > 0) Systems.Destiny.Award(p, fame, Systems.Destiny.Farm(animal.Seed), source: animal.Seed);
-                world.Islands.ProductTaken(animal);
-                Log.Info(Name, $"'{p.Character.Name}' collected {string.Join(", ", product.Items.Select(i => $"{i.Count} x {i.Item.Name}"))} from {animal} (flag {req.lk})");
+                foreach (var (item, count) in taken.SelectMany(t => t.Items)) GiveItem(p, item, count);
+                foreach (var (from, _, rawFame) in taken)
+                {
+                    var fame = Game.Rates.ScaleFame(rawFame, world.Rates.Fame);
+                    if (fame > 0) Systems.Destiny.Award(p, fame, Systems.Destiny.Farm(from.Seed), source: from.Seed);
+                    world.Islands.ProductTaken(from);
+                }
+                var all = taken.SelectMany(t => t.Items).GroupBy(i => i.Item).Select(g => (Item: g.Key, Count: g.Sum(i => i.Count))).ToList();
+                Log.Info(Name, $"'{p.Character.Name}' collected {string.Join(", ", all.Select(i => $"{i.Count} x {i.Item.Name}"))} from {taken.Count} x {animal.Seed.Name} (take all {req.lk})");
                 world.Saves.SaveNow(p.Character);
-                return new FarmableGetProductResponse { la = [.. product.Items.Select(i => i.Item.Name)], lb = [.. product.Items.Select(i => (short)i.Count)] };
+                return new FarmableGetProductResponse { la = [.. all.Select(i => i.Item.Name)], lb = [.. all.Select(i => (short)Math.Min(short.MaxValue, i.Count))] };
             }
         }
         Log.Info(Name, $"'{p.Character.Name}' product of object {req.li} refused: {why}");
         return new GenericResponse { ReturnCode = IslandRefused };
+    }
+
+    // ---- building on the island and picking up (islands phase 5, analysis/work/stageN/islands5/SPEC.md) ----
+
+    /// <summary>A refusal the player should read (the client's generic error says nothing): a system chat line.</summary>
+    private void TellIsland(string text) => SendEvent(new SystemMessageEvent { d0p = text.StartsWith('@') ? " " + text : text, d0q = 0 });
+
+    /// <summary>
+    /// ConstructionSiteCreate (op 68, rb {0 building type, 1 float[2] position, 2 rotation}; build menu BuildingDetailsViewGui.OnClickBuild
+    /// 0x1813811B0 → placement mode): a farm building on a free plot of the own island (<see cref="Systems.Islands.CheckConstruct"/>). The
+    /// official construction site (NewBuilding key 15, ConstructionSiteInfo, InstallResource…) is skipped: the placecost silver (UpdateMoney)
+    /// and the &lt;craftingrequirements&gt; leave the inventory at once and the finished building stands on the plot (NewBuilding,
+    /// AccessStatus); the response aei {0 its object id}. Refused: RC 1 and a system line with the reason (what is missing).
+    /// </summary>
+    [Handles(OperationCodes.ConstructionSiteCreate, Status = SessionStatus.InWorld)]
+    private AlbionResponse? ConstructionSiteCreate(ConstructionSiteCreateRequest req)
+    {
+        if (Player is not { } p || p.Map is not { } map) return null;
+        var at = req.g4 is { Length: >= 2 } v ? new System.Numerics.Vector2(v[0], v[1]) : p.PositionAt(DateTime.UtcNow);
+        var (template, plot, silver, cost, why) = world.Islands.CheckConstruct(p, req.g3, at);
+        if (template is not null && world.Islands.Find(map.Cluster) is { } island)
+        {
+            if (world.Islands.Build(island, template.Name, plot, req.g5, out why) is { } built)
+            {
+                Systems.Wallet.TrySpend(p, silver, $"placing {template.Name}");
+                foreach (var (item, count) in cost) TakeItems(p, item, count);
+                world.Saves.SaveNow(p.Character); // the building's row went at once: so do the silver and the resources
+                var id = map.Objects.Values.OfType<PlayerBuilding>().FirstOrDefault(b => b.Building.Id == built.Id)?.Id ?? 0;
+                Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
+                    $"'{p.Character.Name}' built {template.Name} at ({plot.X:0.#}, {plot.Y:0.#}) for {silver / Game.Pricing.A7m} silver and {string.Join(", ", cost.Select(c => $"{c.Count} x {c.Item.Name}"))}"));
+                return new ConstructionSiteCreateResponse { aoj = id };
+            }
+        }
+        Log.Info(Name, $"'{p.Character.Name}' construction of building type {req.g3} refused: {why}");
+        TellIsland(why);
+        return new GenericResponse { ReturnCode = IslandRefused };
+    }
+
+    /// <summary>
+    /// BuildingGiveup (op 64, pt {0 the building}; BuildingPropertyModule.OnButtonGiveup 0x181322290): an own island building goes (Leave, out of
+    /// the store) with the crops in it; buildings.xml destructionreturnfactor 0: nothing comes back. Refused while an animal stands in it (pick
+    /// it up first) and for any other object: RC 1 with a system line.
+    /// </summary>
+    [Handles(OperationCodes.BuildingGiveup, Status = SessionStatus.InWorld)]
+    private AlbionResponse? BuildingGiveup(BuildingGiveupRequest req)
+    {
+        if (Player is not { } p) return null;
+        var (building, why) = world.Islands.CheckGiveup(p, req.c4);
+        if (building is null)
+        {
+            Log.Info(Name, $"'{p.Character.Name}' give-up of object {req.c4} refused: {why}");
+            TellIsland(why);
+            return new GenericResponse { ReturnCode = IslandRefused };
+        }
+        world.Islands.Demolish(building.Building);
+        Log.Info(Name, $"'{p.Character.Name}' gave up the {building.Template.Name} of {building.Island}");
+        return new GenericResponse();
+    }
+
+    /// <summary>
+    /// PlaceableObjectPickup (op 71, y6 {0 the object}; FarmableGui.OnPickupPressed 0x18110FA40 → co0.af 0x180B8CC00 → c32.j 0x180A77A90, a
+    /// callback on the RC): an own placed animal (items.xml pickupable) in reach goes back into the inventory as the item it was placed as
+    /// (NewSimpleItem / InventoryPutItem), losing its growth and food as the client's question says, then its Leave; RC 0. Refused (a seed,
+    /// not the player's, out of reach, the inventory full): RC 1.
+    /// </summary>
+    [Handles(OperationCodes.PlaceableObjectPickup, Status = SessionStatus.InWorld)]
+    private AlbionResponse? PlaceableObjectPickup(PlaceableObjectPickupRequest req)
+    {
+        if (Player is not { } p) return null;
+        if (p.Map?.Objects.GetValueOrDefault(req.x5) is FurnitureObject) return PickupFurniture(p, req.x5);
+        var (o, why) = world.Islands.CheckPickup(p, req.x5);
+        if (o is not null && !Fits(p.Inventory.Bag, [(o.Seed, 1)])) (o, why) = (null, "the inventory is full");
+        if (o is null)
+        {
+            Log.Info(Name, $"'{p.Character.Name}' pick-up of object {req.x5} refused: {why}");
+            return new GenericResponse { ReturnCode = IslandRefused };
+        }
+        GiveItem(p, o.Seed, 1);
+        world.Islands.Remove(o, $"picked up by '{p.Character.Name}'");
+        world.Saves.SaveNow(p.Character);
+        return new GenericResponse();
     }
 }

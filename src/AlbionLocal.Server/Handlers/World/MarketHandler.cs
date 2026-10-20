@@ -156,9 +156,55 @@ public sealed partial class WorldSession
     /// <summary>The orders of <paramref name="orders"/> that are still open; each expired one is ended (<see cref="MarketExpiry"/>: a finished entry and its owner's mail).</summary>
     private List<MarketOrder> Expire(IEnumerable<MarketOrder> orders) => MarketExpiry.Expire(world, orders);
 
-    /// <summary>AuctionGetItemAverageValue (op 96): no price history here, 0 (safe for the client).</summary>
+    /// <summary>
+    /// AuctionGetItemAverageStats (op 95, ajx: 0 the market object, 1 item type id, 2 quality, 3 the span ajx.a: 0 24 hours, 1 7 days,
+    /// 2 4 weeks; sent by MarketPlacePopUpGui.QueryItemAverageStats 0x180FDA250 through dgi.b 0x180B231F0): the sales of the item at
+    /// this city's market (econ SPEC §1), summed per bucket of the chart: an hour (24 h), a quarter day (7 days) or a day (4 weeks).
+    /// The response (adw, read by MarketPlacePopUpDetailsGraphModule.OnDemandItemAveragesReceived 0x180FCF820) holds parallel arrays:
+    /// 0 the amounts sold, 1 the silver paid (a7m raw; the client shows silver ÷ amount), 2 the bucket's GameTimeStamp (its start),
+    /// newest first; no sales = empty arrays (the client's "no average").
+    /// </summary>
+    [Handles(OperationCodes.AuctionGetItemAverageStats, Status = SessionStatus.InWorld)]
+    private AlbionResponse? AuctionGetItemAverageStats(AuctionGetItemAverageStatsRequest req)
+    {
+        if (Player is not { } player) return null;
+        var (amounts, silver, stamps) = (new List<long>(), new List<long>(), new List<long>());
+        if (MarketAt(player, req.bqs) is { } location && world.Items[req.bor] is { } type)
+        {
+            var (span, bucket) = HistorySpan(req.bot);
+            var now = DateTime.UtcNow;
+            foreach (var g in world.Market!.Sales(location, type.Name, req.bos, now - span)
+                         .GroupBy(s => s.At.Ticks - s.At.Ticks % bucket.Ticks).OrderByDescending(g => g.Key))
+            {
+                amounts.Add(g.Sum(s => (long)s.Amount));
+                silver.Add(g.Sum(s => s.UnitPrice * s.Amount));
+                stamps.Add(g.Key);
+            }
+        }
+        return new AuctionGetItemAverageStatsResponse { amw = [.. amounts], amx = [.. silver], amy = [.. stamps] };
+    }
+
+    /// <summary>The chart's span of ajx.a (0 24 hours, 1 7 days, 2 4 weeks, as GraphModule's 1/7/28 days) and the bucket it plots by.</summary>
+    private static (TimeSpan Span, TimeSpan Bucket) HistorySpan(byte kind) => kind switch
+    {
+        1 => (TimeSpan.FromDays(7), TimeSpan.FromHours(6)),
+        2 => (TimeSpan.FromDays(28), TimeSpan.FromDays(1)),
+        _ => (TimeSpan.FromHours(24), TimeSpan.FromHours(1)),
+    };
+
+    /// <summary>
+    /// AuctionGetItemAverageValue (op 96, ajy: 1 item type id, 2 quality, 3 the span as op 95): the average unit price (a7m raw) of the
+    /// item's sales at this city's market over the span; 0 = no sales.
+    /// </summary>
     [Handles(OperationCodes.AuctionGetItemAverageValue, Status = SessionStatus.InWorld)]
-    private AlbionResponse? AuctionGetItemAverageValue(AuctionGetItemAverageValueRequest req) => new AuctionGetItemAverageValueResponse();
+    private AlbionResponse? AuctionGetItemAverageValue(AuctionGetItemAverageValueRequest req)
+    {
+        if (Player is not { } player || MarketAt(player, req.bqs) is not { } location || world.Items[req.bou] is not { } type)
+            return new AuctionGetItemAverageValueResponse();
+        var sales = world.Market!.Sales(location, type.Name, req.bov, DateTime.UtcNow - HistorySpan(req.bow).Span);
+        var amount = sales.Sum(s => (long)s.Amount);
+        return new AuctionGetItemAverageValueResponse { amz = amount == 0 ? 0 : sales.Sum(s => s.UnitPrice * s.Amount) / amount };
+    }
 
     /// <summary>
     /// AuctionCreateOffer (op 79, ajs; keys from the sender dgi.b(int, a7m, long, int) 0x180B23AF0: 1 amount, 2 the item's
@@ -265,6 +311,7 @@ public sealed partial class WorldSession
             b.AddFinished(new MarketFinished(0, player.Character.Id, offer.Id, MarketOrder.Offer, location, offer.ItemName, offer.Quality, req.bn2,
                 offer.UnitPrice, 0, DateTime.UtcNow, offer.Expires, offer.Reference, offer.Item is { } i ? i with { Count = req.bn2 } : null));
             if (!npc && seller is null) b.Credit(offer.Owner, proceeds);
+            b.AddSale(new MarketSale(location, offer.ItemName, offer.Quality, req.bn2, offer.UnitPrice, DateTime.UtcNow));
         });
         Wallet.TrySpend(player, price, $"{req.bn2} x {offer.ItemName} from the market");
         if (!npc && req.bn2 == offer.Amount) Mailer.MarketNotice(world, offer with { Amount = 0 }, finished: true); // stageJ mail SPEC §3
@@ -306,13 +353,16 @@ public sealed partial class WorldSession
             return RefuseMarket(player, op, "over the Black Market's daily limit (Bm:DailyLimit)");
         var record = item.ToRecord(id => world.Spells?.Name(id)) with { Count = req.bqh };
         // The merchant's and the Black Market's buy orders keep nothing: the items are gone (and the order stays as it was).
-        if (!JournalMerchant.Owns(request) && !npcBuyer)
-            world.Market.Batch(b =>
+        world.Market.Batch(b =>
+        {
+            if (!JournalMerchant.Owns(request) && !npcBuyer)
             {
                 b.SetAmount(request.Id, request.Amount - req.bqh);
                 b.AddFinished(new MarketFinished(0, request.Owner, request.Id, MarketOrder.Request, location, request.ItemName, item.Quality, req.bqh,
                     request.UnitPrice, 0, DateTime.UtcNow, request.Expires, request.Reference, record));
-            });
+            }
+            b.AddSale(new MarketSale(location, request.ItemName, item.Quality, req.bqh, request.UnitPrice, DateTime.UtcNow)); // the price history (econ SPEC §1)
+        });
         if (req.bqh == item.Count)
         {
             bag.Take(req.bqg);

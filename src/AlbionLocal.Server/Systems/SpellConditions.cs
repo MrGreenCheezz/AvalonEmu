@@ -30,7 +30,7 @@ public static class SpellConditions
         "IfIsTargetTopOfThreatList", "IfIsTargetChanneling", "IfTargetIsTransformed", "IfSummonedMobCount", "IfVariableOnTarget", "IfInDuel",
         "IfEquipmentSlotEmpty", "IfTargetIsInFaction", "IfTargetIsInAnyFaction", "IfCasterIsInAnyFaction", "IfTargetIsInOpposingFaction",
         "IfClusterBiome", "IfIsTargetCarryingObject", "IfIsAnyMobWithVariableInRange", "IfTargetCCEffect", "IfTargetPositionIsInPursuitRange",
-        "IfTargetMobIsMoving",
+        "IfTargetMobIsMoving", "IfTargetHasPowerCrystal",
     };
 
     /// <summary>The unit <c>who</c> names (EffectTarget when missing).</summary>
@@ -136,7 +136,7 @@ public static class SpellConditions
                 return f.Caster is Mob pm && Vector2.Distance(Position(unit), pm.Home) <= Math.Max(pm.Template.PursuitRadius, pm.Template.AggroRadius);
             case "IfTargetMobIsMoving":
                 return unit is Mob mm && mm.Motion.Moving;
-            case "IfIsTargetCarryingObject": // no carriable objects (battle standards, power cores) on this server
+            case "IfIsTargetCarryingObject" or "IfTargetHasPowerCrystal": // no carriable objects (battle standards, power cores, crystals) on this server
                 return false;
             default:
                 return null;

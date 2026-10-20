@@ -25,7 +25,36 @@ public static class EffectsBatch3Test
         ("effects batch 3: SHAPESHIFT_PANTHER listed 12 s, SHAPESHIFT_HUMAN ends it; setcooldowns 15 s; cancelmultispell (457 at now); CLEANSE sets the stun DR to 0.3", FormsSlotsCleanse),
         ("effects batch 3: ENERGYSHIELD2 +16 energy per hit, MOB_OPENWORLD_BUFF_Q4 × 1.15 damage and health, notinterruptible, cannotaggro, removefromthreatlist, the timed fiber weight", UnitStates),
         ("spells-bosses: AXETHROW_EFFECT -160 -> -220 with 2 AXE_BLEED (IfCharge), IfTargetHealthPercentage, IfChannelTick modulo, IfTargetMobCategory/Tier, a gathering tome, a fame buff", ConditionsAndTomes),
+        ("spells2: AFTER_IMAGE stores its area's centre (tag IMAGE); AFTER_IMAGE_RETURN (storedtarget) is cast there, teleports back and removes it", StoredTargets),
     ];
+
+    private static void StoredTargets()
+    {
+        using var arena = new Arena();
+        var world = arena.World;
+        var (_, _, me) = arena.Join("Imager", new InventoryItem("T4_MAIN_SWORD"));
+        var map = world.Maps.Find("0204")!;
+        var image = T("AFTER_IMAGE");
+        var back = T("AFTER_IMAGE_RETURN");
+        var home = me.PositionAt(DateTime.UtcNow);
+        lock (world.Sync) SpellCasts.Execute(new SpellCasts.SpellContext(me, map, image, 1, 100, null, home + new Vector2(5, 0), world.GameNow), image);
+        var stored = me.Combat.Stored.SingleOrDefault();
+        Check(stored is { Tag: "IMAGE", Unit: null } && Vector2.Distance(stored.Point, home) < 0.1f && back.StoredTargetTag == "IMAGE",
+              $"storetargets ground/spelleffectarea: the image's centre where it was cast, tag IMAGE (got {stored})");
+        arena.Run(0.5); // its own dash, 5 m towards the aim
+        var away = Vector2.Distance(me.PositionAt(DateTime.UtcNow), home);
+        (PendingCast? Cast, CastRefusal Why) check;
+        lock (world.Sync)
+        {
+            me.Combat.Multi[5] = new MultiSlot(back, image, world.GameNow + SpellCasts.Seconds(6), true);
+            check = SpellCasts.Check(me, new int[14], 5, back.Id, 0, default, 2, world.GameNow);
+            if (check.Cast is { } cast) SpellCasts.Start(me, cast);
+        }
+        arena.Run(0.5);
+        Check(check is { Why: CastRefusal.None, Cast.Aim: var aim } && Vector2.Distance(aim, home) < 0.1f && Vector2.Distance(me.PositionAt(DateTime.UtcNow), home) < 0.5f
+              && me.Combat.Stored.Count == 0 && away > 4,
+              $"AFTER_IMAGE_RETURN at the stored point: back home from {away:0.#} m ({Vector2.Distance(me.PositionAt(DateTime.UtcNow), home):0.##} m off), removestoredtargets ({me.Combat.Stored.Count} left)");
+    }
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
 

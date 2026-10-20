@@ -16,9 +16,26 @@ data/clientdata.json
 # Generated data stays versioned: data/items.tsv (analysis/tools/gen_items.py), data/gamedata.json
 # (analysis/tools/gen_gamedata.py) and data/spells.json (gen_item_spells.py) as the self-test's golden references
 # (the server reads the client's GameData itself), Protocol/Generated (gen_protocol_cs.py).
+data/modkit-extract/
+data/icon-cache/
+
+# In-game check results (.check, /admin/checks)
+data/checks-results.json
+
+# Plugins (plugins/README.md): their build output and their runtime data (storage.json, the owner's config.json)
+data/plugins-bin/
+data/plugins/
 
 # Data generated from the game client is never published
 data/gamedata.json
 data/spells.json
 data/items.tsv
 data/journal-ids.tsv
+
+# Capture-derived self-test fixtures are never published
+tests/AlbionLocal.SelfTest/Fixtures/stage2_joins*.json
+tests/AlbionLocal.SelfTest/Fixtures/fishing_zones_*.json
+
+# Runtime folders
+data/backups/
+logs/

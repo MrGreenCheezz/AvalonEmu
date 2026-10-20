@@ -55,7 +55,8 @@ public sealed class ExpeditionData
     public sealed record Reward(string Kind, string Item, int Enchantment, int Count, long Amount);
 
     /// <summary>A hardcore difficulty level (SPEC §3.1): its mob buff spell and factors.</summary>
-    public sealed record Difficulty(int Level, string MobModifier, double Silver, double Loot, double MobFame, string TokenLootList);
+    /// <summary>A hardcore difficultylevels entry; <see cref="BonusChest"/> = spawnbonuslootchest (level 18: the HCE_FINAL_REWARD chest, econ SPEC §3.1).</summary>
+    public sealed record Difficulty(int Level, string MobModifier, double Silver, double Loot, double MobFame, string TokenLootList, bool BonusChest = false);
 
     /// <summary>An expeditioncategory (bwg): grouptype STANDARD (1 player), VETERAN, HARDCORE (5), ELITE (2) (bwg.ae).</summary>
     public sealed record Category(int Index, string Name, int Tier, string GroupType, double MinItemPower, bool Unlocked,
@@ -133,7 +134,8 @@ public sealed class ExpeditionData
             ((string?)c.Attribute("grouptype") ?? "STANDARD").ToUpperInvariant(), Num(c, "minitempoweraverage", -1), (string?)c.Attribute("unlockedtoregister") == "true",
             Rewards(c.Element("rewards")), Rewards(c.Element("bonusrewards")),
             [.. (c.Element("difficultylevels")?.Elements("difficulty") ?? []).Select(d => new Difficulty(Int(d, "level"), (string?)d.Attribute("mobmodifier") ?? "",
-                Num(d, "silverfactor", 1), Num(d, "lootfactor", 1), Num(d, "mobfamefactor", 1), (string?)d.Attribute("tokenlootlist") ?? ""))])).ToList();
+                Num(d, "silverfactor", 1), Num(d, "lootfactor", 1), Num(d, "mobfamefactor", 1), (string?)d.Attribute("tokenlootlist") ?? "",
+                (string?)d.Attribute("spawnbonuslootchest") == "true"))])).ToList();
         var index = cats.GroupBy(c => c.Name).ToDictionary(g => g.Key, g => g.First().Index, StringComparer.Ordinal);
         var ags = agents.Elements("expeditionagent").Select(a => ((string?)a.Attribute("uniquename") ?? "",
             a.Element("expeditions")?.Elements("expedition").Select(e => index.GetValueOrDefault((string?)e.Attribute("category") ?? "", -1)).Where(i => i >= 0).ToArray() ?? [])).ToList();

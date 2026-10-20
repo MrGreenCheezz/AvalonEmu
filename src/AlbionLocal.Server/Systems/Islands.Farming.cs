@@ -73,7 +73,7 @@ public sealed partial class Islands
     {
         why = "";
         if (Buildings?.Find(name) is not { } template) why = $"no building {name} in buildings.xml";
-        else if (template.Kind != "farmbuilding") why = $"{template.Name} is a {template.Kind}; only farm buildings (T1_FARMHOUSE, T1_HERBGARDEN, T1_PASTURE, T1_KENNEL) are built yet";
+        else if (template.Kind != "farmbuilding" && !IsHouse(template)) why = $"{template.Name} is a {template.Kind}; only farm buildings (T1_FARMHOUSE, T1_HERBGARDEN, T1_PASTURE, T1_KENNEL) and houses (T2-T8_PLAYERHOUSE) are built";
         else if (BuildingsOf(island.Id).FirstOrDefault(b => Vector2.Distance(new Vector2(b.X, b.Z), at) < 3 * SlotSpacing) is { } near)
             why = $"too near the {near.Name} at ({near.X:0.#}, {near.Z:0.#})";
         else
@@ -93,9 +93,11 @@ public sealed partial class Islands
     {
         _buildings.Remove(b.Id);
         foreach (var f in _crops.Values.Where(f => f.Building == b.Id).ToList()) _crops.Remove(f.Id);
+        foreach (var l in _labourers.Values.Where(l => l.Building == b.Id).ToList()) _labourers.Remove(l.Id); // their rows follow by ON DELETE CASCADE
         store?.DeleteIslandBuilding(b.Id); // the crops follow by ON DELETE CASCADE
         if (_islands.GetValueOrDefault(b.Island) is { } island && world.Maps.Find(island.Cluster) is { } map)
-            foreach (var o in map.Objects.Values.Where(o => o is PlayerBuilding pb && pb.Building.Id == b.Id || o is FarmableObject c && c.Crop.Building == b.Id).ToList())
+            foreach (var o in map.Objects.Values.Where(o => o is PlayerBuilding pb && pb.Building.Id == b.Id || o is FarmableObject c && c.Crop.Building == b.Id
+                         || o is FurnitureObject f && f.Row.Building == b.Id || o is LabourerObject l && l.Labourer.Building == b.Id).ToList())
                 map.RemoveObject(o);
     }
 
@@ -134,9 +136,10 @@ public sealed partial class Islands
                 continue;
             }
             yield return Object(map, island, b, template);
-            foreach (var f in _crops.Values.Where(f => f.Building == b.Id).OrderBy(f => f.Planted))
+            foreach (var f in _crops.Values.Where(f => f.Building == b.Id && world.Items.Find(f.Item) is not { IsFurniture: true }).OrderBy(f => f.Planted))
                 if (Object(map, island, f) is { } o) yield return o;
                 else Log.Warn("world", $"{island}: crop {f.Item} is no seed of items.xml, left out");
+            foreach (var o in HouseObjects(map, island, b)) yield return o; // labourers SPEC §2.1: the furniture, then the labourers
         }
     }
 
@@ -452,9 +455,10 @@ public sealed partial class Islands
 
     /// <summary>
     /// What product <paramref name="index"/> of grown animal <paramref name="o"/> gives once its production is complete (FarmableGetProduct): its
-    /// lootlist with lootchance and its fame (a7m). Null when it has no such product, it is not ready, or loot.xml is not read.
+    /// lootlist with lootchance and its fame (a7m), the items × <paramref name="yield"/> (<see cref="YieldFactor"/>: the island bonus and the
+    /// owner's premium, the fraction at random). Null when it has no such product, it is not ready, or loot.xml is not read.
     /// </summary>
-    public (List<(ItemTemplate Item, int Count)> Items, long Fame)? ProductOf(FarmableObject o, int index, Random random)
+    public (List<(ItemTemplate Item, int Count)> Items, long Fame)? ProductOf(FarmableObject o, int index, Random random, double yield = 1)
     {
         if (o.Seed.Animal is not { GrownItem: null } a || index < 0 || index >= a.Products.Count || !AnimalGrown(o.Crop, a, world.GameNow)
             || world.Clusters?.LootIfLoaded is not { } loot) return null;
@@ -462,7 +466,7 @@ public sealed partial class Islands
         var items = new List<(ItemTemplate, int)>();
         if (random.NextDouble() < product.LootChance)
             foreach (var (name, n) in loot.RollList(product.LootList, random).GroupBy(d => d.Item).Select(g => (g.Key, g.Sum(d => d.Amount))))
-                if (world.Items.Find(name) is { } item && n > 0) items.Add((item, n));
+                if (world.Items.Find(name) is { } item && n > 0) items.Add((item, yield == 1 ? n : Game.Rates.Scale(n, yield, random)));
                 else Log.Warn("world", $"product of {o.Seed.Name}: item {name} unknown");
         return (items, (long)Math.Round(product.Fame * 10000));
     }

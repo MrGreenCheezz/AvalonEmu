@@ -126,6 +126,9 @@ public sealed class ClusterTemplate
     /// <summary>StageH islands (SPEC §0.2, §1.5): the islandmanagement tiles of an island template (one, at (185.5, 64.5)); empty elsewhere.</summary>
     public IReadOnlyList<IslandManagementSpawn> IslandManagements { get; init; } = [];
 
+    /// <summary>Islands phase 5 (stageN islands5 SPEC §1): the centres (world x/z) of the buildable 10 × 10 m ground cells of the active layers; empty off islands.</summary>
+    public IReadOnlyList<Vector2> BuildCells { get; init; } = [];
+
     /// <summary>
     /// StageL corrupted (SPEC §1.2, §4.4): the InvaderSpawnpoint tiles (tiles.xml namedmarkerpoint InvaderSpawnpoint) of the active layers,
     /// where an invader comes in; empty on every cluster but the corrupted dungeons.
@@ -152,6 +155,12 @@ public sealed class ClusterTemplate
     /// restricted area's centre, its radius and width at the start and the end); empty elsewhere.
     /// </summary>
     public IReadOnlyList<HellgateAreaSpawn> HellgateAreas { get; init; } = [];
+
+    /// <summary>
+    /// Stage N arena (analysis/work/stageN/arena/SPEC.md §3): the WarCamp_Arena tiles' &lt;warcamp&gt; spawn positions of an arena template, in
+    /// file order (the first camp team 1's, the second team 2's); empty elsewhere.
+    /// </summary>
+    public IReadOnlyList<WarcampSpawn> Warcamps { get; init; } = [];
 
     /// <summary>
     /// StageL mists phase B (SPEC §2.5): the spots of a mists template's active layers by <see cref="MistsSpot.Kind"/>: the named markers
@@ -420,11 +429,13 @@ public sealed class ClusterTemplate
         public readonly List<PlacedCollider> Colliders = [];
         public readonly List<RoadLine> Roads = [];
         public readonly List<IslandManagementSpawn> IslandManagements = [];
+        public readonly List<Vector2> BuildCells = [];
         public readonly List<NamedMarkerSpawn> InvaderSpawns = [];
         public readonly List<HellgateShrineSpawn> HellgateShrines = [];
         public List<BuffShrineSpawn> BuffShrines = [];
         public readonly List<NamedMarkerSpawn> HellgateMarkers = [];
         public readonly List<HellgateAreaSpawn> HellgateAreas = [];
+        public readonly List<WarcampSpawn> Warcamps = [];
         public readonly List<MistsSpot> MistsSpots = [];
 
         /// <summary>A dungeon floor's exits (<see cref="FromLayout"/>): the Guid and world exit of the n-th exit member (1-based, load order) at its position.</summary>
@@ -553,6 +564,12 @@ public sealed class ClusterTemplate
                 var (cx, _, cz) = place.Apply(c.X, 0, c.Z);
                 Colliders.Add(new PlacedCollider(c.Grid, cx, cz, TileMath.Mod360(place.Yaw + c.Yaw)));
             }
+            foreach (var cell in layout.BuildCells)
+            {
+                if (cell.Layer is not null && !active.Contains(cell.Layer)) continue;
+                var (bx, _, bz) = place.Apply(cell.X, 0, cell.Z);
+                BuildCells.Add(new Vector2((float)bx, (float)bz));
+            }
             foreach (var r in layout.Roads)
             {
                 if (r.Layer is not null && !active.Contains(r.Layer)) continue;
@@ -645,6 +662,12 @@ public sealed class ClusterTemplate
                         BuffShrines.Add(new BuffShrineSpawn { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, ShrineType = A("shrinetype") ?? "" });
                         break;
                     // StageL hellgates phase B (SPEC §2.4): the HellgateFxManager's restricted area; its centre attribute is in the template's frame.
+                    // Stage N arena (SPEC §3): a team's camp and its spawn positions (template coordinates, placed as the tile).
+                    case "warcamp":
+                        var spawns = c.Descendants("position").Select(e => TileMath.V2((string?)e.Attribute("pos"))).OfType<Vector2>()
+                            .Select(v => place.Apply(v.X, t.Y, v.Y)).Select(w => new Vector2((float)w.X, (float)w.Z)).ToList();
+                        Warcamps.Add(new WarcampSpawn { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, Spawns = spawns.Count > 0 ? spawns : [pos] });
+                        break;
                     case "arearestrictionsettings":
                         var (acx, acz) = TileMath.V2((string?)c.Attribute("center")) is { } ac ? (ac.X, ac.Y) : ((float)t.X, (float)t.Z);
                         var (ax, _, az) = place.Apply(acx, t.Y, acz);
@@ -813,9 +836,9 @@ public sealed class ClusterTemplate
                 Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
                 ExpeditionAgents = Agents, LocationMarkers = Markers, Harvestables = Harvestables, MobSpawnPoints = Mobs, ResourceNodes = Nodes,
                 RealEstates = Estates, FishingZones = Fishing, RespawnPoints = Respawns, Resources = resources, DungeonMarkers = DungeonMarkers, LootChests = ChestPoints,
-                LocalQuestAreas = QuestAreas, PoiChestLimit = poiLimit, ExpeditionObjects = ExpeditionObjects, Colliders = Colliders, Roads = Roads, IslandManagements = IslandManagements,
+                LocalQuestAreas = QuestAreas, PoiChestLimit = poiLimit, ExpeditionObjects = ExpeditionObjects, Colliders = Colliders, Roads = Roads, IslandManagements = IslandManagements, BuildCells = BuildCells,
                 InvaderSpawns = InvaderSpawns, HellgateShrines = HellgateShrines, BuffShrines = BuffShrines, HellgateMarkers = HellgateMarkers,
-                HellgateAreas = HellgateAreas, SpawnBuffs = spawnBuffs, MistsSpots = MistsSpots,
+                HellgateAreas = HellgateAreas, Warcamps = Warcamps, SpawnBuffs = spawnBuffs, MistsSpots = MistsSpots,
                 Problems = [.. _problems.Select(p => p.Value == 1 ? p.Key : $"{p.Key} (x{p.Value})")],
                 LoadTime = watch.Elapsed, MobsBound = mobsBound, DangerType = danger, Pvp = pvp,
             };
@@ -1154,6 +1177,12 @@ public sealed record MistsSpot : ClusterObject
 /// A HellgateFxManager's &lt;arearestrictionsettings center startradius endradius startwidth endwidth&gt; (stageL hellgates SPEC §2.4; Hellgate_01:
 /// (14, 41), 154.6 → 25 m, width 20): the restricted area of phase B (HellgateRestrictedAreaUpdate 452 keys 3-7).
 /// </summary>
+/// <summary>A WarCamp_Arena tile's &lt;warcamp isattacker&gt; with its &lt;spawnpositions&gt; (stage N arena SPEC §3: 1 in the 1v1 arena, 20 in the others).</summary>
+public sealed record WarcampSpawn : ClusterObject
+{
+    public IReadOnlyList<Vector2> Spawns { get; init; } = [];
+}
+
 public sealed record HellgateAreaSpawn : ClusterObject
 {
     public Vector2 Center { get; init; }

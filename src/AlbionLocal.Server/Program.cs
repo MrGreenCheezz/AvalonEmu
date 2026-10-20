@@ -30,6 +30,22 @@ if (args.Contains("--check-content"))
         return 1;
     }
 }
+// --plugins-build [name...]: builds the plugins of Plugins:Path and of the Mods:Packs packs (all of them, enabled or not; or the named ones)
+// into data/plugins-bin, prints each outcome and exits (server/plugins/README.md). No port is opened.
+if (args.Contains("--plugins-build"))
+{
+    var names = args.SkipWhile(a => a != "--plugins-build").Skip(1).TakeWhile(a => !a.StartsWith('-')).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var failed = 0;
+    var found = AlbionLocal.Server.Plugins.PluginManifest.Discover(config.Plugins.Path, config.ModsPath, config.ModPacks);
+    foreach (var m in found.Where(m => names.Count == 0 || names.Contains(m.Name)))
+    {
+        var (dll, error) = AlbionLocal.Server.Plugins.PluginBuilder.Resolve(m, Path.Combine(config.SavesPath, "plugins-bin"), build: true, force: args.Contains("--force"));
+        Console.WriteLine(dll is not null ? $"OK    {m.Name}: {dll}" : $"FAIL  {m.Name}: {error}");
+        if (dll is null) failed++;
+    }
+    if (found.Count == 0) Console.WriteLine($"no plugins in {config.Plugins.Path}");
+    return failed == 0 ? 0 : 1;
+}
 // Here, not in ServerHost: the self-test builds its servers with the default config and must not write into data/.
 if (config.LogFile is { } logFile) Log.SetFile(logFile);
 

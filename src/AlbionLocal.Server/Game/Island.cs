@@ -82,3 +82,49 @@ public sealed record Farmable(Guid Id, Guid Island, Guid Building, string Item, 
     /// <summary>An animal's growth (a baby) or product progress (a grown animal) in ticks at <see cref="FedAt"/> (schema v28).</summary>
     public long Growth { get; set; }
 }
+
+/// <summary>
+/// A labourer living in a house of an island (analysis/work/stageN/labourers/SPEC.md §2, schema v33): its buildings.xml &lt;labourer&gt; type
+/// (T2_LABOURER_WOOD; it changes when it advances a tier), the house (an island building), its spot and yaw in the house, its name, the hire
+/// (GameTimeStamp: settled in settleintime later), the labourer fame it learned (a7m raw), its happiness (whole, 0..units × 100) at a stamp
+/// (it moves towards what the house's furniture gives, SPEC §3) and the job under way or done: the _FULL journal it works with, its start
+/// and end stamps and the yield fixed at the start. Saved at once by the island store.
+/// </summary>
+public sealed class IslandLabourer(Guid id, Guid island, Guid building, string type, string name, float x, float z, float rotation, long hired)
+{
+    public Guid Id { get; } = id;
+    public Guid Island { get; } = island;
+    public Guid Building { get; } = building;
+
+    /// <summary>buildings.xml labourer uniquename.</summary>
+    public string Type { get; set; } = type;
+
+    public string Name { get; } = name;
+    public float X { get; set; } = x;
+    public float Z { get; set; } = z;
+    public float Rotation { get; set; } = rotation;
+
+    /// <summary>GameTimeStamp of the hire (a GM's .labourer finish moves it back so that the labourer has settled in).</summary>
+    public long Hired { get; set; } = hired;
+
+    /// <summary>The labourer fame learned (a7m raw): what lets it advance a tier.</summary>
+    public long Fame { get; set; }
+
+    /// <summary>The happiness (whole) at <see cref="HappinessAt"/>.</summary>
+    public double Happiness { get; set; }
+
+    public long HappinessAt { get; set; }
+
+    /// <summary>The _FULL journal of the job; null = no job.</summary>
+    public string? Journal { get; set; }
+
+    public long JobStart { get; set; }
+
+    /// <summary>GameTimeStamp the job is done at.</summary>
+    public long JobEnd { get; set; }
+
+    /// <summary>The yield of the job (1 = 100 %), fixed at its start.</summary>
+    public double JobYield { get; set; }
+
+    public override string ToString() => $"labourer '{Name}' ({Type})";
+}

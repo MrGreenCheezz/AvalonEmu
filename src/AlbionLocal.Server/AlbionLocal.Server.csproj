@@ -3,11 +3,17 @@
   <ItemGroup>
     <ProjectReference Include="..\AlbionLocal.Photon\AlbionLocal.Photon.csproj" />
     <ProjectReference Include="..\AlbionLocal.Protocol\AlbionLocal.Protocol.csproj" />
+    <ProjectReference Include="..\AlbionLocal.Plugin.Api\AlbionLocal.Plugin.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- The one NuGet package (ARCHITECTURE.md §5.5), restored offline from the local cache (server/nuget.config). -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Studio's front-end (web/studio: ES modules, no build step), served by the web panel at /studio from the assembly. -->
+    <EmbeddedResource Include="..\..\web\studio\**\*" LogicalName="studio/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <PropertyGroup>

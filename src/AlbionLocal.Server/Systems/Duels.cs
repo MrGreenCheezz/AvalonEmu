@@ -359,6 +359,14 @@ public sealed class Duels(World world)
             {
                 DuelSeconds = (world.GameNow - duel.Start) / (double)TimeSpan.TicksPerSecond,
             });
+        // Stage N arena (SPEC §5, §6): a duel won by knockdown, the area or a disconnect moves the duel ladder and decides a tournament pair.
+        if (winner is not null && reason is not ((byte)DuelEnd.OutsiderInterruptedDuel or (byte)DuelEnd.ChallengerKnockedDownByOutsider
+                or (byte)DuelEnd.ChallengerKnockedDownByOutsider + ChallengeeOffset or (byte)DuelEnd.ChallengerKnockedDownByNonPlayer
+                or (byte)DuelEnd.ChallengerKnockedDownByNonPlayer + ChallengeeOffset or (byte)DuelEnd.ChallengerKilledHimself or (byte)DuelEnd.ChallengerKilledHimself + ChallengeeOffset))
+        {
+            world.Ratings.DuelWon(winner, duel.Opponent(winner));
+            world.Tournament.DuelWon(winner, duel.Opponent(winner));
+        }
         if (duel.Wager > 0)
         {
             if (winner is not null) Wallet.Credit(winner, 2 * duel.Wager, "duel won");

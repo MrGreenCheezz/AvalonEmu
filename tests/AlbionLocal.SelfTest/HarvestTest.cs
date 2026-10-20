@@ -14,7 +14,7 @@ namespace AlbionLocal.SelfTest;
 
 /// <summary>
 /// Gathering the static harvestables (stage 4a, ARCHITECTURE.md §8 step 14) against what the official server sent in
-/// captures/albion_20261016_002835 (analysis/work/cap002835/harvest/HARVEST.md, harvest_sequence_0204.json): the formulas
+/// capture 002835 (analysis/work/cap002835/harvest/HARVEST.md, harvest_sequence_0204.json): the formulas
 /// on the client's data give the captured durations, amounts and tool wear; a Thetford tree harvested by hand and with
 /// T1/T2 axes on a <see cref="ManualClock"/> gives the captured messages in the captured order with the captured keys.
 /// Runs after <see cref="ClusterDataTest"/>, whose clusters the shared store has resolved by then.

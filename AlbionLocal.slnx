@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AlbionLocal.Photon/AlbionLocal.Photon.csproj" />
+    <Project Path="src/AlbionLocal.Plugin.Api/AlbionLocal.Plugin.Api.csproj" />
     <Project Path="src/AlbionLocal.Protocol/AlbionLocal.Protocol.csproj" />
     <Project Path="src/AlbionLocal.Server/AlbionLocal.Server.csproj" />
   </Folder>
@@ -9,5 +10,6 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/AlbionLocal.CapDecode/AlbionLocal.CapDecode.csproj" />
+    <Project Path="tools/AlbionLocal.ModKit/AlbionLocal.ModKit.csproj" />
   </Folder>
 </Solution>

@@ -310,7 +310,7 @@ public static class WorldObjectTest
     /// </summary>
     private static void CapturedJoins()
     {
-        // stage2_joins.json: 103829, 113433, 114814; stage2_joins_002835.json: captures/albion_20261016_002835 (the same tool
+        // stage2_joins.json: 103829, 113433, 114814; stage2_joins_002835.json: capture 002835 (the same tool
         // on analysis/work/cap002835: 1207, 1000, Thetford 0000 three times, its bank 0006 and market 0007, 0204).
         // Capture-derived fixtures are not in the public repository: the comparison is skipped without them.
         var files = new[] { "stage2_joins.json", "stage2_joins_002835.json" }.Select(f => Path.Combine(AppContext.BaseDirectory, "Fixtures", f)).ToList();

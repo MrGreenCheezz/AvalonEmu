@@ -42,7 +42,7 @@ public sealed partial class WorldSession
     /// for guild mail); it then reads the mail count from key 3, a null key 3 throws (NullReferenceException), and builds
     /// the rows from the parallel arrays 3-13 (SPEC §1.2: 3 ids, 4 the sending character's Guid, 5 the same for the client's
     /// privacy lookup, 6 show the sender as author, 7 sender, 8 bd3.a kind, 9 bd3.b category, 10 read, 11 subject or type key,
-    /// 12 received UTC ticks, 13 has attachments). Official (captures/albion_20261016_002835): no request id on either side, key 0
+    /// 12 received UTC ticks, 13 has attachments). Official (capture 002835): no request id on either side, key 0
     /// the character Guid, key 1 left out (= request key 2, 0), key 2 ByteZero (= request key 1), two system mails with zero Guids,
     /// newest first. Here: page key 2 of 50 (<see cref="Mailer.PageSize"/>) of the category (0 = all), newest first; without a
     /// mailbox (a guild's without the right, mail off) every array empty and key 0 left out, which the client drops.

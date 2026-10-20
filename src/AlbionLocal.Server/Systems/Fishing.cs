@@ -20,8 +20,9 @@ namespace AlbionLocal.Server.Systems;
 /// server's fallback timer) ends it with the FishingCancel event and the float's Leave. Every FishingStart event, the float and
 /// the FishingCancel go to the fisher and everyone who sees it (§10); the minigame, items and fame to the fisher only.
 /// The numbers the client data does not hold are content/fishing.json's (<see cref="FishingSettings"/>, [assume] where
-/// marked there). Not done: bait charges and buffs (FISHINGBAIT_*), the black-market list, the rare share of the fish spots,
-/// the fishingspeed of gear other than the rod. Touched only under <see cref="World.Sync"/>.
+/// marked there). Bait (econ SPEC §2.2): the FISHINGBAIT_* buff's fishingspeed shortens the bite delay as the rod's does, and
+/// each strike takes one of its 10 charges (FISHINGBAIT_CONSUME_CHARGE). Not done: the black-market list, the rare share of the
+/// fish spots, the fishingspeed of gear other than the rod and the bait. Touched only under <see cref="World.Sync"/>.
 /// </summary>
 public static class Fishing
 {
@@ -39,9 +40,28 @@ public static class Fishing
     /// <summary>The seconds of the float's flight for a cast of <paramref name="power"/> (0.44 + 0.30 × power by default, SPEC §6).</summary>
     public static double Flight(FishingSettings s, float power) => s.FlightBase + s.FlightPerPower * Math.Clamp(power, 0, 1);
 
-    /// <summary>The bite delay: uniform(BiteMin, BiteMax) / (1 + the rod's fishingspeed) [assume, SPEC §6].</summary>
-    public static TimeSpan BiteDelay(FishingZoneSettings zone, ItemTemplate rod, Random random) =>
-        TimeSpan.FromSeconds((zone.BiteMin + random.NextDouble() * Math.Max(0, zone.BiteMax - zone.BiteMin)) / (1 + Speed(rod)));
+    /// <summary>
+    /// The bite delay: uniform(BiteMin, BiteMax) / (1 + the rod's fishingspeed + <paramref name="bait"/>, the fishingspeed buff of a
+    /// bait: 0.5 / 1.25 / 2.5) [assume, SPEC §6; econ SPEC §2.2].
+    /// </summary>
+    public static TimeSpan BiteDelay(FishingZoneSettings zone, ItemTemplate rod, Random random, double bait = 0) =>
+        TimeSpan.FromSeconds((zone.BiteMin + random.NextDouble() * Math.Max(0, zone.BiteMax - zone.BiteMin)) / (1 + Speed(rod) + Math.Max(0, bait)));
+
+    /// <summary>The spell category of a bait's charges (FISHINGBAIT_LEVELn_CHARGE, startcharges 10) and of its buff (FISHINGBAIT_LEVELn_USE).</summary>
+    public const string BaitCharges = "fishingbait_charges", BaitBuffs = "fishingbait_buffs";
+
+    /// <summary>
+    /// FISHINGBAIT_CONSUME_CHARGE at a strike (econ SPEC §2.2): one charge of the bait goes; with the last one the bait's buff goes too
+    /// (its removeactiveeffects fishingbait_buffs under "not IfSpellCategoryActive fishingbait_charges"). The list goes out when it changed.
+    /// </summary>
+    public static void ConsumeBait(Player p)
+    {
+        var world = p.World;
+        if (!SpellEffects.Remove(world, p, a => a.Spell.Category == BaitCharges, charges: 1)) return;
+        if (!p.Effects.Spells.Any(a => a.Spell.Category == BaitCharges)) SpellEffects.Remove(world, p, a => a.Spell.Category == BaitBuffs, charges: 1);
+        SpellEffects.Send(world, p);
+        SpellEffects.Refresh(world, p);
+    }
 
     /// <summary>The settings of the water at the landing point: the zone's kind, or the default zone of the water type.</summary>
     public static FishingZoneSettings SettingsOf(World world, FishingSession s) => s.Zone?.Settings ?? (s.Ocean ? world.Fishing.Ocean : world.Fishing.Freshwater);
@@ -242,7 +262,7 @@ public static class Fishing
             s.Float = new FishingFloat(world.ObjectIds.Next(), spawn, p.Id, p.Facing);
             map.AddObject(s.Float);
             if (s.State != FishingState.Cast) return;
-            var delay = BiteDelay(SettingsOf(world, s), s.Rod.Template, map.Random);
+            var delay = BiteDelay(SettingsOf(world, s), s.Rod.Template, map.Random, p.Effects.Sum("fishingspeed", world.GameNow));
             After(p, s, delay, () => Bite(p, s));
         });
     }
@@ -303,6 +323,7 @@ public static class Fishing
         }
         s.MiniGame = world.Fishing.MiniGame(SettingName(s.Catch));
         if (s.Zone is { } zone) TakeCharge(map, zone, world.Clock.Now, world.Rates.Regrowth);
+        ConsumeBait(p);
         if (s.Float is { } f) SetFloat(f, FloatState.Hooked);
         s.State = FishingState.MiniGame;
         s.MiniGameStart = world.GameNow;

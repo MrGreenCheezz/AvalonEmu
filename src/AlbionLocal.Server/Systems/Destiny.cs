@@ -46,7 +46,9 @@ public static class Destiny
         }
         if (guild) p.World.GuildGoals.OnFame(p, gain, ctx, pvp);
         var c = p.Character;
+        var before = c.Fame;
         c.Fame += gain;
+        p.World.Vanity.Fame(p, before, c.Fame); // stageN vanity: a total-fame milestone may drop a cosmetic
         p.World.Saves.MarkChanged(c);
         // The premium share of the nodes (UpdateFame key 5 sources only; the client adds the same premium part to what it shows itself).
         var board = boardGain ?? gain;
@@ -70,6 +72,8 @@ public static class Destiny
             d3u = ctx.Source == FameSource.Kill, // [15] kills and tomes; not on harvests
         });
         if (journals) Journals.OnFame(p, boardGain ?? gain, ctx, source, pvp); // stageH journals SPEC §A.3: after the UpdateFame of the gain
+        if (guild && !pvp) p.World.Factions.OnFame(p, gain, ctx.Source); // stageN faction SPEC §2: faction points and standing in a warfare cluster
+        if (ctx.Source == FameSource.Kill) Attunement.OnFame(p, gain); // stageN awakening SPEC §5: the awakened weapon in hand gains attunement
         return steps;
     }
 

@@ -45,19 +45,16 @@ public static class PvpCommands
     }
 
     /// <summary>
-    /// Enlists the player to a faction (or none: blue): what a faction flag (op 354) needs (SPEC §3.1). FactionEnlistmentChanged
-    /// (482) is not sent: the client reads the enlisted faction from the next Join (key 106) and NewCharacter (key 56). A flag cast
-    /// under way ends, and a player flagged to another faction is Blue again (ChangeFlaggingFinished): no flag without its enlistment.
+    /// Enlists the player to a faction (or none: blue) at once, without the switch cooldown: what a faction flag (op 354) needs (SPEC §3.1).
+    /// As at a faction trader (stageN faction, <see cref="Factions.Enlist(Entities.Player, byte, bool)"/>): FactionEnlistmentChanged (482) to it and
+    /// its observers, a flag cast under way ends, and a player flagged to another faction is Blue again (ChangeFlaggingFinished).
     /// </summary>
-    [Command("pvp faction", Level = AccountLevel.GameMaster, Help = "enlists the player to a faction (highland, forest, steppe, mountain, swamp, caerleon or 1-6; blue = none); seen from the next Join")]
+    [Command("pvp faction", Level = AccountLevel.GameMaster, Help = "enlists the player to a faction at once, no cooldown (highland, forest, steppe, mountain, swamp, caerleon or 1-6; blue = none)")]
     public static void Faction(CommandContext ctx, string faction)
     {
         var player = ctx.RequirePlayer();
         var f = Parse(faction, red: false);
-        player.Faction = f;
-        ctx.World.Saves.MarkChanged(player.Character);
-        Flagging.Interrupt(player, "the enlistment changed");
-        if (Pvp.IsFaction(player.Flag) && player.Flag != f) Flagging.Set(player, Pvp.Blue);
+        ctx.World.Factions.Enlist(player, f, force: true);
         ctx.Reply($"enlisted {(f == 0 ? "to none" : Name(f))}");
     }
 

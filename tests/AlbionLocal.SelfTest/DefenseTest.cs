@@ -132,7 +132,8 @@ public static class DefenseTest
     /// <summary>
     /// The user's case (stageM pvp-damage NOTES §1, §5.2b): a T4 quarterstaff at AP 313.4 against a T7 gatherer bot on the T6 red map 0221.
     /// Through the real BotManager.Spawn and SpellCasts.Execute: Bots:Gear:Mastery 1 (official-like, the unlock-all board) against the
-    /// pve preset's bot keys (Mastery 0.5, HealthFactor 0.7, Gear:DamageBonus false); the presets resolve to these.
+    /// old pve bot keys (Mastery 0.5, HealthFactor 0.7, Gear:DamageBonus false; since stageN botpower the pve preset's companions only, its
+    /// world bots full like the official preset's); the presets resolve to these.
     /// </summary>
     private static void BotStrength()
     {
@@ -144,8 +145,11 @@ public static class DefenseTest
             return ServerConfig.Load(file, []).Bots;
         }
         var (official, pve) = (Preset("official"), Preset("pve"));
-        Check(official is { GearMastery: 1, HealthFactor: 1, GearDamageBonus: true } && pve is { GearMastery: 0.5, HealthFactor: 0.7, GearDamageBonus: false },
-              $"presets: official Mastery 1 / HealthFactor 1 / DamageBonus true, pve 0.5 / 0.7 / false (got {official.GearMastery}/{official.HealthFactor}/{official.GearDamageBonus}, {pve.GearMastery}/{pve.HealthFactor}/{pve.GearDamageBonus})");
+        var companions = ServerConfig.PveDefaults.Companions;
+        Check(official is { GearMastery: 1, HealthFactor: 1, GearDamageBonus: true, Difficulty: 1 } && pve is { GearMastery: 1, HealthFactor: 1, GearDamageBonus: true, Difficulty: 1 }
+              && companions is { GearMastery: 0.5, GearDamageBonus: false } && new CompanionOptions() is { GearMastery: 1, GearDamageBonus: true },
+              $"presets (stageN botpower): bots Mastery 1 / HealthFactor 1 / DamageBonus true / Difficulty 1 in both (got pve {pve.GearMastery}/{pve.HealthFactor}/{pve.GearDamageBonus}/{pve.Difficulty}); pve companions 0.5 / false");
+        pve = new BotOptions { GearMastery = 0.5, HealthFactor = 0.7, GearDamageBonus = false }; // the old soft pve bots
 
         var rules = new ClusterPvp(PvpRule.PvpAllowed, PlayersAreLethal: false, WarningType: "yellow");
         var vault = Client.Spells!.Template("VAULT_ATTACK_EFFECT")!;

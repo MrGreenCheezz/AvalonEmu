@@ -136,3 +136,102 @@ public sealed class FarmableObject(long id, IslandObjectSpawn spawn, Farmable cr
         yield return islands.Info(this, viewer.World.GameNow);
     }
 }
+
+/// <summary>
+/// A piece of furniture placed in a house (analysis/work/stageN/labourers/SPEC.md §1.3): NewBuilding {0 id, 1 Guid, 2 the item's building type
+/// (ClientNumbering:ItemBuildingBase + its place index, as a seed's), 3 the item's uniquename, 4 its spot, 5 yaw, 7 10000, 8/20/22 the placing,
+/// 9 owner, 11/12 owner name, 19 -1, 25 true, 29 byte 0}. Stored as an island_farmables row of the house (an item at a spot in a building).
+/// </summary>
+public sealed class FurnitureObject(long id, IslandObjectSpawn spawn, Farmable row, ItemTemplate item, short typeId, Island island)
+    : WorldObject(id, spawn)
+{
+    public Farmable Row { get; } = row;
+
+    public ItemTemplate Item { get; } = item;
+
+    public short TypeId { get; } = typeId;
+
+    public Island Island { get; } = island;
+
+    public override string Kind => "furniture";
+    public override string TypeName => Item.Name;
+    public override bool LeaveOnRange => true;
+
+    public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
+    {
+        yield return new NewBuildingEvent
+        {
+            ObjectId = Id,                                      // [0]
+            BuildingGuid = Row.Id,                              // [1]
+            TypeId = TypeId,                                    // [2]
+            Tile = Item.Name,                                   // [3]
+            Position = Position,                                // [4]
+            Direction = Direction,                              // [5]
+            Durability = 10000,                                 // [7]
+            DurabilityStamp = Row.Planted,                      // [8]
+            cto = Island.Owner,                                 // [9]
+            ctq = Island.OwnerName, ctr = Island.OwnerName,     // [11], [12]
+            ItemTypeId = -1,                                    // [19]
+            LoadTime = Row.Planted, CraftCapacityStamp = Row.Planted, // [20], [22]
+            ct4 = true,                                         // [25]
+            Extra = new() { [29] = (byte)0 },                   // [29]
+        };
+    }
+}
+
+/// <summary>
+/// A labourer in a house (SPEC §2): NewBuilding of its labourer type (the client makes its cph LaborerObject of a b53 template, cjb.a
+/// 0x180A9FE50) {0 id, 1 Guid, 2 type, 3 uniquename, 4 spot, 5 yaw, 7 durability, 8 the hire, 9 owner, 11/12 owner name, 19 -1, 20/22 the
+/// hire, 29 byte 0}, then LaborerObjectInfo (56) and LaborerObjectJobInfo (57) (<see cref="Systems.Islands.LabourerInfo"/>), and its
+/// AccessStatus (the cph checks its AccessRightsLaborerObject before every request, cyb.u 0x1809FE160).
+/// </summary>
+public sealed class LabourerObject(long id, IslandObjectSpawn spawn, IslandLabourer labourer, LabourerTemplate type, BuildingTemplate building, Island island,
+    Systems.Islands islands, Func<Guid, (Guid Id, string Name)?> guildOf) : WorldObject(id, spawn), IAccessStatusObject
+{
+    public IslandLabourer Labourer { get; } = labourer;
+
+    public LabourerTemplate Type { get; set; } = type;
+
+    public BuildingTemplate Building { get; set; } = building;
+
+    public Island Island { get; } = island;
+
+    public override string Kind => "labourer";
+    public override string TypeName => Type.Name;
+    public override bool LeaveOnRange => true;
+
+    public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
+    {
+        yield return new NewBuildingEvent
+        {
+            ObjectId = Id,                                              // [0]
+            BuildingGuid = Labourer.Id,                                 // [1]
+            TypeId = Type.Id,                                           // [2] T2_LABOURER_WOOD
+            Tile = Type.Name,                                           // [3]
+            Position = Position,                                        // [4]
+            Direction = Direction,                                      // [5]
+            Durability = (long)Math.Round(Building.Durability * 10000), // [7] 50 → 500000
+            DurabilityStamp = Labourer.Hired,                           // [8]
+            cto = Island.Owner,                                         // [9]
+            ctp = guildOf(Island.Owner)?.Id ?? Guid.Empty,              // [10]
+            ctq = Island.OwnerName, ctr = Island.OwnerName,             // [11], [12]
+            Nutrition = (long)Math.Round(Building.NutritionStorage * 10000), // [18]
+            ItemTypeId = -1,                                            // [19]
+            LoadTime = Labourer.Hired, CraftCapacityStamp = Labourer.Hired, // [20], [22]
+            Extra = new() { [29] = (byte)0 },                           // [29]
+        };
+        var now = viewer.World.GameNow;
+        yield return islands.LabourerInfo(this, now);
+        yield return islands.LabourerJobInfo(this);
+    }
+
+    /// <summary>AccessStatus as the island's buildings' (owner / noaccess / noaccess).</summary>
+    public AccessStatusEvent AccessStatus() => new()
+    {
+        ddn = Id,
+        bq5 = 0,
+        bq8 = Entities.Building.AccessGroups,
+        bq9 = ["owner", "noaccess", "noaccess"],
+        bra = ["", guildOf(Island.Owner)?.Name ?? "", ""],
+    };
+}

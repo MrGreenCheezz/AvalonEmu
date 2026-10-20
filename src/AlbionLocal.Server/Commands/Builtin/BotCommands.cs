@@ -58,13 +58,17 @@ public static class BotCommands
     /// <paramref name="count"/> GM bots of <paramref name="role"/> 3-8 m around the walkable cell nearest to the player (within 6 m; on that
     /// cell when no spot is found), gear tier <paramref name="tier"/> (0: by the zone): NewCharacter to everyone in view at once. Refused until
     /// the walk grid is built, and where nothing within 6 m is walkable: a bot is never put in a wall. Extra to the population, they never
-    /// respawn; .bot clear takes them. City and gatherer bots (a gatherer gathers what the map has of its tier, which may move its tier to
+    /// respawn; .bot clear takes them. <paramref name="elite"/> "elite": every one an elite (BotInfo.Elite: Bots:Gear:EliteEnchant and EliteQuality)
+    /// instead of the Bots:Gear:EliteChance roll of the population's patrols. City and gatherer bots (a gatherer gathers what the map has of its tier, which may move its tier to
     /// the nodes there; refused on a map without harvestables) and patrol bots (in groups of up to Bots:Patrol:GroupSize's most, on the
     /// route nearest to the player; refused where the rule keeps no Red player: a city, a green zone).
     /// </summary>
-    [Command("bot spawn", Level = AccountLevel.GameMaster, Help = "puts <count> GM bots of a role (city, gatherer, patrol) 3-8 m around the player, gear tier [tier] (0 = by the zone)")]
-    public static void Spawn(CommandContext ctx, string role, int count = 1, int tier = 0)
+    [Command("bot spawn", Level = AccountLevel.GameMaster,
+        Help = "puts <count> GM bots of a role (city, gatherer, patrol) 3-8 m around the player, gear tier [tier] (0 = by the zone); 'elite' last: elites (enchanted gear)")]
+    public static void Spawn(CommandContext ctx, string role, int count = 1, int tier = 0, string elite = "")
     {
+        if (elite.Length > 0 && !elite.Equals("elite", StringComparison.OrdinalIgnoreCase)) throw new CommandError($"'{elite}': only the word elite may follow the tier");
+        var forceElite = elite.Length > 0 ? true : (bool?)null;
         var player = ctx.RequirePlayer();
         var bots = ctx.World.Bots;
         if (!bots.Enabled) throw new CommandError("bots are off (.bot on)");
@@ -86,9 +90,9 @@ public static class BotCommands
             var facing = AI.MotionMaster.Facing(spot, at);
             var t = tier > 0 ? tier : bots.Factory.TierFor(bots.ZoneOf(map) ?? "Safe", map.Template?.Name.Tier ?? 0, bots.Random);
             if (group is { } g && g.Members.Count >= size) group = null; // the next group
-            if (bots.Spawn(map, r, t, spot, facing, group: group) is not { } bot) continue;
+            if (bots.Spawn(map, r, t, spot, facing, group: group, elite: forceElite) is not { } bot) continue;
             group = bot.Bot!.Group;
-            names.Add(Inv($"'{bot.Character.Name}' T{t} (object {bot.Id})"));
+            names.Add(Inv($"'{bot.Character.Name}' T{t}{(bot.Bot!.Elite ? " elite" : "")} (object {bot.Id})"));
         }
         if (names.Count == 0)
             throw new CommandError(r == BotRole.Gatherer && bots.NodesOf(map).Count == 0 ? $"nothing to gather on {map.Cluster}"

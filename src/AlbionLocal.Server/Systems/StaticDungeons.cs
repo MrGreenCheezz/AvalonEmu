@@ -137,11 +137,32 @@ public sealed class StaticDungeons(World world)
         return new Event(start * TimeSpan.TicksPerSecond, (start + def.DurationSeconds) * TimeSpan.TicksPerSecond, def);
     }
 
-    /// <summary>The event of <paramref name="d"/> running at <paramref name="ticks"/> (default now); null = none.</summary>
+    /// <summary>The event of <paramref name="d"/> running at <paramref name="ticks"/> (default now); null = none. A GM's <see cref="Force"/> goes first while it runs.</summary>
     public Event? Current(Dungeon d, long? ticks = null)
     {
         var now = ticks ?? world.GameNow;
+        if (_forced.TryGetValue(d.Id, out var forced))
+        {
+            if (forced.Start <= now && now < forced.End) return forced;
+            if (now >= forced.End) _forced.Remove(d.Id);
+        }
         return SlotEvent(d, now) is { } e && e.Start <= now && now < e.End ? e : null;
+    }
+
+    private readonly Dictionary<Guid, Event> _forced = [];
+
+    /// <summary>
+    /// A GM's .sd event: an event of <paramref name="d"/> from now for <paramref name="minutes"/> over its schedule (not saved), the first standard
+    /// (not rare) event of its group by weight (a made-up "GM_EVENT" without a group).
+    /// </summary>
+    public Event Force(Dungeon d, double minutes)
+    {
+        var now = world.GameNow;
+        var def = GroupOf(d)?.Events.Where(e => e.Weight > 0 && e.DurationSeconds > 0).OrderBy(e => e.Rarity).ThenByDescending(e => e.Weight).FirstOrDefault()
+            ?? new EventDef("GM_EVENT", 1, 2, (int)(minutes * 60), 1);
+        var e = new Event(now, now + (long)(minutes * 60 * TimeSpan.TicksPerSecond), def);
+        _forced[d.Id] = e;
+        return e;
     }
 
     /// <summary>The running event, else the next one when it starts within upcomingeventtimeframeinsec (300 s); null = neither.</summary>

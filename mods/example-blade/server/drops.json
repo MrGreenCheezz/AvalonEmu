@@ -1,0 +1,9 @@
+// Server-only extras of the pack (read by the server when Mods:Packs lists the pack; nothing in game-local).
+// Each drop: Item, where (Mobs and/or Chests: names with * wildcards; Category: boss, miniboss, champion, ...), Chance per kill or
+// chest roll (x Rates:Loot), Amount.
+{
+  "Drops": [
+    // the world bosses (the WORLDBOSS points and content/bosses.json's own): 3 % per kill, into the boss's loot bag
+    { "Item": "T6_MAIN_CLOCKWORKBLADE", "Mobs": [ "WORLD_BOSS_*" ], "Chance": 0.03, "Amount": 1 }
+  ]
+}

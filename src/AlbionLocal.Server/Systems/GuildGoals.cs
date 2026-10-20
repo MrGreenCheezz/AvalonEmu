@@ -617,6 +617,7 @@ public sealed class GuildGoals(World world)
         world.Guilds.Tell(g, $"[Guild] Weekly goal complete: {goal.Describe()}. Reward: {silver} silver into the guild account, {S.GoalXp} guild xp, "
             + $"{points} guild season points" + (done <= S.MaxBlessing ? $"; next week's guild blessing: {DescribeBlessing(Math.Min(done, S.MaxBlessing))}" : ""));
         Log.Info("guild", $"guild '{g.Name}' finished weekly goal {goal.Describe()}: {silver} silver, {S.GoalXp} xp, {points} season points");
+        world.Vanity.GuildGoal(g.Members.Select(m => world.Parties.Online(m.Id)).OfType<Player>()); // stageN vanity
     }
 
     /// <summary>The blessing of <paramref name="p"/>'s guild this week (shares; zeros without one or with the weekly goals off).</summary>

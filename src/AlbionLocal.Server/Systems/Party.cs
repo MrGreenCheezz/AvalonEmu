@@ -26,6 +26,12 @@ public sealed class PartyMember(Guid id, string name, byte frame)
 
     /// <summary>A party event went out while it had no joined player (a cluster change under way): its next Join gets PartyJoined again.</summary>
     public bool Missed { get; set; }
+
+    /// <summary>StageN companions: the character Guid of the player who hired this member (a companion bot); null for a player.</summary>
+    public Guid? Owner { get; init; }
+
+    /// <summary>Whether this member is a hired companion (<see cref="Owner"/> set): no client, never offline, no fame share.</summary>
+    public bool Companion => Owner is not null;
 }
 
 /// <summary>
@@ -133,7 +139,7 @@ public sealed class Parties(World world)
     private void SendTo(Party party, AlbionEvent e, Guid? except = null)
     {
         foreach (var m in party.Members)
-            if (m.Id == except) continue;
+            if (m.Id == except || m.Companion) continue; // stageN: a companion has no client
             else if (Online(m.Id) is { } p) p.Session.Send(e);
             else m.Missed = true;
     }
@@ -249,6 +255,7 @@ public sealed class Parties(World world)
         }
         _droppedAway.Remove(me);
         var joiner = MemberOf(invitee);
+        var created = party is null;
         if (party is null)
         {
             var host = inviter!; // a new party without an inviter player was refused above
@@ -272,6 +279,9 @@ public sealed class Parties(World world)
         }
         inviter?.Session.Send(Answer(invite.InviteeName, true, false, NoReason));
         Log.Info("party", $"'{invite.InviteeName}' joins party {party.Id} of '{invite.InviterName}' ({party.Members.Count} members)");
+        // The plugins' PartyJoined: a new party's leader first, then the joiner.
+        if (created) world.Plugins.Party(true, invite.Inviter, invite.InviterName, party.Id, 2, "created");
+        world.Plugins.Party(true, me, invite.InviteeName, party.Id, party.Members.Count, "invited");
         return 0;
     }
 
@@ -322,20 +332,71 @@ public sealed class Parties(World world)
         if (m.Missed) _droppedAway[m.Id] = party.Id;
         world.Expeditions.PartyLeft(m.Id); // stageH: a registration of the party's expedition group ends with it
         Log.Info("party", $"'{m.Name}' {why}: party {party.Id} has {party.Members.Count} member(s)");
-        if (party.Members.Count <= 1)
+        if (!m.Companion) world.Plugins.Party(false, m.Id, m.Name, party.Id, party.Members.Count, why); // the plugins' PartyLeft
+        // StageN companions: a companion out of the party (kicked from the party frame, dismissed) goes; a player's companions leave with it.
+        if (m.Companion) world.Companions.LeftParty(m.Id);
+        else
+            foreach (var own in party.Members.Where(c => c.Owner == m.Id).ToList())
+            {
+                SendTo(party, new PartyPlayerLeftEvent { dkj = party.Id, dkk = own.Id, dkm = false });
+                party.Members.Remove(own);
+                _byMember.Remove(own.Id);
+                world.Companions.LeftParty(own.Id);
+            }
+        if (party.Members.Count <= 1 || party.Members.All(x => x.Companion))
         {
             SendTo(party, new PartyDisbandedEvent { dfp = party.Id });
-            foreach (var rest in party.Members)
+            foreach (var rest in party.Members.ToList())
             {
                 _byMember.Remove(rest.Id);
                 if (rest.Missed) _droppedAway[rest.Id] = party.Id;
+                if (rest.Companion) world.Companions.LeftParty(rest.Id); // stageN: the companions of a party with no player left go
             }
             party.Members.Clear();
             _parties.Remove(party);
             Log.Info("party", $"party {party.Id} disbanded");
             return;
         }
-        if (party.Leader == m.Id) SetLeader(party, party.Members[0]);
+        if (party.Leader == m.Id) SetLeader(party, party.Members.FirstOrDefault(x => !x.Companion) ?? party.Members[0]);
+    }
+
+    // ---- companions (stageN companions SPEC §2) ----
+
+    /// <summary>
+    /// StageN companions: <paramref name="companion"/> (a bot) joins the party of <paramref name="owner"/>, which is made when it has none (the
+    /// owner leads it: PartyJoined to the owner); else PartyPlayerJoined to the members that play, as for an accepted invitation. Null when it
+    /// joined, else why not (the party is full by <paramref name="maxSize"/>).
+    /// </summary>
+    public string? AddCompanion(Player owner, Player companion, int maxSize)
+    {
+        var me = owner.Character.Id;
+        var member = new PartyMember(companion.Character.Id, companion.Character.Name ?? "", (byte)companion.Character.Template) { Owner = me };
+        if (Of(me) is not { } party)
+        {
+            _droppedAway.Remove(me);
+            party = new Party(++_lastId, me);
+            _parties.Add(party);
+            party.Members.Add(MemberOf(owner));
+            _byMember[me] = party;
+            party.Members.Add(member);
+            _byMember[member.Id] = party;
+            owner.Session.Send(Joined(party));
+        }
+        else
+        {
+            if (party.Members.Count >= Math.Min(maxSize, MaxSize)) return $"the party is full ({party.Members.Count} of {Math.Min(maxSize, MaxSize)})";
+            SendTo(party, PlayerJoined(party, member));
+            party.Members.Add(member);
+            _byMember[member.Id] = party;
+        }
+        Log.Info("party", $"companion '{member.Name}' of '{owner.Character.Name}' joins party {party.Id} ({party.Members.Count} members)");
+        return null;
+    }
+
+    /// <summary>StageN companions: the companion of character <paramref name="id"/> is out of its party (dismissed, gone): as a leave.</summary>
+    public void RemoveCompanion(Guid id)
+    {
+        if (Of(id) is { } party && party.Find(id) is { Companion: true } m) Remove(party, m, kicked: false, "is dismissed");
     }
 
     private void SetLeader(Party party, PartyMember m)
@@ -352,7 +413,7 @@ public sealed class Parties(World world)
         var me = leader.Character.Id;
         if (Of(me) is not { } party) return LeaderNoParty;
         if (party.Leader != me) return LeaderNotLeader;
-        if ((target != Guid.Empty ? party.Find(target) : party.Find(name)) is not { } m || m.Id == me) return LeaderNotFound;
+        if ((target != Guid.Empty ? party.Find(target) : party.Find(name)) is not { } m || m.Id == me || m.Companion) return LeaderNotFound; // a companion never leads
         newLeader = m.Name;
         SetLeader(party, m);
         return 0;
@@ -497,6 +558,7 @@ public sealed class Parties(World world)
         foreach (var party in _parties.ToList())
             foreach (var m in party.Members.ToList())
             {
+                if (m.Companion) continue; // stageN: Companions keeps its own owners' grace
                 if (Online(m.Id) is not null) m.OfflineSince = null;
                 else if (m.OfflineSince is not { } since) m.OfflineSince = now;
                 else if (now - since >= OfflineGrace && party.Members.Contains(m)) Remove(party, m, kicked: false, "has not come back");

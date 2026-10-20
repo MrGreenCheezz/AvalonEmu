@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 namespace AlbionLocal.Server.Persistence;
 
 /// <summary>
-/// <see cref="IMarketStore"/> in the character database (schema v7: market_orders, market_finished, market_credits; v22 initial_amount), on
+/// <see cref="IMarketStore"/> in the character database (schema v7: market_orders, market_finished, market_credits; v22 initial_amount; market_sales, econ SPEC §1), on
 /// the repository's connection and lock: an order goes when its owner is deleted.
 /// </summary>
 public sealed partial class SqliteCharacterRepository : IMarketStore
@@ -58,6 +58,22 @@ public sealed partial class SqliteCharacterRepository : IMarketStore
     public IReadOnlyList<MarketOrder> ExpiredOrders(DateTime now)
     {
         lock (_sync) return ReadOrders($"SELECT {OrderColumns} FROM market_orders WHERE expires <= $now ORDER BY id", null, ("$now", now.Ticks));
+    }
+
+    public IReadOnlyList<MarketSale> Sales(string location, string itemName, int quality, DateTime since)
+    {
+        lock (_sync)
+        {
+            using var select = Command("""
+                SELECT location, uniquename, quality, amount, unit_price, at FROM market_sales
+                WHERE location = $location AND uniquename = $name AND at >= $since AND ($quality <= 0 OR quality = $quality) ORDER BY at DESC
+                """, null, ("$location", location), ("$name", itemName), ("$since", since.Ticks), ("$quality", quality));
+            using var r = select.ExecuteReader();
+            var list = new List<MarketSale>();
+            while (r.Read())
+                list.Add(new MarketSale(r.GetString(0), r.GetString(1), r.GetInt32(2), r.GetInt32(3), r.GetInt64(4), new DateTime(r.GetInt64(5), DateTimeKind.Utc)));
+            return list;
+        }
     }
 
     public long TakeCredits(Guid character)
@@ -119,6 +135,16 @@ public sealed partial class SqliteCharacterRepository : IMarketStore
         {
             using var cmd = repo.Command("DELETE FROM market_finished WHERE id = $id", tx, ("$id", entry));
             cmd.ExecuteNonQuery();
+        }
+
+        public void AddSale(MarketSale sale)
+        {
+            if (sale.Amount <= 0) return;
+            using (var old = repo.Command("DELETE FROM market_sales WHERE at < $before", tx, ("$before", (sale.At - TimeSpan.FromDays(IMarketStore.HistoryDays)).Ticks)))
+                old.ExecuteNonQuery();
+            using var insert = repo.Command("INSERT INTO market_sales (location, uniquename, quality, amount, unit_price, at) VALUES ($location, $name, $quality, $amount, $price, $at)", tx,
+                ("$location", sale.Location), ("$name", sale.ItemName), ("$quality", sale.Quality), ("$amount", sale.Amount), ("$price", sale.UnitPrice), ("$at", sale.At.Ticks));
+            insert.ExecuteNonQuery();
         }
 
         public void Credit(Guid character, long silver)

@@ -11,7 +11,7 @@ namespace AlbionLocal.Server;
 /// has a &lt;Harvestable type tier&gt; that is not silver (HIDE of the toads, snakes and lizards, FIBER_CRITTER of the
 /// dryads, the *_CRITTER, *_GUARDIAN and *_TREASURE types) leaves a <see cref="Harvestable"/> of that type and tier where
 /// it died. It is made in the kill batch where the silver pile goes, right after UpdateFame and before EnergyUpdate
-/// (captures/albion_20261016_002835 +522.332, the own T4 dryad kill: UpdateFame, NewHarvestableObject, EnergyUpdate,
+/// (capture 002835 +522.332, the own T4 dryad kill: UpdateFame, NewHarvestableObject, EnergyUpdate,
 /// CastSpell, the combat end, then the death clear and the lethal hit), and goes to the players in view as
 /// NewHarvestableObject 40 with the corpse keys (<see cref="Harvestable.BuildCreate"/>); the mob's own Leave follows 5 s
 /// later as before, the corpse stays. It is gathered through the stage-4a path (World/Harvesting.cs: the type's tool

@@ -35,14 +35,29 @@ public static class MobAiTest
 
     private const string Soldier = "T4_MOB_UNDEAD_SOLDIER_VETERAN";
 
-    /// <summary>An arena with the AI on and every mob within 150 m of the stand despawned for good, so only the test's own mobs act.</summary>
+    /// <summary>
+    /// An arena with the AI on and every mob within 150 m of the stand despawned for good, so only the test's own mobs act, on an open walk
+    /// grid (<see cref="OpenGrid"/>).
+    /// </summary>
     private static (Arena Arena, Map Map) Quiet(Arena arena)
     {
         var map = arena.World.Maps.Find("0204")!;
+        OpenGrid(map, arena.Stand);
         lock (arena.World.Sync)
             foreach (var m in map.Objects.Values.OfType<Mob>().Where(m => Vector2.Distance(m.Position, arena.Stand) < 150).ToList())
                 SpawnManager.Despawn(m, arena.World, respawn: false);
         return (arena, map);
+    }
+
+    /// <summary>
+    /// A walk grid without walls 150 m around <paramref name="around"/> for <paramref name="map"/> (<see cref="MobNav.Use"/>): the stage-5d
+    /// fights walk straight, as they were written. Without it the map's real grid (the guard tower and houses by the stand) came from a pool
+    /// thread at a tick that depended on the machine's load, and the rabbit's roam and the soldier's chase changed with it (the old flakiness).
+    /// </summary>
+    internal static void OpenGrid(Map map, Vector2 around)
+    {
+        int x = (int)Math.Floor(around.X), z = (int)Math.Floor(around.Y);
+        MobNav.Use(map, WalkGrid.FromCells(x - 150, z - 150, x + 150, z + 150, [], [around]));
     }
 
     /// <summary>Event 3 key 1 of our own mobs (MovementCodec layout): stamp, position, speed (flag 1), target (flag 2, else the position).</summary>

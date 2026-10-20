@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- spells.bin: Clockwork Dash, made of existing effects: the hamstring sword's dash (HAMSTRINGSWORD_DASH), at its end a hit and the
+     frost path's slowing ground (ICEROCK_EXPLODE_FROST_PATH) for 4 s. Icons, animations, effects and sounds are official ones. -->
+<patch>
+  <add>
+    <activespell uniquename="CLOCKWORK_DASH" target="ground" castingtime="0" hitdelay="0" standtime="0" recastdelay="12" energyusage="12" castrange="8"
+                 uitype="movement" uisprite="JUMP_ATTACK" category="forcedmovement" showrange="true" animmode="SingleAnim" assessment="negative"
+                 adjustgroundtargettorange="true" keepmovingaftercast="true" autoattackcooldownaftercasting="Trigger"
+                 namelocatag="@SPELLS_CLOCKWORK_DASH" descriptionlocatag="@SPELLS_CLOCKWORK_DASH_DESC" statblock="@SPELLS_STANDARD_STATBLOCK"
+                 controllerpreferredtarget="enemy" controllerpreferredcastdirection="targetthenlookdirection" controllerselfcastable="true">
+      <spellvfx event="OnCastStart" target="self" prefab="FX/ClientPrefabs/fx_dust_01" socket="floor" constraintpreset="inworld" />
+      <dash movespeed="16" ruleset="constanttime" scaleAnim="true" animID="rendingrage_jump" standtime="0.1" endeffect="CLOCKWORK_DASH_FIELD" />
+      <nop target="self" effectarearadius="4" showarearadius="true" />
+      <AudioInfo name="MELEE_SWORD_HAMSTRING_DASH" />
+    </activespell>
+    <activespell uniquename="CLOCKWORK_DASH_FIELD" target="self" castingtime="0" hitdelay="0" standtime="0" recastdelay="0" energyusage="0" castrange="0"
+                 uitype="crowdcontrol" category="instant" hidespelleffecticon="true">
+      <applyspell spell="CLOCKWORK_DASH_HIT" effectarearadius="3" target="enemy" />
+      <spelleffectarea time="4" effect="CLOCKWORK_DASH_SLOW" target="enemy" position="atcaster" removeonleave="true" applyeffectonlyoncepertarget="false"
+                       visible="false" areatag="hostilegroundeffectarea">
+        <area>
+          <shape>
+            <circle radius="4">
+              <spellvfx prefab="FX/ClientPrefabs/fx_spell_icerock_path_01" event="SpellEffectAreaInit" duration="4" target="target" socket="centerGround" />
+            </circle>
+          </shape>
+        </area>
+      </spelleffectarea>
+      <spellvfx target="ground" event="OnCastFinished" alive="none" prefab="FX/ClientPrefabs/fx_keeper_ram_impact" socket="floor" constraintpreset="inWorldWithRotate" />
+    </activespell>
+    <activespell uniquename="CLOCKWORK_DASH_HIT" target="enemy" castingtime="0" hitdelay="0" standtime="0" recastdelay="0" energyusage="0" castrange="0"
+                 uitype="damage" category="damage" uisprite="JUMP_ATTACK" namelocatag="@SPELLS_CLOCKWORK_DASH">
+      <directattributechange target="enemy" attribute="health" change="-95" effecttype="physical" />
+      <spellvfx event="OnSpellHit" target="target_notCaster" prefab="FX/ClientPrefabs/fx_spell_aoe_impact" socket="damage" constraintpreset="pointconstraint" />
+    </activespell>
+    <activespell uniquename="CLOCKWORK_DASH_SLOW" target="enemy" castingtime="0" hitdelay="0" standtime="0" recastdelay="0" energyusage="0" castrange="0"
+                 uisprite="HAMSTRING" uitype="crowdcontrol" category="instant" spelleffectlocatag="@SPELLS_STATUS_SLOW" namelocatag="@SPELLS_CLOCKWORK_DASH">
+      <buffovertime target="enemy" type="movespeedbonus" value="-0.35" time="1" />
+      <spelleffectfx prefab="FX/ClientPrefabs/fx_slow" socket="floor" />
+    </activespell>
+  </add>
+</patch>

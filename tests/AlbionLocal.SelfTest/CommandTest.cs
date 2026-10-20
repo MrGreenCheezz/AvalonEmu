@@ -27,7 +27,7 @@ public static class CommandTest
     {
         var dir = NewDir();
         var characters = Repository(dir);
-        var items = Items("8610\tT4_MAIN_SWORD\tweapon\tmainhand\t4\t13500", "1000\tT4_ORE\tsimpleitem\t\t4", "2000\tT4_CHEST\tfurnitureitem\t\t4");
+        var items = Items("8610\tT4_MAIN_SWORD\tweapon\tmainhand\t4\t13500", "1000\tT4_ORE\tsimpleitem\t\t4", "2000\tT4_CHEST\tkilltrophy\t\t4");
         var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, items) { Sync = new object(), Clock = clock ?? new ManualClock() };
         return (world, characters, dir);
     }
@@ -98,8 +98,8 @@ public static class CommandTest
               "any other line gets the empty Say response, as before, and comes back as ChatSay (stage 7)");
         session.OnRequest(Request(new SayRequest { aa9 = ".item add T4_CHEST" }, null), encrypted: false);
         Check(peer.Events.Count == events + 5 && peer.Events[^1] is var refused && Code(refused) == (int)EventCodes.SystemMessage
-              && refused.Parameters.ContainsKey(1) && refused.Parameters[0] is string why && why.Contains("furnitureitem"),
-              "a kind NewSimpleItem cannot create (furniture) is refused before anything is sent");
+              && refused.Parameters.ContainsKey(1) && refused.Parameters[0] is string why && why.Contains("killtrophy"),
+              "a kind NewSimpleItem cannot create (a kill trophy) is refused before anything is sent");
         for (var i = 0; i < 50; i++)
         {
             clock.Advance(TimeSpan.FromMilliseconds(50));
@@ -195,7 +195,7 @@ public static class CommandTest
 
             var dir = NewDir();
             var characters = Repository(dir);
-            var items = Items("8610\tT4_MAIN_SWORD\tweapon\tmainhand\t4\t13500", "1000\tT4_ORE\tsimpleitem\t\t4", "2000\tT4_CHEST\tfurnitureitem\t\t4");
+            var items = Items("8610\tT4_MAIN_SWORD\tweapon\tmainhand\t4\t13500", "1000\tT4_ORE\tsimpleitem\t\t4", "2000\tT4_CHEST\tkilltrophy\t\t4");
             var file = Path.Combine(dir, "kits.json");
             File.WriteAllText(file, """
                 { "small": { "Items": [{ "Name": "T4_MAIN_SWORD", "Count": 3, "Quality": 2 }, { "Name": "T4_ORE", "Count": 5 }, "T4_CHEST", { "Name": "T4_ORE", "Count": "9" }] },
@@ -206,7 +206,7 @@ public static class CommandTest
                 Sync = new object(), Clock = new ManualClock(), Kits = Kits.Load(file, items),
             };
             Check(world.Kits.Find("SMALL") is { Items.Count: 2 } && world.Kits.Find("x") is { Items.Count: 0 },
-                  "a furniture item, a string count and wrong-typed keys are skipped at load, not the kits; names in any case");
+                  "a kill trophy, a string count and wrong-typed keys are skipped at load, not the kits; names in any case");
             var hero = characters.List()[0];
             hero.Equipment = [];
             hero.Inventory = [.. Enumerable.Range(0, Server.Entities.Inventory.BagSlots - 2).Select(_ => new InventoryItem("T4_ORE", 1))];

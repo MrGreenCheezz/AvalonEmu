@@ -1,0 +1,9 @@
+{
+  "name": "welcome",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Greets players when they log in and answers .motd (example plugin)",
+  "apiVersion": 1,
+  "enabled": false,
+  "dependencies": []
+}

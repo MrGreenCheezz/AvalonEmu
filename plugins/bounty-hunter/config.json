@@ -1,0 +1,12 @@
+{
+  // The bounty-hunter plugin's defaults; override keys in data/plugins/bounty-hunter/config.json, then .plugins reload bounty-hunter.
+  "IntervalMinutes": 10,          // a new bounty this often (when none is open)
+  "DurationMinutes": 20,          // an open bounty expires after this
+  "Categories": ["champion", "miniboss"], // mobs.xml categories a bounty may name (elites)
+  "MinTier": 3,                   // lowest mob tier
+  "RewardSilver": 10000,          // whole silver, + RewardSilverPerTier × the mob's tier
+  "RewardSilverPerTier": 2500,
+  "RewardFame": 5000,             // whole fame (kill fame of the mob's tier), + RewardFamePerTier × tier
+  "RewardFamePerTier": 1000,
+  "LeaderboardSize": 5
+}

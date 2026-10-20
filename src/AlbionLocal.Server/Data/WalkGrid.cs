@@ -70,7 +70,8 @@ public sealed class WalkGrid
             .Concat(t.HellgateMarkers.Select(m => m.Position))
             .Concat(t.HellgateMarkers.Count > 0 ? t.MobSpawnPoints.Select(m => m.Position) : [])
             .Concat(t.Info.Type.StartsWith("TUNNEL_", StringComparison.Ordinal) ? t.Critical.Where(m => m.Type == "tunnelexit").Select(PortalFront) : [])
-            .Concat(MistsIds.IsInstance(t.Id) ? MistsSeeds(t) : []);
+            .Concat(MistsIds.IsInstance(t.Id) ? MistsSeeds(t) : [])
+            .Concat(t.Warcamps.SelectMany(w => w.Spawns)); // stage N arena: the teams' camps (an arena has none of the seeds above)
         g.Fill(seeds);
         return g;
     }

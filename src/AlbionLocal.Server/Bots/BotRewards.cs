@@ -95,7 +95,7 @@ public sealed class BotRewards(World world)
         }
         var look = bot.Inventory.EquipmentTypeIds(); // the corpse's gear, before anything is taken
         var items = Roll(bot, info, map.Random, death);
-        var silver = (int)Math.Round(world.BotSettings.Silver.GetValueOrDefault(info.Tier) * world.Rates.Silver, MidpointRounding.AwayFromZero);
+        var silver = (int)Math.Round(world.BotSettings.Silver.GetValueOrDefault(info.Tier) * world.Rates.Silver * (info.Elite ? options.EliteSilverFactor : 1), MidpointRounding.AwayFromZero);
         if (items.Count == 0 && silver <= 0) return;
         if (items.Count > 0) drops.Add(ticks);
         if (silver > 0) drops.Add(ticks);
@@ -130,7 +130,8 @@ public sealed class BotRewards(World world)
         foreach (var slot in DropSlots)
             if (equipment[slot] is not null && random.NextDouble() < chance) Move(slot);
         // Bots:Rewards:MinItems (stageM bots): random further worn items until the bag holds that many of its gear (moved, never copied).
-        while (items.Count < options.MinItems && DropSlots.Where(s => equipment[s] is not null).ToList() is { Count: > 0 } worn)
+        var least = options.MinItems + (info.Elite ? options.EliteExtraItems : 0); // stageN botpower: an elite's richer bag
+        while (items.Count < least && DropSlots.Where(s => equipment[s] is not null).ToList() is { Count: > 0 } worn)
             Move(worn[random.Next(worn.Count)]);
         // Each item it gathered on its own (a band of tiers and rare states): the only items made outside the spawn.
         foreach (var (name, amount) in info.Fight.Carried)

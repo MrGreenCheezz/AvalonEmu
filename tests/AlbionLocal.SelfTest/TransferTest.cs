@@ -184,7 +184,7 @@ public static class TransferTest
     /// <summary>
     /// SPEC §11 item 12. The arrival (target exit spawnpos in world coordinates, pushed clear of the exit tile's collision
     /// by characters.xml's collisionradius) and facing through every exit transfer the captures hold (103829 and 114814 as
-    /// SPEC §3; 20261016_002835: 1207 → 1000, Thetford ↔ bank 0006 and market 0007, 0000 → 0204) and the other Thetford
+    /// SPEC §3; 002835: 1207 → 1000, Thetford ↔ bank 0006 and market 0007, 0000 → 0204) and the other Thetford
     /// doors (spec/arrivals.py), within 0.01 m and 0.01°. The two bank doors arrive 0.75 m beyond their spawnpos, as
     /// captured: Lymhurst 1001 → 1000 (-20, -20.75), Thetford 0006 → 0000 (-10, -20.750141); every other one exactly at it.
     /// One captured transfer, 1002 → 1000, also goes through the server. No arrival lies in an exit square of its cluster;
@@ -355,7 +355,7 @@ public static class TransferTest
     }
 
     /// <summary>
-    /// The journey of captures/albion_20261016_002835 (transfers n = 2): Lymhurst's travel point 7e5a37ea (-30, 51) to
+    /// The journey of capture 002835 (transfers n = 2): Lymhurst's travel point 7e5a37ea (-30, 51) to
     /// Thetford's cfca05a8 (-2, 36). The client's route rule (no direct world.xml connection: 1000 → 4000 → 0000, cost 10;
     /// Caerleon 3003 only without luggage); then on a session: refusals (an exit instead of a travel point, an unknown
     /// target, the travel point itself, the island kind) answered 8040 with the request id; the journey with the captured

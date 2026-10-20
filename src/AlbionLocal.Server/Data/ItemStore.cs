@@ -133,7 +133,14 @@ public sealed class ItemStore
                 mission?.Attribute("value") is { } value ? numbers.Num(value.Value, "value", r.Name) : 0,
                 (mission?.Elements("validitem").Select(v => (string?)v.Attribute("id")).OfType<string>() ?? []).ToHashSet(StringComparer.OrdinalIgnoreCase),
                 (long)Math.Round((r.Own.Element("craftingrequirements") is { } price ? numbers.Num((string?)price.Attribute("silver"), "silver", r.Name) : 0) * 10000),
-                empty, full);
+                empty, full)
+            {
+                BaseLoot = numbers.Num(r.Attrs.GetValueOrDefault("baselootamount"), "baselootamount", r.Name), // T7_JOURNAL_WOOD 38.4
+                Loot = [.. (r.Own.Element("lootlist")?.Elements("loot") ?? []).Select(l => new JournalLoot((string?)l.Attribute("itemname"),
+                    l.Attribute("itemamount") is { } a ? numbers.Int(a.Value, "itemamount", r.Name) : 1,
+                    l.Attribute("silveramount") is { } sa ? (long)Math.Round(numbers.Num(sa.Value, "silveramount", r.Name) * 10000) : 0,
+                    numbers.Num((string?)l.Attribute("weight"), "weight", r.Name), numbers.Num((string?)l.Attribute("labourerfame"), "labourerfame", r.Name)))],
+            };
         }
         // StageH islands SPEC §0.4: the client numbers the placeable items (farmableitem, furnitureitem elements) in document order for their building type.
         var placeIndex = new Dictionary<string, int>(StringComparer.Ordinal);

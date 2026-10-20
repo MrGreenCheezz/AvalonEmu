@@ -50,6 +50,14 @@ public sealed class BotMotion
         Leg(bot, _points[0], bots);
     }
 
+    /// <summary>Drops the path under way without a sample (stageN companions: a teleport or a move to another map sends its own).</summary>
+    public void Reset()
+    {
+        _points = null;
+        _pauseUntil = null;
+        _held = false;
+    }
+
     /// <summary>Ends the walk where the bot is now: a stop sample facing <paramref name="facing"/> (null: as it faces).</summary>
     public void Stop(Player bot, float? facing, BotManager bots)
     {

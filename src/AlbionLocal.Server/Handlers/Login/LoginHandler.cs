@@ -16,7 +16,7 @@ public sealed partial class LoginSession
     /// region normally only for 3: any other value turns on MaintenanceFlagParent and the GreyTextureShader on the
     /// ContinentImage, the StatusDot takes its colour from dr2.a(state), SetSelected 0x180eaef30 uses the selected colours
     /// only for 3. So 3 = online; the 1 sent before showed the region greyed out as in maintenance. Official answer
-    /// (captures/albion_20261016_002835, all three regions, both logins): event 1 {1: byte 3, 252: short 1}, 11 bytes,
+    /// (capture 002835, all three regions, both logins): event 1 {1: byte 3, 252: short 1}, 11 bytes,
     /// the same keys and wire types as this one. Ping itself is the Photon round-trip time.
     /// These peers never log in (captures: their only operation is that request, op 1 without key 253 = Unused).
     /// </summary>

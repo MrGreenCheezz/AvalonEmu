@@ -75,6 +75,7 @@ public static class Consumables
         }
         p.SaveItems();
         Log.Debug("items", $"'{p.Character.Name}' used {item.Template.Name} from slot {cast.Slot}: {item.Count} left");
+        p.World.Plugins.ItemUsed(p, item.Template.Name, 1, "slot"); // the plugins' ItemUsed
     }
 
     /// <summary>
@@ -241,6 +242,7 @@ public static class Consumables
         "energymax", "energymaxbonus", "energyregeneration", "energyregenerationbonus",
         "magiccooldownreduction", "attackspeedbonus", "movespeedbonus", "healmodifier", "magicresistance", "physicalarmor",
         "crowdcontrolresistance", "magicspelldamagebonus", "magicattackdamagebonus", "physicalspelldamagebonus", "physicalattackdamagebonus",
+        "fishingspeed", // the fishing bait (econ SPEC §2.2): Fishing.BiteDelay reads it
     };
 
     /// <summary>
@@ -366,6 +368,7 @@ public static class Consumables
         SpellCasts.ExecuteFirst(new SpellCasts.SpellContext(p, batch.Map, spell, 0, batch.Ap, null, here, ticks) { CcAbilityPower = batch.CcAp, Item = item.Template, Loot = loot }, spell);
         item.Count--;
         batch.Done++;
+        p.World.Plugins.ItemUsed(p, item.Template.Name, 1, "inventory"); // the plugins' ItemUsed
         var hit = Combat.CastHit(p.Id, p.Id, spell.Id, 0);
         if (batch.Done < batch.Count && item.Count > 0)
         {

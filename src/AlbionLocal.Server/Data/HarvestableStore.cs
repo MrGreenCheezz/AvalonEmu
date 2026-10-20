@@ -79,6 +79,10 @@ public sealed class HarvestableStore
                     // <RareState state="1" item="T4_WOOD_LEVEL1">: what an enchanted node of the tier gives (T4 and up).
                     RareItems = t.Elements("RareState").Where(r => (string?)r.Attribute("item") is not null)
                         .GroupBy(r => TileMath.Int((string?)r.Attribute("state"))).ToDictionary(g => g.Key, g => (string)g.First().Attribute("item")!),
+                    // <Loot><LootListReference name="T4_WOOD_SKILLBOOK" chance="0.002"/></Loot>: the bonus loot (the gathering tomes, econ SPEC §2.1).
+                    Loot = t.Element("Loot"),
+                    RareLoot = t.Elements("RareState").Where(r => r.Element("Loot") is not null)
+                        .GroupBy(r => TileMath.Int((string?)r.Attribute("state"))).ToDictionary(g => g.Key, g => g.First().Element("Loot")!),
                 };
             }
             return new HarvestableTemplate
@@ -150,6 +154,19 @@ public sealed record HarvestableTier(int Tier, string? Item, int Charges, int St
     /// them can be enchanted (stage 4b SPEC §5.4). Empty below T4.
     /// </summary>
     public IReadOnlyDictionary<int, string> RareItems { get; init; } = new Dictionary<int, string>();
+
+    /// <summary>
+    /// The tier's &lt;Loot&gt; (a loot.xml roll, <see cref="LootTables.RollMob"/>): the bonus loot of one harvest. Every one names a
+    /// Tn_&lt;RESOURCE&gt;_SKILLBOOK list (a gathering tome) with chance 0.001 × yield × maxchargesperharvest (loot.xml's own comment), so
+    /// one roll per harvest; null = none (T1-T3).
+    /// </summary>
+    public System.Xml.Linq.XElement? Loot { get; init; }
+
+    /// <summary>The &lt;Loot&gt; of each rare state (the same lists, at the enchanted yields' chances).</summary>
+    public IReadOnlyDictionary<int, System.Xml.Linq.XElement> RareLoot { get; init; } = new Dictionary<int, System.Xml.Linq.XElement>();
+
+    /// <summary>The bonus loot of a node in <paramref name="rareState"/>: its RareState's, else the tier's.</summary>
+    public System.Xml.Linq.XElement? LootOf(int rareState) => rareState > 0 && RareLoot.TryGetValue(rareState, out var rare) ? rare : Loot;
 
     /// <summary>The item a harvest of a node in <paramref name="rareState"/> gives: its RareState item, else <see cref="Item"/>.</summary>
     public string? ItemOf(int rareState) => rareState > 0 && RareItems.TryGetValue(rareState, out var rare) ? rare : Item;

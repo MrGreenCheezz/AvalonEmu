@@ -193,7 +193,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
         var reach = Math.Max(t.AggroRadius, t.AggroConeLength);
         Player? best = null;
         var bestDistance = float.MaxValue;
-        foreach (var p in map.Players.Values)
+        foreach (var p in map.Fighters)
         {
             if (!Valid(p, map) || (p.IsMounted && !t.CanAggroMountedPlayers)) continue; // mobs.xml canaggromountedplayers (stageD mounts)
             if (Systems.SpellEffects.InvisibleToMobs(p, world.GameNow)) continue; // invisibility to mobs (stageD effects batch 2): no aggro

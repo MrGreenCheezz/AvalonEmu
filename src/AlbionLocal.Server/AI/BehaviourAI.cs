@@ -93,8 +93,91 @@ public class BehaviourAI : AggressiveAI, IMobCaster
             _spawned = true;
             RunEvent(world, map, Script.Events, "onSpawn", null);
         }
+        if (_escape is not null)
+        {
+            EscapeStep(world, map);
+            return;
+        }
         Idle(world, map);
         base.Update(world, map);
+    }
+
+    // ---- escape (stageN spells2: mobs.xml EscapeSpellSequence) ----
+
+    /// <summary>The escape spells still to cast (null: not fleeing), and the point its escapeposition spells aim at.</summary>
+    private Queue<AiSpell>? _escape;
+
+    private Vector2 _escapePoint;
+
+    /// <summary>Whether it is fleeing (<see cref="Escape"/>).</summary>
+    public bool Escaping => _escape is not null;
+
+    /// <summary>
+    /// The mob flees (the tracking mobs' escape; dynamichunt.xml forcemobtoescape and its HP and timer triggers, the hunts, are not run yet:
+    /// .mob escape starts it): the cast under way is cancelled, then its EscapeSpellSequence (its own, else its reference's) is cast in
+    /// order, each when the one before has ended (cast, stand time, dash), target self or escapeposition: a point
+    /// <see cref="EscapeDistance"/> m away from its threat (the walk grid's walls shorten it); then it leaves the map (its spawn point
+    /// respawns it). No chase, swing, aggro or leash meanwhile. Returns the spells it will cast.
+    /// </summary>
+    public IReadOnlyList<string> Escape(World world, Map map, string why)
+    {
+        if (_escape is not null || Me.Dead || Me.Removed) return [];
+        var sequence = EscapeSequence(world);
+        if (Cast is { } cast) MobCasts.Cancel(cast, interrupted: false);
+        Cast = null;
+        _moving = null;
+        _busyUntil = 0;
+        _escapePoint = EscapePoint(world, map);
+        _escape = new Queue<AiSpell>(sequence.Select(s => new AiSpell { Spell = s.Spell, Target = s.Target }));
+        AlbionLocal.Photon.Log.Info("ai", $"{Me} flees ({why}): {(sequence.Count == 0 ? "no EscapeSpellSequence" : string.Join(", ", sequence.Select(s => s.Spell)))}");
+        return [.. sequence.Select(s => s.Spell)];
+    }
+
+    /// <summary>How far an escapeposition lies from the mob (m): the escape dashes' castrange.</summary>
+    public const float EscapeDistance = 13;
+
+    /// <summary>The EscapeSpellSequence of its template, else of the mob it references (followed with a loop guard).</summary>
+    private IReadOnlyList<(string Spell, string Target)> EscapeSequence(World world)
+    {
+        var t = Me.Template;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { t.Name };
+        while (t.EscapeSpells.Count == 0 && t.EscapeReference is { Length: > 0 } reference && seen.Add(reference)
+               && world.Clusters?.MobsIfLoaded?.Find(reference) is { } next)
+            t = next;
+        return t.EscapeSpells;
+    }
+
+    /// <summary>Away from the centre of its valid threat (else from its facing), <see cref="EscapeDistance"/> m, at least 3 m of it clear of walls.</summary>
+    private Vector2 EscapePoint(World world, Map map)
+    {
+        var here = Me.Position;
+        var now = world.GameNow;
+        var threat = Me.Threat.Keys.Where(p => MobCasts.Valid(p, map, now)).Select(p => p.PositionAt(DateTime.UtcNow)).ToList();
+        var away = threat.Count == 0 ? Vector2.Zero : here - threat.Aggregate(Vector2.Zero, (a, b) => a + b) / threat.Count;
+        var dir = away.LengthSquared() > 1e-4f ? Vector2.Normalize(away) : -SpellMovement.Facing(Me.Direction);
+        var grid = MobNav.Grid(world, map);
+        for (var k = 10; k >= 3; k--)
+        {
+            var at = here + dir * (EscapeDistance * k / 10);
+            if (grid is null || grid.ClearFree(here, at)) return at;
+        }
+        return here;
+    }
+
+    /// <summary>One tick of the flight: the next escape spell once the last has ended, then the departure.</summary>
+    private void EscapeStep(World world, Map map)
+    {
+        Me.Motion.Update(world.Combat.MobMoveResend);
+        var now = world.GameNow;
+        if (Cast is not null || now < _busyUntil || Me.Effects.Forced is { } dash && dash.End > now) return;
+        if (_escape!.Count > 0 && world.MobSpells && world.Spells is not null)
+        {
+            TrySpell(world, map, _escape.Dequeue(), dry: false, @event: true);
+            return;
+        }
+        _escape = null;
+        AlbionLocal.Photon.Log.Info("ai", $"{Me} has fled");
+        SpawnManager.Despawn(Me, world);
     }
 
     protected override void OnEnterCombat(World world)
@@ -282,13 +365,14 @@ public class BehaviourAI : AggressiveAI, IMobCaster
             "self" => [Me],
             "current" => current is null ? [] : [current],
             "anythreat" => [.. threat],
-            "anyenemy" => [.. map.Players.Values.Where(p => MobCasts.Valid(p, map, now) && Vector2.Distance(here, p.PositionAt(DateTime.UtcNow)) <= reach)],
+            "anyenemy" => [.. map.Fighters.Where(p => MobCasts.Valid(p, map, now) && Vector2.Distance(here, p.PositionAt(DateTime.UtcNow)) <= reach)],
             "anyfriend" => [.. map.Objects.Values.OfType<Mob>().Where(m => !m.Dead && !m.Removed && string.Equals(m.Template.Faction, Me.Template.Faction, StringComparison.OrdinalIgnoreCase)
                 && Vector2.Distance(here, m.Position) <= spell.CastRange + Me.Template.CollisionRadius + m.Template.CollisionRadius)],
             "currentortopthreatorself" => [(IUnit?)current ?? (IUnit?)threat.OrderByDescending(p => Me.Threat[p]).FirstOrDefault() ?? Me],
+            "escapeposition" => _escape is null ? [] : [Me], // stageN spells2: the flight's dash, at the escape point (InRange)
             _ => [],
         };
-        if (list.Count == 0 && s.Target is not ("self" or "current" or "anythreat" or "anyenemy" or "anyfriend" or "currentortopthreatorself"))
+        if (list.Count == 0 && s.Target is not ("self" or "current" or "anythreat" or "anyenemy" or "anyfriend" or "currentortopthreatorself" or "escapeposition"))
             Combat.LogOnce("aitarget:" + s.Target, $"<AI> spell target '{s.Target}' is not supported yet: no candidate");
         if (list.Count < 2) return list;
         double Health(IUnit u) => HealthOf(u, now);
@@ -337,7 +421,28 @@ public class BehaviourAI : AggressiveAI, IMobCaster
         }
         var there = Position(candidate);
         point = there;
+        if (s.Target == "escapeposition")
+        {
+            point = _escapePoint;
+            return true;
+        }
         var slack = Me.Template.CollisionRadius + (candidate is Player ? world.CollisionRadius : candidate is Mob m && m != Me ? m.Template.CollisionRadius : 0);
+        if (spell.Target == "ground" && s.RandomGround is { } ring)
+        {
+            // StageN spells2 <RandomGroundTarget>: a random point of the ring around the target (origin="target") or the mob, on a free
+            // cell of the walk grid when the map has one (20 tries, else the last pick); no castrange check (the meteors land up to 40 m out).
+            var origin = ring.AtTarget && candidate != Me ? there : here;
+            var grid = Me.Map is { } onGrid ? MobNav.Grid(world, onGrid) : null;
+            var random = Me.Map?.Random ?? Random.Shared;
+            for (var i = 0; i < 20; i++)
+            {
+                var r = ring.Inner + (ring.Radius - ring.Inner) * Math.Sqrt(random.NextDouble());
+                var a = random.NextDouble() * 2 * Math.PI;
+                point = origin + new Vector2((float)(r * Math.Sin(a)), (float)(r * Math.Cos(a)));
+                if (grid is null || grid.Free(point)) break;
+            }
+            return true;
+        }
         if (spell.Target == "ground")
         {
             if (s.GroundOffset != 0)
@@ -493,7 +598,12 @@ public class BehaviourAI : AggressiveAI, IMobCaster
         foreach (var a in actions)
         {
             if (a is AiSpell { Spell: var spell } && Me.Dead)
-                Combat.LogOnce("aideath:" + spell, $"<AI> {name} spell {spell} of {Me.Template.Name} is not supported yet (5f.4): a dead mob casts nothing");
+            {
+                // StageN spells2: a dead mob's onDeath spells (the demon and avalon bosses' death effects) are cast at once, as its
+                // <DeathSpells>: on itself, a ground spell at its feet.
+                if (world.MobSpells && world.Spells?.Template(spell) is { } dying) MobEvents.CastNow(world, map, Me, dying, Me, Me.Position);
+                continue;
+            }
             if (a is not AiSpell || (!Me.Dead && world.MobSpells && world.Spells is not null)) Run(world, map, a, dry: false, @event: true);
         }
     }
@@ -521,6 +631,7 @@ public class BehaviourAI : AggressiveAI, IMobCaster
 
     public override void OnDeath()
     {
+        _escape = null;
         Stop(death: true);
         if (Me.World is { } world && Me.Map is { } map) RunEvent(world, map, Script.Events, "onDeath", null);
         foreach (var v in Script.Vars.Where(v => v.ResetOnMobDeath)) _vars[v.Name] = (v.Initial, null);
@@ -530,6 +641,7 @@ public class BehaviourAI : AggressiveAI, IMobCaster
 
     public override void Halt(World world, Map map)
     {
+        _escape = null;
         Stop(death: false);
         _combatStart = null;
         base.Halt(world, map);
@@ -621,7 +733,7 @@ public class BehaviourAI : AggressiveAI, IMobCaster
             case "iftargetenergypercentage": return target is not null && leaf.Compare(EnergyOf(target, now));
             case "iftargetrange": return target is not null && leaf.Compare(Vector2.Distance(Me.Position, Position(target)));
             case "ifisanyenemyinrange":
-                return map.Players.Values.Any(p => MobCasts.Valid(p, map, now) && Vector2.Distance(Me.Position, p.PositionAt(DateTime.UtcNow)) <= leaf.Range);
+                return map.Fighters.Any(p => MobCasts.Valid(p, map, now) && Vector2.Distance(Me.Position, p.PositionAt(DateTime.UtcNow)) <= leaf.Range);
             case "ifisanyfactionmemberinrange":
                 return map.Objects.Values.OfType<Mob>().Any(m => m != Me && !m.Dead && string.Equals(m.Template.Faction, Me.Template.Faction, StringComparison.OrdinalIgnoreCase)
                     && Vector2.Distance(Me.Position, m.Position) <= leaf.Range);
@@ -633,6 +745,21 @@ public class BehaviourAI : AggressiveAI, IMobCaster
             case "ifistargetcasting": return target is Player { Combat.Cast: not null } || target is Mob { AI: BehaviourAI { Cast.Finished: false } };
             case "ifistargetchanneling":
                 return target is Player { Combat.Channel: not null } || target is Mob { AI: BehaviourAI { Cast: { Finished: true, Channel: not null } } };
+            case "iftargettookdamage":
+            {
+                // StageN spells2: the spell's target (a self node: the mob itself, as the dummy's and the chest's flinch; an anyfriend node:
+                // the friend) lost health within TookDamageWindow, of DamageType Physical, Magic or All [inference: no window in the data].
+                var hurt = spellTarget ?? Me;
+                var kind = (string?)leaf.Element.Attribute("DamageType") ?? "All";
+                return hurt.Effects.DamagedAt > 0 && now - hurt.Effects.DamagedAt <= SpellCasts.Seconds(TookDamageWindow)
+                    && (kind.Equals("All", StringComparison.OrdinalIgnoreCase) || kind.Equals(hurt.Effects.DamagedType.ToString(), StringComparison.OrdinalIgnoreCase));
+            }
+            case "ifhighestarea": return leaf.Area is { } highest && Highest(world, map, leaf)?.Name == highest;
+            case "iftargetisinhighestarea":
+                return leaf.Area is { } best && target is Player inArea && Highest(world, map, leaf) is { } arc && arc.Name == best && arc.Holds(Me, Position(inArea));
+            case "ifplayersinarea":
+                return Areas(world).FirstOrDefault(a => a.Name == leaf.Area) is { } counted
+                    && leaf.Compare(map.Fighters.Count(p => MobCasts.Valid(p, map, now) && counted.Holds(Me, p.PositionAt(DateTime.UtcNow)) && Holds(world, map, leaf.Inner, p)));
             case "iftargettype": return string.Equals((string?)leaf.Element.Attribute("type"), spellTarget is Mob ? "mob" : "player", StringComparison.OrdinalIgnoreCase);
             case "ifvariable": return leaf.Name is { } name && leaf.CompareText(Var(world, name));
             case "ifspellactive":
@@ -657,6 +784,76 @@ public class BehaviourAI : AggressiveAI, IMobCaster
                 Combat.LogOnce("aicond:" + leaf.Kind, $"<AI> condition <{leaf.Tag}> is not supported yet: read as false");
                 return false;
         }
+    }
+
+    // ---- areas around the mob (stageN spells2: IfHighestArea, IfTargetIsInHighestArea, IfPlayersInArea) ----
+
+    /// <summary>How long after a hit IfTargetTookDamage holds (s) [inference].</summary>
+    public const double TookDamageWindow = 1;
+
+    /// <summary>
+    /// A named arc of a TargetAreaDefinition spell (its spelleffectarea's &lt;node angle&gt;&lt;arc name angle innerradius outerradius&gt;):
+    /// <see cref="Center"/>° clockwise from the mob's facing, <see cref="Width"/>° wide.
+    /// </summary>
+    public sealed record AreaArc(string Name, double Center, double Width, double Inner, double Outer)
+    {
+        /// <summary>Whether <paramref name="at"/> lies in the arc of <paramref name="mob"/> (its position and facing now).</summary>
+        public bool Holds(Mob mob, Vector2 at)
+        {
+            var d = at - mob.Position;
+            var dist = d.Length();
+            if (dist < Inner || dist > Outer) return false;
+            if (dist < 1e-4f) return true;
+            var bearing = Math.Atan2(d.X, d.Y) * 180 / Math.PI; // SpellMovement.Facing: degrees from +Y towards +X
+            var off = ((bearing - mob.Direction - Center) % 360 + 540) % 360 - 180;
+            return Math.Abs(off) <= Width / 2;
+        }
+    }
+
+    /// <summary>The fire dragon's MOB_DRAGON_GENERAL_DIRECTION_ZONES_TEST layout: the areas of a mob without a TargetAreaDefinition.</summary>
+    private static readonly AreaArc[] DefaultAreas =
+    [
+        new("front", 0, 110, 0, 100), new("right", 90, 70, 0, 100), new("back", 180, 110, 0, 100), new("left", 270, 70, 0, 100),
+        new("frontright", 45, 65, 0, 100), new("backright", 135, 50, 0, 100), new("backleft", 225, 50, 0, 100), new("frontleft", 315, 65, 0, 100),
+    ];
+
+    private static readonly Dictionary<string, AreaArc[]> AreaCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The areas of its &lt;AI&gt;: the arcs of the TargetAreaDefinition spell, else <see cref="DefaultAreas"/>.</summary>
+    public IReadOnlyList<AreaArc> Areas(World world)
+    {
+        if (Script.AreaSpell is not { } name || world.Spells?.Template(name) is not { } spell) return DefaultAreas;
+        lock (AreaCache)
+        {
+            if (AreaCache.TryGetValue(name, out var known)) return known;
+            var arcs = System.Xml.Linq.Extensions.Descendants(spell.Effects.Where(e => e.Name.LocalName == "spelleffectarea"), "node")
+                .SelectMany(n => n.Elements("arc").Select(a => new AreaArc((string?)a.Attribute("name") ?? "", AiScript.Num(n, "angle"), AiScript.Num(a, "angle"),
+                    AiScript.Num(a, "innerradius"), AiScript.Num(a, "outerradius", 100))))
+                .Where(a => a.Name.Length > 0).ToArray();
+            return AreaCache[name] = arcs.Length > 0 ? arcs : DefaultAreas;
+        }
+    }
+
+    /// <summary>
+    /// The area with the most threat (type="threat"): the valid players of its threat list for which the leaf's own conditions hold, their
+    /// threat summed per area. front, right, back and left split the circle and are compared with each other; a diagonal area (frontright …)
+    /// with all of them. Null when no area has any; a tie goes to the first in the definition.
+    /// </summary>
+    private AreaArc? Highest(World world, Map map, AiLeaf leaf)
+    {
+        var cardinal = leaf.Area is "front" or "back" or "left" or "right";
+        var now = world.GameNow;
+        var players = Me.Threat.Where(t => MobCasts.Valid(t.Key, map, now) && Holds(world, map, leaf.Inner, t.Key))
+            .Select(t => (At: t.Key.PositionAt(DateTime.UtcNow), Threat: t.Value)).ToList();
+        AreaArc? best = null;
+        var most = 0.0;
+        foreach (var a in Areas(world))
+        {
+            if (cardinal && a.Name is not ("front" or "back" or "left" or "right")) continue;
+            var sum = players.Where(p => a.Holds(Me, p.At)).Sum(p => p.Threat);
+            if (sum > most) (best, most) = (a, sum);
+        }
+        return best;
     }
 
     /// <summary>

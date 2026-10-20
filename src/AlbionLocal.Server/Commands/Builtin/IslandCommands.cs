@@ -53,6 +53,20 @@ public static class IslandCommands
         ctx.Reply(lines.Count == 0 ? "no islands" : string.Join("\n", lines));
     }
 
+    /// <summary>
+    /// .labourer finish: on the island the player stands on (its own or another's), every labourer has settled in at once and every running
+    /// job ends now, so the job's loot can be taken (LaborerTakeJobLoot); the count of labourers changed.
+    /// </summary>
+    [Command("labourer finish", Level = AccountLevel.GameMaster, Help = "on this island: every labourer settled in and every running job done now")]
+    public static void LabourerFinish(CommandContext ctx)
+    {
+        var player = ctx.RequirePlayer();
+        var islands = Islands(ctx);
+        if (player.Map is not { } map || islands.Find(map.Cluster) is not { } island) throw new CommandError("the player is not on an island (.island go)");
+        var n = islands.FinishAll(map);
+        ctx.Reply($"{island}: {n} labourer(s) settled in or done with their job");
+    }
+
     /// <summary>.island go [city]: onto the player's island as after a journey, without the merchant's window.</summary>
     [Command("island go", Level = AccountLevel.GameMaster, Help = "takes the player onto its island (as a journey) [city id: which one]")]
     public static void Go(CommandContext ctx, string city = "")

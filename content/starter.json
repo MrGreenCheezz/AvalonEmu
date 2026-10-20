@@ -7,15 +7,15 @@
   "Position": [0, 0],         // Join key 9
   "Silver": 0,                // whole silver to start with (Join key 33; repairs, shops, crafting and the market cost silver)
   "Equipment": {              // by slot: mainhand, offhand, head, armor, shoes, bag, cape, mount, potion, food
-    "mainhand": "T4_MAIN_SWORD",
-    "head": "T4_HEAD_PLATE_SET1",
-    "armor": "T4_ARMOR_PLATE_SET1",
-    "shoes": "T4_SHOES_PLATE_SET1",
-    "bag": "T4_BAG",
-    "cape": "T4_CAPE"
+    "bag": "T2_BAG",          // the lowest bag, cape and mount the game has (there are no T1 ones)
+    "cape": "T2_CAPE",
+    "mount": "T2_MOUNT_MULE"
   },
-  "Inventory": [              // slots in order, null = empty slot
-    { "Name": "T4_ORE", "Count": 10 },
-    { "Name": "T4_WOOD", "Count": 10 }
+  "Inventory": [              // slots in order, null = empty slot: the T1 gathering tools (the fishing rod starts at T3)
+    "T1_2H_TOOL_AXE",
+    "T1_2H_TOOL_PICK",
+    "T1_2H_TOOL_SICKLE",
+    "T1_2H_TOOL_HAMMER",
+    "T1_2H_TOOL_KNIFE"
   ]
 }

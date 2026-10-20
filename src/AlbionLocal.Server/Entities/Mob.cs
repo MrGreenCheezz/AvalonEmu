@@ -116,7 +116,9 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
     public bool Immune { get; internal set; }
 
     /// <summary>Its active spells (stageD effects SPEC §1): the players' damage over time and debuffs, its return-home buff.</summary>
-    public Systems.EffectList Effects { get; } = new();
+    public Systems.EffectList Effects => _effects ??= new() { Owner = this };
+
+    private Systems.EffectList? _effects;
 
     /// <summary>StageH bosses SPEC §4.1: the world boss slot it stands for (<see cref="Systems.WorldBosses"/>); null for every other mob.</summary>
     public Systems.WorldBosses.Slot? Boss { get; init; }
@@ -132,6 +134,9 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
 
     /// <summary>Stage I: a factor on its kill fame (a T9/T10 invasion's wave mob); 1 for every other mob.</summary>
     public double FameFactor { get; init; } = 1;
+
+    /// <summary>Studio phase 3: the content pack's mob variant it is (mods/&lt;pack&gt;/server/mobs.json, <see cref="Mods.ModVariant"/>): its extra loot lists and drop rules; null for every other mob.</summary>
+    public string? Variant { get; init; }
 
     /// <summary>StageG: the dungeon level's mobmodifier it carries from its spawn (<see cref="SpawnManager.LevelBuff"/>); null off a dungeon floor of level 1-4.</summary>
     public SpellTemplate? LevelBuff { get; internal set; }

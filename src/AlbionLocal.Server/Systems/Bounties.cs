@@ -155,12 +155,14 @@ public sealed class Bounties(World world)
     /// <summary>An expedition completed by <paramref name="p"/> (of a tier from MinTier).</summary>
     public void ExpeditionFinished(Player p, int tier)
     {
+        world.Plugins.GoalCompleted(p, "expedition", $"a T{tier} expedition"); // the plugins' GoalCompleted
         if (Settings.Enabled) Count(p, b => b.Kind == "expedition" && tier >= b.MinTier, 1);
     }
 
     /// <summary>StageL: a corrupted dungeon completed by <paramref name="p"/> (its rank's tier 5 / 6 / 8 from MinTier).</summary>
     public void CorruptedCompleted(Player p, int tier)
     {
+        world.Plugins.GoalCompleted(p, "corrupted", $"a T{tier} corrupted dungeon"); // the plugins' GoalCompleted
         if (Settings.Enabled) Count(p, b => b.Kind == "corrupted" && tier >= b.MinTier, 1);
     }
 
@@ -247,6 +249,7 @@ public sealed class Bounties(World world)
         Expeditions.Tell(p, $"Bounty complete: {a.Bounty.Describe()}. Reward: {(given.Count == 0 ? "none" : string.Join(", ", given))}"
             + (fits ? "" : mailed ? "; the items do not fit the inventory and come by mail" : "; the items do not fit the inventory: free some room and type .bounty claim"));
         Log.Info("world", $"'{p.Character.Name}' completed bounty {a.Key}");
+        world.Plugins.GoalCompleted(p, "bounty", a.Bounty.Describe()); // the plugins' GoalCompleted
     }
 
     /// <summary>The reward of <paramref name="b"/>: silver and fame now, the items when all fit (<paramref name="fits"/> false: none given).</summary>

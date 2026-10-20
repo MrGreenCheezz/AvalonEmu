@@ -43,6 +43,12 @@ public sealed class Map(string cluster)
     /// <summary>The player or bot with object id <paramref name="id"/> on the map; null when none (an AttackStart's target, a killer).</summary>
     public Player? FindPlayer(long id) => _players.GetValueOrDefault(id) ?? _bots.GetValueOrDefault(id);
 
+    /// <summary>
+    /// StageN companions: the units mobs fight on the map: the joined players, then the hired companions (<see cref="Player.IsCompanion"/>);
+    /// the other bots never meet a mob.
+    /// </summary>
+    public IEnumerable<Player> Fighters => _bots.Count == 0 ? _players.Values : _players.Values.Concat(_bots.Values.Where(b => b.IsCompanion));
+
     /// <summary>The players, then the bots (stageJ pvp-spells SPEC §2.1): what the scans of a player's spells look at (areas, auras, radius nodes, chains).</summary>
     public IEnumerable<Player> Characters => _players.Values.Concat(_bots.Values);
 
@@ -155,6 +161,7 @@ public sealed class Map(string cluster)
         _objects.Add(o.Id, o);
         Grid.Add(o);
         foreach (var player in _players.Values) player.Visibility.Show(o);
+        if (o is Mob { World: { } world } mob) world.Plugins.MobSpawned(mob); // the plugins' MobSpawned
     }
 
     /// <summary>

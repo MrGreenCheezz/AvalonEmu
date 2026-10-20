@@ -335,7 +335,7 @@ public sealed class LocationMarker(long id, LocationMarkerSpawn spawn) : WorldOb
 /// resource prefab the client's placement put on a node tile (stage 4b, <see cref="HarvestableSpawn.Prefab"/>,
 /// <see cref="ResourceLayout"/>). Sent in NewSimpleHarvestableObjectList 39 (<see cref="Lists"/>); WOOD, ROCK, FIBER and
 /// ORE bind to the landscape tile at the exact position. Never left; re-sent on re-entry, with the charges it has then (a
-/// depleted one with 0: captures/albion_20261016_002835, nodes 2660, 2239, 2223). An enchanted resource node
+/// depleted one with 0: capture 002835, nodes 2660, 2239, 2223). An enchanted resource node
 /// (<see cref="RareState"/> &gt; 0) is not in the lists: it comes as NewHarvestableObject 40 (<see cref="BuildCreate"/>,
 /// stage 4b SPEC §5.4) and is left by visibility. <see cref="Charges"/> starts full; gathering takes them
 /// (World/Harvesting.cs, stage 4a) and the regrowth timer of the map gives them back one step at a time (<see cref="RegrowAt"/>).
@@ -394,7 +394,7 @@ public sealed class Harvestable(long id, HarvestableSpawn spawn) : WorldObject(i
     /// start), 5 type (sent also as 0, WOOD), 6 short -1 (no mob type: a resource), 7 tier, 8 the prefab position (bound as
     /// in list 39), 9 direction (left out at 0), 10 charges (sent also as 0), 11 rare state}; keys 1 and 3 (dead mob,
     /// owner) are corpse keys and left out.
-    /// A corpse (<see cref="Corpse"/>; the 10 mob-derived ones of captures/albion_20261016_002835, HARVEST.md §2): {0 id, 1 the
+    /// A corpse (<see cref="Corpse"/>; the 10 mob-derived ones of capture 002835, HARVEST.md §2): {0 id, 1 the
     /// dead mob's object id, 2 GameTimeStamp = the end of its loot protection, 3 Guid owner = the killer's character, 5
     /// type, 6 mob type (mobs.xml index + 16, NewMob key 1), 7 tier, 8 the death position, 9 the mob's facing, 10 charges, 11
     /// rare state}; 5, 10 and 11 go out also as 0, as captured (depleted corpses with 10 = 0, every corpse with 11 = 0).

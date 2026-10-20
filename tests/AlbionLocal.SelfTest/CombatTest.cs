@@ -29,6 +29,7 @@ public static class CombatTest
         ("combat: fire staff at IP 1050: FIRESTAFFBOLT2 after 0.8 s with energy 8, projectile hit, 4 ticks over time, CastCancel, combat timeout", FireStaff),
         ("loot: shift+click from a bag into stacks, a full inventory and a freed slot (InventoryMoveGivenItems counts)", LootIntoStacks),
         ("loot: roll rates of the 18 captured kills (loot.xml, total loot factor, black market chance; fixed seed) and the Economy/Loot config", LootRates),
+        ("loot balance: a T5 CORRUPTED_HERETIC_CHEST_RARE under the pve preset, 300 rolls: average items and gear, tier sanity, BM soft cap (loot-balance SPEC)", LootBalance),
     ];
 
     private static ClusterStore Store => Client.Clusters!;
@@ -270,6 +271,38 @@ public static class CombatTest
               "Economy:SilverPickupFactor 1 and SilverPickupTax 0 by default (no premium, no guild), Loot:BlackMarketChance 0.1; the captured 1.5 / 0.15 can be set");
         try { ServerConfig.Load(path, ["--Economy:SilverPickupTax=2"]); Check(false, "a tax of 200 % accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("SilverPickupTax"), "Economy:SilverPickupTax is 0..1"); }
+    }
+
+    /// <summary>
+    /// Loot balance (analysis/work/stageN/loot-balance/SPEC.md §4): 300 rolls of the T5 corrupted rare chest as OpenChest rolls it under
+    /// the pve preset (factor Rates:Loot 1, no cluster moblootfactor, Loot:BlackMarketChance 0.15, soft cap 4, content tier 5; the live
+    /// report had 41 items with T7 gear) average 4-14 items with at most 8 pieces of gear, gear above T6 only now and then (the data's
+    /// rare T7 list), never above T7; the old roll (1.33 × 0.9 × 1.5, BM 0.525, no cap or tier) for contrast.
+    /// </summary>
+    private static void LootBalance()
+    {
+        var pve = ServerConfig.Load(Path.Combine(NewDir(), "none.json"), []);
+        Check(pve is { LootBlackMarketChance: 0.15, LootBlackMarketSoftCap: 4 } && pve.Rates.Loot == 1, "pve preset: Loot:BlackMarketChance 0.15, soft cap 4, Rates:Loot 1");
+        var chest = Store.LootChests!.Chests["CORRUPTED_HERETIC_CHEST_RARE"].States[0].LootFor(5)!;
+        (double Items, double Gear, double High, int Max) Roll(int rounds, double factor, double bm, int tier, int cap)
+        {
+            var rng = new Random(20261018);
+            var (items, gear, high, max) = (0, 0, 0, 0);
+            for (var i = 0; i < rounds; i++)
+                foreach (var (name, amount) in Store.Loot.RollMob(chest, rng, factor, bm, null, tier, cap))
+                {
+                    if (Client.Items.Find(name) is not { IsEquipment: true }) { items++; continue; }
+                    (items, gear) = (items + amount, gear + amount);
+                    var t = LootTables.TierOf(name);
+                    if (t > 6) high += amount;
+                    max = Math.Max(max, t);
+                }
+            return ((double)items / rounds, (double)gear / rounds, (double)high / rounds, max);
+        }
+        var now = Roll(300, pve.Rates.Loot, pve.LootBlackMarketChance, 5, pve.LootBlackMarketSoftCap);
+        var old = Roll(100, 1.33 * 0.9 * 1.5, 0.525, 0, 0);
+        Check(now.Items is > 4 and < 14 && now.Gear < 8 && now.High < 0.25 && now.Max <= 7 && old.Items > 25,
+              $"T5 corrupted rare chest: {now.Items:0.#} items, {now.Gear:0.#} gear, {now.High:0.###} above T6 per chest, max T{now.Max} (the old roll {old.Items:0.#} items, {old.Gear:0.#} gear)");
     }
 
     private static void AxeFight()

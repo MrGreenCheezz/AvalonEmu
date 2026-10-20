@@ -100,11 +100,11 @@ public static class AccountCommands
     }
 
     /// <summary>Whether the account has an open connection or a player in the world.</summary>
-    private static bool Online(World world, Guid account) =>
+    internal static bool Online(World world, Guid account) =>
         world.Accounts.Sessions(account).Count > 0 || world.Maps.Maps.Any(m => m.Players.Values.Any(p => p.Character.Account == account));
 
     /// <summary>Closes every connection of the account (its login and game sessions, players in the world); how many.</summary>
-    private static int Kick(World world, Guid account, string why)
+    internal static int Kick(World world, Guid account, string why)
     {
         var sessions = world.Accounts.Sessions(account).ToHashSet();
         foreach (var p in world.Maps.Maps.SelectMany(m => m.Players.Values).Where(p => p.Character.Account == account).ToList())

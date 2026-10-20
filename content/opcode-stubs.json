@@ -16,18 +16,18 @@
 // Read at server start: an unknown operation, kind, key or field, a value that does not fit its field, an operation
 // that has a handler, fields or "silent" without a response class, or "ack" / "ignore" with one stops the start.
 // Each entry was checked against the client's response handler (345319, analysis/NOTES-protocol.md "Opcode stubs") or,
-// for silent, ack and ignore, against the official answers in the captures (103829, 114814, 20261016_002835).
+// for silent, ack and ignore, against the official answers in the captures (103829, 114814, 002835).
 // Answered in code since the ops audit (stageH ops-audit SPEC): SubscribeToCluster, TravelIslandShowroom,
 // GetPersonalSeasonPastRewardData, GetFactionWarfareCampaignData, TrackAlbionJournalAchievements, QuickSellAuctionQueryAction; since the
 // goals (PVE-DESIGN step 11): GetPersonalSeasonTrackerData, GetCharacterSteamAchievements, ClaimAlbionJournalReward; since the
 // island farms (PVE-DESIGN step 14 phase 3): PlaceableObjectPlace, BoostFarmable; since the mail (stageJ mail SPEC): ReadMail.
+// Since the vanity (stageN vanity SPEC): GetVanityUnlocks.
 {
   // ---- login server
   "AccountSubscriptionInfo": {},      // c3d.j.c: key 0 (character Guids), keys 1/2 per entry; none = no flags
   "GetSurveyLogs": {},                // c3d.cl: rows up to the shortest of keys 0-2; none = no surveys
 
   // ---- game server
-  "GetVanityUnlocks": {},             // cjk.b: key 0 = unlocked vanity ids; none = nothing unlocked
   "GetVanityConsumables": {},         // cjk.c.c → bh(bcm, ajg): keys 0/1 parallel; none = no consumables
   "ArmoryItemUsageStatistics": {},    // ItemDetailsPopularBuildsView.OnSearchResult: empty key 0 = view stays hidden
   "GoldMarketGetInfos": {},           // del.x: thirteen numbers kept as they are
@@ -37,7 +37,6 @@
   "GoldMarketGetSellOffer": {},       // GetGoldView: as GoldMarketGetBuyOffer
   "GetMatches": {},                   // dd0.b: rows of key 1; none = no matches
   "AuctionGetLowestOfferPrices": {},  // stage 6d: keys 0/1 parallel (item type, lowest price); none = no price shown
-  "AuctionGetItemAverageStats": {},   // stage 6d: keys 0-2 parallel price history; none = no history
   "GetClusterMapInfo": {},            // c32.n.b → the map's callback; the world map opened fine with it (2026-10-15)
 
   // ---- the empty answer the unhandled default sent already, kept as it is without the warning (ops-audit SPEC §1:
@@ -72,7 +71,7 @@
   },
 
   // ---- never answered by the official server, although the client has a response class (requests / responses in the
-  // captures 103829, 114814, 20261016_002835; the unhandled default answered them with the empty response)
+  // captures 103829, 114814, 002835; the unhandled default answered them with the empty response)
   // (CastStart and RegisterToObject were here: since stage 5b/5c their handlers keep that silence, CombatHandler and LootHandler;
   // ActionOnBuildingStart too: since stage 6 its handler answers only a failure, BuildingActionHandler; ChangeUseFlag and
   // SetAchievementsAutoLearn since stageJ focus-lp, FocusHandler)

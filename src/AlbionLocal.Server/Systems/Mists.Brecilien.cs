@@ -193,6 +193,7 @@ public sealed partial class Mists
         }
         foreach (var (name, amount) in recipe.Currencies)
         {
+            if (name.StartsWith("FACTION_", StringComparison.Ordinal)) continue; // Factions.ShopRefusal's
             if (name != "FAVOR") return $"the currency {name} is not kept on this server";
             var need = (long)Math.Round(amount * 10000) * crafts;
             if (c.MistFavor < need) return string.Create(CultureInfo.InvariantCulture, $"{c.MistFavor / 10000} of {need / 10000} FAVOR");

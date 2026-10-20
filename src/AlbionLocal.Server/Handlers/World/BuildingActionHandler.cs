@@ -51,7 +51,7 @@ public sealed partial class WorldSession
     /// <summary>The salvage's duration (not captured; as <see cref="RepairTime"/>: gamedata gives both the crafttimefactor 0.1).</summary>
     public static readonly TimeSpan SalvageTime = RepairTime;
 
-    /// <summary>The time per craft at a station (observed 0.31-0.55 s at the meld building of 20261016_002835; Q-C3).</summary>
+    /// <summary>The time per craft at a station (observed 0.31-0.55 s at the meld building of 002835; Q-C3).</summary>
     public static readonly TimeSpan CraftTime = TimeSpan.FromSeconds(0.4);
 
     /// <summary>
@@ -70,7 +70,7 @@ public sealed partial class WorldSession
         if (player.Action is { Over: false } busy)
             return Generic($"another station action runs at building {busy.Building.Id}");
         var far = Vector2.Distance(player.PositionAt(DateTime.UtcNow), building.Position) > StationRange;
-        return (StationAction)req.p switch
+        var answer = (StationAction)req.p switch
         {
             StationAction.RepairItem when !building.Template.Repairs => Generic($"{building.Template.Name} does not repair"),
             StationAction.RepairItem when far => StationRefused(player, req, StationComponentError, (byte)RepairError.OutOfRange, "out of range"),
@@ -87,8 +87,14 @@ public sealed partial class WorldSession
             StationAction.RerollQuality when !building.Template.RerollsQuality => Generic($"{building.Template.Name} does not reroll quality"),
             StationAction.RerollQuality when far => StationRefused(player, req, StationComponentError, (byte)RerollError.OutOfRange, "out of range"),
             StationAction.RerollQuality => StartReroll(player, building, req),
+            StationAction.Awaken when !building.Template.Awakens => Generic($"{building.Template.Name} does not awaken"),
+            StationAction.Awaken when far => StationRefused(player, req, StationComponentError, (byte)AwakenError.OutOfRange, "out of range"),
+            StationAction.Awaken => StartLegendary(player, building, req),
             _ => Generic($"ACT {req.p} is not made yet"),
         };
+        // The plugins' BuildingAction: a started action gets no response (a refusal does).
+        world.Plugins.BuildingAction(player, building.Template.Name, ((StationAction)req.p).ToString(), answer is null);
+        return answer;
     }
 
     /// <summary>The failure response of op 55 (see the class), logged with why.</summary>
@@ -318,10 +324,11 @@ public sealed partial class WorldSession
         var recipe = item.Recipes[req.v];
         if (req.w <= 0 || req.w > 9999) return Generic($"amount {req.w}");
         // StageL mists phase B: the City Trader's standing gates and FAVOR (Systems/Mists) are kept; every other kind is not yet.
-        if (recipe.Gold > 0 || recipe.Unsupported.Any(u => !Systems.Mists.Supports(u)))
+        if (recipe.Gold > 0 || recipe.Unsupported.Any(u => !Systems.Mists.Supports(u) && !Systems.Factions.Supports(u)))
             return Refuse(CraftError.NotEnoughResources, $"the recipe needs {(recipe.Gold > 0 ? "gold" : string.Join(", ", recipe.Unsupported))}, not made here yet");
         var crafts = Pricing.Crafts(req.w, recipe.AmountCrafted);
         if (world.Mists.TraderRefusal(player, recipe, crafts) is { } gated) return Refuse(CraftError.NotEnoughResources, gated);
+        if (world.Factions.ShopRefusal(player, recipe, crafts, building.Template) is { } faction) return Refuse(CraftError.NotEnoughResources, faction); // stageN faction SPEC §3
         var price = Pricing.CraftPrice(recipe, crafts);
         if (!Pricing.Accepts(req.r, price))
             return Refuse(CraftError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.r / 10000.0:0.####} is not the server's {price / 10000.0:0.####}"));
@@ -347,6 +354,7 @@ public sealed partial class WorldSession
         SendEvent(building.NewBuilding(inUse: true));                                          // 1.
         Wallet.TrySpend(player, req.r, $"{crafts} x {item.Name} at {building.Template.Name}"); // 2. UpdateMoney
         world.Mists.PayFavor(player, recipe, crafts); // stageL mists phase B: the City Trader's FAVOR
+        world.Factions.Pay(player, recipe, crafts);   // stageN faction SPEC §3: the faction trader's FACTION_* points
 
         double focusUsed = 0, focusShare = 0;
         if (!building.Template.IsShop)
@@ -388,6 +396,7 @@ public sealed partial class WorldSession
                 made.AddRange(GiveItem(player, item, item.IsEquipment ? 1 : batch * recipe.AmountCrafted, item.IsEquipment ? RollQuality(world.CraftRandom, world.Economy.QualityWeights, qualityBonus) : 1));
             if (returns > 0) GiveReturns(player, recipe, batch, returns);
             if (fames) AwardCraftFame(player, item, batch * recipe.AmountCrafted);
+            world.Plugins.ItemCrafted(player, item.Name, batch * recipe.AmountCrafted, building.Template.Name); // the plugins' ItemCrafted
             SendEvent(new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] }); // 6.
             if (!instant) player.SendToObservers(new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] });
             if (done < crafts)

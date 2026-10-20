@@ -221,13 +221,14 @@ public static class BotStageMTest
             var r = Ask(target.Character.Id);
             var ids = (long[])r.Parameters[1]!;
             var worn = Enumerable.Range(0, 10).Select(s => target.Inventory.Equipment[s]?.Id ?? 0).ToArray();
-            var sent = Of(peer, EventCodes.NewEquipmentItem, mark).Select(p => L(p, 0)).ToHashSet();
+            // Stackables (a botpower bot's potion and meal) go as NewSimpleItem.
+            var sent = Of(peer, EventCodes.NewEquipmentItem, mark).Concat(Of(peer, EventCodes.NewSimpleItem, mark)).Select(p => L(p, 0)).ToHashSet();
             var mastery = (byte[])r.Parameters[2]!;
             var expected = Enumerable.Range(0, 10).Select(s => s < 5 && target.Inventory.Equipment[s] is { } i ? (byte)(WorldSession.MasteryLevel(target, i) + 1) : (byte)0).ToArray();
             var who = target == far ? "a human on another map" : target.IsBot ? "the bot" : "a human";
             Check(r.ReturnCode == 0 && new Guid((byte[])r.Parameters[0]!) == target.Character.Id && ids.SequenceEqual(worn) && worn.Where(id => id != 0).All(sent.Contains)
                   && Convert.ToSingle(r.Parameters[3]) > 0 && mastery.SequenceEqual(expected) && (!target.IsBot || mastery[0] > 1),
-                  $"{who}: rc 0, its Guid, {worn.Count(id => id != 0)} item ids by slot each sent as NewEquipmentItem, mastery+1 [{string.Join(",", mastery)}], item power {r.Parameters.GetValueOrDefault((byte)3)}");
+                  $"{who}: rc 0, its Guid, {worn.Count(id => id != 0)} item ids by slot each sent as NewEquipmentItem (stackables NewSimpleItem), mastery+1 [{string.Join(",", mastery)}], item power {r.Parameters.GetValueOrDefault((byte)3)}");
         }
         Check(Ask(Guid.NewGuid()).ReturnCode == WorldSession.InspectNotFound, "an unknown Guid: rc 1 (the client's OnRequestFailed)");
     }

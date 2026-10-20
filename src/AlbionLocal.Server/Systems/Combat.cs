@@ -161,9 +161,13 @@ public static class Combat
     }
 
     /// <summary>The item power of <paramref name="item"/> as worn by <paramref name="p"/> (<see cref="StatCalculator.ItemPower"/>: quality, destiny board, wear); items.xml itempower without game data.</summary>
-    public static double ItemPower(Player p, Item item) =>
-        p.World.StatCalculator is { } calc ? calc.ItemPower(item.ForStats(), p.Progression?.Levels ?? new SortedDictionary<int, int>())
-            : double.TryParse(Attr(item.Template, "itempower"), NumberStyles.Float, CultureInfo.InvariantCulture, out var ip) ? ip : 0;
+    /// <remarks>An awakened weapon attuned to <paramref name="p"/> adds its TRAIT_ITEM_POWER (<see cref="Passives.TraitItemPower"/>).</remarks>
+    public static double ItemPower(Player p, Item item) => p.World.Plugins.ItemPower(p, item, ItemPowerOf(p, item)); // Formulas.OnCalcItemPower
+
+    private static double ItemPowerOf(Player p, Item item) =>
+        (p.World.StatCalculator is { } calc ? calc.ItemPower(item.ForStats(), p.Progression?.Levels ?? new SortedDictionary<int, int>())
+            : double.TryParse(Attr(item.Template, "itempower"), NumberStyles.Float, CultureInfo.InvariantCulture, out var ip) ? ip : 0)
+        + (item.Soul is null ? 0 : Passives.TraitItemPower(p, item));
 
     /// <summary>The ItemPowerProgression section's combat progressions of <paramref name="item"/>; null = no scaling.</summary>
     public static CombatProgression? ProgressionOf(World world, Item item) =>
@@ -334,14 +338,20 @@ public static class Combat
     /// <see cref="World.MobAi"/> the damage is threat for the attacker (<see cref="AI.MobAI.OnDamaged"/>). Nothing either from
     /// an attacker knocked down meanwhile (a cast hit or projectile in flight, a pulse: SPEC §5e.1, no combat while down).
     /// StageD part B: nothing on a nothittablebyothers mob, damage shields first, then the attacker's DoDamage / DoDirectDamage triggers.
-    /// Never from a bot (bots never fight mobs; its spells' scans skip them already, stageJ pvp-spells SPEC §2.9).
+    /// Never from a bot (bots never fight mobs; its spells' scans skip them already, stageJ pvp-spells SPEC §2.9) but a hired companion (stageN).
     /// </summary>
     public static void Damage(Player attacker, Mob target, double amount, EffectType type, HitOrigin origin, short spell, long ticks, AlbionEvent? hit = null)
     {
-        if (!target.Attackable || target.Map is not { } map || target.Immune || attacker.Combat.Down is not null || attacker.IsBot) return;
+        // StageN companions: a hired companion fights mobs (Companions:DamageFactor); the other bots never do.
+        if (!target.Attackable || target.Map is not { } map || target.Immune || attacker.Combat.Down is not null || attacker.IsBot && !attacker.IsCompanion) return;
         if (SpellEffects.Invincible(target, ticks) || SpellEffects.NotHittable(target, ticks)) return; // stageD SPEC §3.4: no HealthUpdate
         var world = attacker.World;
+        // A companion whose owner is not in game deals nothing: every kill is credited to a human (fame, loot, journal).
+        var credit = attacker.IsCompanion ? world.Companions.CreditOf(attacker) : attacker;
+        if (credit is null) return;
+        if (attacker.IsCompanion) amount *= world.Config.Companions.DamageFactor;
         var damage = Math.Max(0, Rounded(amount * SpellEffects.TakenFactor(target, fromPlayer: true, ticks)));
+        damage = Rounded(world.Plugins.Damage(attacker, null, null, target, AlbionLocal.Plugin.Api.DamageKind.PlayerToMob, origin == HitOrigin.OverTime, damage)); // the plugins' Damage
         if (target.TargetId == 0) target.TargetId = attacker.Id;
         if (attacker.Map == map) EnterCombat(attacker, target);
         if (origin is not (HitOrigin.Reflected or HitOrigin.OverTime)) SpellEffects.Break(world, attacker, "attacking", ticks); // an invisibility ends with the attack
@@ -358,18 +368,26 @@ public static class Combat
             var left = had - damage;
             if (target.Event is { } run && !attacker.IsBot) WorldEvents.Damaged(run, attacker, Math.Min(damage, had)); // a world event's reward share (never a bot's, stage I)
             var update = HealthUpdate(target.Id, ticks, -damage, Math.Max(0, left), type, origin, attacker.Id, spell);
+            if (damage > 0) SpellEffects.Damaged(target, type, ticks);
             if (left <= 0)
             {
                 target.Health.Set(0, stamp);
-                Kill(world, attacker, target, ticks, hit is null ? [update] : [hit, update]);
+                world.Plugins.HealthChanged(target, had, 0, attacker.Id, spell); // Units.OnHealthChange, before the kill's handling
+                // StageN companions: a companion's kill is its owner's (fame, silver, the loot bag's rights), the owner on the map.
+                Kill(world, credit, target, ticks, hit is null ? [update] : [hit, update]);
             }
             else
             {
                 target.Health.Set(left, stamp);
                 if (hit is not null) map.SendToObservers(target, hit);
                 map.SendToObservers(target, update);
+                world.Plugins.HealthChanged(target, had, left, attacker.Id, spell); // Units.OnHealthChange
                 if (damage > 0) SpellEffects.Break(world, target, "damage", ticks); // a stun or root with damagebreakseffect ends with the hit
-                if (world.MobAi && attacker.Map == map) target.AI.OnDamaged(attacker, damage);
+                if (world.MobAi && attacker.Map == map)
+                {
+                    target.AI.OnDamaged(attacker, world.Plugins.Threat(attacker, target, damage)); // Formulas.OnCalcThreat
+                    if (attacker.IsCompanion) world.Companions.Threat(attacker, target, damage); // a tank's Companions:TankThreatFactor
+                }
             }
         }
         // The attacker's triggers (applyeffectoneventactive, stageD SPEC §3.5), after the hit, the killing one too.
@@ -394,13 +412,14 @@ public static class Combat
     /// </summary>
     public static void DamagePlayer(Mob attacker, Player target, double amount, EffectType type, HitOrigin origin, short spell, long ticks, bool reflectable = true)
     {
-        if (target.IsBot) return; // stage I: mobs never fight bots (they scan the humans only; a guard)
+        if (target.IsBot && !target.IsCompanion) return; // stage I: mobs never fight bots (they scan the humans and companions only; a guard)
         if (target.Map is not { } map || attacker.Map != map || target.Combat.Untouchable || SpellEffects.Invincible(target, ticks)
             || SpellEffects.NotHittable(target, ticks)) return;
         var before = target.Health.At(ticks);
         if (before <= 0) return;
         var world = target.World;
         var damage = Math.Max(0, Rounded(amount * SpellEffects.TakenFactor(target, fromPlayer: false, ticks, target.Defense.DefenseVsMobs)));
+        damage = Rounded(world.Plugins.Damage(null, attacker, target, null, AlbionLocal.Plugin.Api.DamageKind.MobToPlayer, origin == HitOrigin.OverTime, damage)); // the plugins' Damage
         EnterCombat(target, attacker, hit: true);
         // notinterruptible (HYPER_FOCUS) keeps a damagecancelscasting channel too, as it does for stuns (the client side not captured).
         if (target.Combat.Channel is { Info.DamageCancels: true } && !SpellEffects.NotInterruptible(target, ticks))
@@ -419,9 +438,11 @@ public static class Combat
         if (damage > 0 || raw <= 0) // a hit of 0 still goes out; one all on a shield does not
         {
             target.Health.Set(left, Math.Max(ticks, target.Health.Stamp));
+            if (damage > 0) SpellEffects.Damaged(target, type, ticks);
             var e = HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
             target.Session.Send(e);
             target.SendToObservers(e);
+            world.Plugins.HealthChanged(target, health, left, attacker.Id, spell); // Units.OnHealthChange
         }
         if (reflectable) SpellEffects.Reflect(target, attacker, raw, ticks); // reflectdamageactive (batch 2); not a reflectdamage="never" hit
         if (raw > 0) SpellEffects.EnergyOnDamage(target, ticks); // gainenergyondamage (batch 3), a hit on a shield too
@@ -446,7 +467,7 @@ public static class Combat
     /// </summary>
     public static void EnemyGone(Map map, Mob mob)
     {
-        foreach (var p in map.Players.Values.ToList())
+        foreach (var p in map.Fighters.ToList())
             if (p.Combat.Enemies.Remove(mob) && p.Combat.Enemies.Count == 0 && p.Combat.InCombat && !FightsPlayer(p)) EndCombat(p);
     }
 
@@ -472,6 +493,7 @@ public static class Combat
         var e = HealthUpdate(target.Id, ticks, after - before, after, EffectType.Magic, origin, caster.Id, spell);
         target.Session.Send(e);
         target.SendToObservers(e);
+        target.World.Plugins.HealthChanged(target, before, after, caster.Id, spell); // Units.OnHealthChange
         if (target.World.MobAi && target.Map is { } map) AI.MobAI.Healed(map, caster, target, after - before);
     }
 
@@ -552,7 +574,7 @@ public static class Combat
                 Reputation.Gain(p, gain / 10000.0, Reputation.MobKill, (short)t.Index);
                 // StageN spells-bosses: the fame buffs of the mob's category (the dungeon and roaming fame events, the world boss's death spell).
                 var buff = FameBuff(world, p, mob, map);
-                Destiny.Award(p, buff == 1 ? gain : Rates.ScaleFame(gain, buff), Destiny.Kill(p, t.Tier), buff == 1 ? bonus : Rates.ScaleFame(bonus, buff));
+                Destiny.Award(p, world.Plugins.Fame(p, mob, buff == 1 ? gain : Rates.ScaleFame(gain, buff)), Destiny.Kill(p, t.Tier), buff == 1 ? bonus : Rates.ScaleFame(bonus, buff)); // Formulas.OnCalcFame
             }
         DropSilver(world, killer, mob, ticks, danger);
         Corpses.Drop(world, killer, mob, ticks);
@@ -574,7 +596,7 @@ public static class Combat
         }
         // 2. The combat end of the players whose last enemy it was: the killer's in this batch.
         var ended = new List<Player>();
-        foreach (var p in map.Players.Values)
+        foreach (var p in map.Fighters)
             if (p.Combat.Enemies.Remove(mob) && p.Combat.Enemies.Count == 0 && p.Combat.InCombat && !FightsPlayer(p)) ended.Add(p);
         if (ended.Remove(killer)) EndCombat(killer);
         // 3. The loot bag, 4. the death clear and the killing hit.
@@ -591,6 +613,8 @@ public static class Combat
         // a camp quest counts its raw fame (× the zone's famefactor / mindivisor, no rates).
         world.WorldChests.Killed(map, killer, mob, t.Fame * (danger?.FameFactor ?? 1) / (t.MinDivisor > 0 ? t.MinDivisor : 1));
         world.Bosses.Killed(mob); // stageH: a world boss's slot waits for its next time, the death is announced
+        world.Hunts.Killed(mob, killer); // stageN hunts: a hunt's target slain wins the hunt (fame, HuntFinished)
+        world.Vanity.Killed(killer, mob, bossLooters); // stageN vanity: a boss, miniboss or champion may drop a cosmetic (very rarely)
         world.Expeditions.Killed(map, mob); // stageH: an expedition's task counts it (261 to the members inside)
         world.Dungeons.Killed(map, mob); // stageH: a dungeon boss frees the boss chests it guarded
         world.Corrupted.Killed(map, killer, mob); // stageL: a corrupted dungeon's points (451), the demon, its completion, the chest guards
@@ -606,6 +630,7 @@ public static class Combat
         world.Guilds.Killed(map, mob, credited); // guilds SPEC §10.3/§10.6: the clear experience of a dungeon boss, the contracts
         world.GuildGoals.OnKill(map, killer, mob, credited); // stage I: the weekly guild goals (killmobs, bosses, dungeons)
         foreach (var p in credited.Contains(killer) ? credited : [killer, .. credited]) Seasons.OnBossKill(p, mob);
+        world.Plugins.MobDied(mob, killer, credited); // the plugins' MobDied, after every system's own handling
         Log.Info("combat", string.Create(CultureInfo.InvariantCulture,
             $"'{killer.Character.Name}' killed {mob}: fame {gain / 10000.0:0.####}{(group.Count > 1 ? $" each for {group.Count} party members" : "")} (total {killer.Character.Fame / 10000.0:0.####}), energy +{t.EnergyReward}"));
         // 5./6. A corpse until postDeathLifetime, then off the map; its spawn point respawns.
@@ -618,7 +643,8 @@ public static class Combat
 
     /// <summary>
     /// The items <paramref name="mob"/> drops (its &lt;Loot&gt; rolled with loot.xml on the map's random, with the cluster's
-    /// moblootfactor × globalmoblootfactor × Rates:Loot as the total loot factor and Loot:BlackMarketChance × Rates:Loot (at most 1) for the useblackmarket items:
+    /// moblootfactor × globalmoblootfactor × Rates:Loot as the total loot factor, Loot:BlackMarketChance (not × Rates:Loot: it is on the
+    /// factor already) and Loot:BlackMarketSoftCap for the useblackmarket items and the mob's tier as the content tier (loot-balance SPEC):
     /// <see cref="Data.LootTables.RollMob"/>; or <see cref="World.LootOverride"/>) into a <see cref="LootBag"/> for <paramref name="killer"/> at the mob's position,
     /// put on the map (NewLoot to the players in view) and taken off again after the bag time. Nothing when nothing drops;
     /// items the server cannot create are logged and left out. A stackable item is one stack of its amount, equipment one
@@ -631,10 +657,15 @@ public static class Combat
         IReadOnlyList<(string Item, int Amount)> drops = world.LootOverride?.Invoke(mob)
             ?? (mob.Template.Loot is { } loot && world.Clusters?.LootIfLoaded is { } tables
                 ? tables.RollMob(loot, map.Random, (danger?.MobLootFactor ?? 1) * (world.GameData?.GlobalMobLootFactor ?? 1) * (map.Difficulty?.Loot ?? 1) * world.Rates.Loot,
-                    Math.Min(1, world.Config.LootBlackMarketChance * world.Rates.Loot),
-                    name => LogOnce("loot:" + name, $"loot list {name} of {mob.Template.Name} is not in loot.xml"))
+                    world.Config.LootBlackMarketChance,
+                    name => LogOnce("loot:" + name, $"loot list {name} of {mob.Template.Name} is not in loot.xml"),
+                    mob.Template.Tier, world.Config.LootBlackMarketSoftCap)
                 : []);
         if (world.LootOverride is null) drops = WithTicket(world, mob, map, drops);
+        if (world.LootOverride is null) // content packs (Mods:Packs): drop rules, and a mob variant's loot lists (official ones rolled with loot.xml)
+            drops = world.ModDrops.ForMob(mob.Template.Name, mob.Template.Category, world.Rates.Loot, drops, mob.Variant,
+                world.Clusters?.LootIfLoaded is { } official ? name => official.RollList(name, map.Random) : null);
+        drops = world.Plugins.LootRolled(mob, killer, drops); // the plugins' LootRolled (may add or remove items)
         var items = new List<Item>();
         foreach (var (name, amount) in drops)
         {
@@ -706,6 +737,7 @@ public static class Combat
             // Guilds SPEC §10.3: the silver perk of the killer's guild level, a Rates-like factor.
             var amount = (int)Math.Round(level.ExactYield * mob.Template.SilverModifier * (0.84 + 0.04 * map.Random.NextDouble()) * (map.Difficulty?.Silver ?? 1) * world.Rates.Silver
                 * (1 + world.Guilds.SilverBonus(killer)), MidpointRounding.AwayFromZero);
+            amount = world.Plugins.Silver(killer, mob, amount); // Formulas.OnCalcSilver
             if (amount <= 0) continue;
             var factor = (danger?.MobSilverLootFactor ?? 1) * (world.GameData?.GlobalMobSilverLootFactor ?? 1);
             var pile = new SilverPile(world.ObjectIds.Next(), mob, amount, factor, killer.Character.Id, ticks, world.Parties.Of(killer.Character.Id)?.Id ?? 0)
@@ -786,6 +818,7 @@ public static class Combat
         if (first && p.IsMounted) p.Session.Send(PlayerCombo(p, now));
         p.Session.Send(new InCombatStateUpdateEvent { ddn = p.Id, cj3 = true, cj4 = c.Hit });
         if (first && !p.IsMounted) p.Session.Send(RegenerationChanged(p, now));
+        if (first) p.World.Plugins.UnitEvent(p.World.Plugins.Hooks.EnterCombat, p); // Units.OnEnterCombat
     }
 
     /// <summary>
@@ -812,6 +845,7 @@ public static class Combat
         if (p.Map is { } map)
             foreach (var mob in map.Objects.Values.OfType<Mob>())
                 if (mob.TargetId == p.Id) mob.TargetId = 0;
+        p.World.Plugins.UnitEvent(p.World.Plugins.Hooks.LeaveCombat, p); // Units.OnLeaveCombat
     }
 
     /// <summary>RegenerationHealthChanged (91, ayl): 0 player, 1 now, 2 current (left out at 0: knocked down), 3 max, 5 regeneration per second (left out at 0: in combat), 6 now (Int64 ticks).</summary>

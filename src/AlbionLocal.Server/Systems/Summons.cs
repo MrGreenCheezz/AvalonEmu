@@ -66,7 +66,7 @@ public static class Summons
         var ttl = SpellTemplate.Float(node, "ttl");
         if (ttl > 0) map.Timers.At(world.Clock.Now + TimeSpan.FromSeconds(ttl), () => Remove(world, mob, "its ttl ran out"));
         // A mob's adds fight its target at once.
-        if (summoner is Mob { TargetId: not 0 } boss && world.MobAi && map.Players.Values.FirstOrDefault(p => p.Id == boss.TargetId) is { } victim)
+        if (summoner is Mob { TargetId: not 0 } boss && world.MobAi && map.Fighters.FirstOrDefault(p => p.Id == boss.TargetId) is { } victim)
             mob.AI.AddThreat(victim, 1);
         return mob;
     }

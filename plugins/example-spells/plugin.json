@@ -1,0 +1,9 @@
+{
+  "name": "example-spells",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "API v2 example: a scripted Clockwork Dash with a lingering slow field, a faster night gallop, a sword that hits harder at low health",
+  "apiVersion": 2,
+  "enabled": false,
+  "dependencies": []
+}

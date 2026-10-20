@@ -52,6 +52,14 @@ public sealed class BuffShrines(World world)
         return shrine;
     }
 
+    /// <summary>A GM's .shrine reset: <paramref name="s"/> Ready again with its charges full (UpdateShrine 397 to the players who see it).</summary>
+    public void Reset(BuffShrine s)
+    {
+        s.Charges = s.Definition.MaxCharges;
+        s.ReadyAt = null;
+        Set(s, BuffShrine.Ready);
+    }
+
     private static bool Alerting(BuffShrineData.Definition d) => d.AlertRadius > 0 && d.Faction.Length > 0 && !d.Faction.Equals("NONE", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Once a second: the shrines of closed maps dropped, the spent ones ready again at their time, the faction shrines locked or unlocked.</summary>

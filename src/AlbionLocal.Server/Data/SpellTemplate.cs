@@ -105,6 +105,9 @@ public sealed class SpellTemplate
     /// </summary>
     public int StackLimit { get; init; } = 1;
 
+    /// <summary>startcharges: the stacks a new entry starts with (FISHINGBAIT_LEVEL1_CHARGE 10, econ SPEC §2.2); 1 when missing.</summary>
+    public int StartCharges { get; init; } = 1;
+
     /// <summary>category: damage, buff, debuff, foodbuff, instant, … (spellimmunity category, removeactiveeffects).</summary>
     public string Category { get; init; } = "";
 
@@ -125,6 +128,9 @@ public sealed class SpellTemplate
 
     /// <summary>interruptiblebyspell (default true): false = an interruptcast does not cancel its cast (UNDEAD_NECROMANCER_SUMMON_*).</summary>
     public bool InterruptibleBySpell { get; init; } = true;
+
+    /// <summary>storedtargettag of a target="storedtarget" spell (AFTER_IMAGE_RETURN IMAGE): the tag of the caster's stored target it is cast at; null = any.</summary>
+    public string? StoredTargetTag { get; init; }
 
     /// <summary>flyspeed of its &lt;projectile&gt; (m/s; FIRESTAFFBOLT2 85); null = no projectile, the hit comes after the hit delay alone.</summary>
     public float? ProjectileSpeed { get; init; }
@@ -171,8 +177,10 @@ public sealed class SpellTemplate
             CastRange = Float(e, "castrange"),
             MaxStack = Math.Max(1, (int)Float(e, "maxstack", 1)),
             StackLimit = Math.Max(1, (int)(e.Attribute("maxstack") is not null ? Float(e, "maxstack", 1) : Float(e, "maxcharges", 1))),
+            StartCharges = Math.Max(1, (int)Float(e, "startcharges", 1)),
             Category = (string?)e.Attribute("category") ?? "",
             InterruptibleBySpell = Bool(e, "interruptiblebyspell", true),
+            StoredTargetTag = (string?)e.Attribute("storedtargettag") is { Length: > 0 } stored ? stored : null,
             UsableInCombat = Bool(e, "usableincombat", true),
             UiType = (string?)e.Attribute("uitype") ?? "",
             CastableWhenSilenced = Bool(e, "castablewhensilenced"),

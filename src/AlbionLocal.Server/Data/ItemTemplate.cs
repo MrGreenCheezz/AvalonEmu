@@ -114,8 +114,11 @@ public sealed class ItemTemplate
     /// <summary>Unique name without the @N enchantment suffix.</summary>
     public string BaseName => Name.IndexOf('@') is var i and >= 0 ? Name[..i] : Name;
 
-    /// <summary>Items the client creates with NewEquipmentItem (quality, durability, spells).</summary>
-    public bool IsEquipment => Kind is "equipmentitem" or "weapon" or "mount" or "transformationweapon";
+    /// <summary>
+    /// Items the client creates with NewEquipmentItem (quality, durability, spells). StageN hunts: a trackingitem too (the tracking toolkit:
+    /// its descriptor bty derives from the equipment one bc9, and c10.af 0x180A19EC0 makes it a c2k, a c1r equipment item).
+    /// </summary>
+    public bool IsEquipment => Kind is "equipmentitem" or "weapon" or "mount" or "transformationweapon" or "trackingitem";
 
     /// <summary>
     /// Items the client creates with NewSimpleItem: the kinds the official server sends that way (captures 103829,
@@ -124,6 +127,12 @@ public sealed class ItemTemplate
     /// NewJournalItem 35) and the c2g kinds are no c2i, so the cast throws and the item never appears.
     /// </summary>
     public bool IsSimple => Kind is "simpleitem" or "consumableitem" or "consumablefrominventoryitem" or "farmableitem";
+
+    /// <summary>A furnitureitem (beds, tables, trophies, chests): sent with NewFurnitureItem (33, captures 103829/113433; the client's c1v is no c2i).</summary>
+    public bool IsFurniture => Kind == "furnitureitem";
+
+    /// <summary>A labourercontract (T2_LABOURER_CONTRACT_WOOD): sent with NewLaborerItem (36); placed, it hires its labourer (labourers SPEC §2).</summary>
+    public bool IsLabourerContract => Kind == "labourercontract";
 
     /// <summary>
     /// The labourer journal data of a journalitem (stageH journals SPEC §A.1): the base item of items.xml (never used in play) and
@@ -152,8 +161,8 @@ public sealed class ItemTemplate
     /// </summary>
     public int PlaceIndex { get; init; } = -1;
 
-    /// <summary>Items this server can send (<see cref="IsEquipment"/>, <see cref="IsSimple"/> or <see cref="IsJournal"/>); the other kinds need their own New*Item event.</summary>
-    public bool CanCreate => IsEquipment || IsSimple || IsJournal;
+    /// <summary>Items this server can send (<see cref="IsEquipment"/>, <see cref="IsSimple"/>, <see cref="IsJournal"/>, <see cref="IsFurniture"/>, <see cref="IsLabourerContract"/>); the other kinds need their own New*Item event.</summary>
+    public bool CanCreate => IsEquipment || IsSimple || IsJournal || IsFurniture || IsLabourerContract;
 
     /// <summary>Full durability as a7m raw (fixed point, 10000 = 1; NewEquipmentItem key 8, c1r.af(atl)).</summary>
     public long FullDurabilityRaw => (long)Math.Round(MaxDurability * 10000);
@@ -232,6 +241,12 @@ public sealed record CraftRecipe(double Silver, double Gold, double Time, int Am
     /// <summary>StageL mists phase B: the &lt;currency uniquename amount&gt; requirements per craft (FAVOR 675, whole units).</summary>
     public IReadOnlyList<(string Name, double Amount)> Currencies { get; init; } = [];
 
+    /// <summary>StageN faction (SPEC §3): &lt;playerfactionstanding faction minstanding&gt; (the faction trader's gates, whole points); null = none.</summary>
+    public (string Faction, double Min)? FactionStanding { get; init; }
+
+    /// <summary>buildingfilter: the one building this recipe is made at (the faction traders' vanity unlocks); null = any.</summary>
+    public string? BuildingFilter { get; init; }
+
     /// <summary>returnproductnotresource (bbu+0x78): the return bonus gives back the product, not resources (6 recipes of this build).</summary>
     public bool ReturnProductNotResource { get; init; }
 
@@ -260,6 +275,8 @@ public sealed record CraftRecipe(double Silver, double Gold, double Time, int Am
                 .Select(c => c.Name.LocalName + ((string?)c.Attribute("uniquename") is { } u ? $" {u}" : ""))],
             Standing = e.Element("standing") is { } st ? ((string?)st.Attribute("type") ?? "", Num(st, "minstanding", 0)) : null,
             Currencies = [.. e.Elements("currency").Select(c => ((string?)c.Attribute("uniquename") ?? "", Num(c, "amount", 0)))],
+            FactionStanding = e.Element("playerfactionstanding") is { } fs ? ((string?)fs.Attribute("faction") ?? "", Num(fs, "minstanding", 0)) : null,
+            BuildingFilter = (string?)e.Attribute("buildingfilter") is { Length: > 0 } filter ? filter : null,
 
         };
     }
@@ -283,7 +300,19 @@ public sealed record JournalData(string Journal, JournalState State, long MaxFam
     /// 15 fame × 1800 / 1200 = 22.5); a value of 0 counts 1:1.
     /// </summary>
     public long Fill(long gain) => Value > 0 ? (long)Math.Floor((decimal)gain * (MaxFame / 10000m) / (decimal)Value) : gain;
+
+    /// <summary>baselootamount: the loot rolls a labourer's job with this journal makes at 100 % yield (analysis/work/stageN/labourers/SPEC.md §4).</summary>
+    public double BaseLoot { get; init; }
+
+    /// <summary>The &lt;lootlist&gt; entries a labourer's job rolls from, by weight (SPEC §4).</summary>
+    public IReadOnlyList<JournalLoot> Loot { get; init; } = [];
 }
+
+/// <summary>
+/// One &lt;loot&gt; of a journal's &lt;lootlist&gt;: <see cref="Item"/> × <see cref="Amount"/> (itemname, itemamount) or <see cref="Silver"/> whole
+/// silver (silveramount), chosen by <see cref="Weight"/>; <see cref="Fame"/> = labourerfame, what the labourer learns from it (whole fame).
+/// </summary>
+public sealed record JournalLoot(string? Item, int Amount, long Silver, double Weight, double Fame);
 
 /// <summary>A craftresource: <see cref="Count"/> × <see cref="Name"/> per craft; <see cref="MaxReturn"/> caps the returned resources (0 = never returned).</summary>
 public sealed record CraftResource(string Name, int Count, int Enchantment, int MaxReturn);

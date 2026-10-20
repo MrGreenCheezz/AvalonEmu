@@ -6,7 +6,7 @@ using AlbionLocal.Server.Systems;
 
 namespace AlbionLocal.Server.Commands.Builtin;
 
-/// <summary>Random dungeons (analysis/work/stageG/dungeons/SPEC.md §13 item 1): .rd.</summary>
+/// <summary>Random dungeons (analysis/work/stageG/dungeons/SPEC.md §13 item 1): .rd; static dungeons: .sd event.</summary>
 public static class DungeonCommands
 {
     /// <summary>
@@ -66,5 +66,41 @@ public static class DungeonCommands
         lines.Add(daily is null ? "  no dungeon of the day" : string.Create(CultureInfo.InvariantCulture,
             $"  dungeon of the day: {RandomDungeons.DailyName(daily)} (x{world.DungeonSettings.DailyBonus:0.##} fame, silver and loot until {world.DungeonSettings.DailyResetHour:00}:00 UTC)"));
         ctx.Reply($"{map.Cluster}:\n{string.Join("\n", lines)}");
+    }
+
+    /// <summary>How far .sd event looks for a static dungeon entrance on the player's map (m).</summary>
+    public const float EventRange = 200;
+
+    /// <summary>
+    /// .sd event [minutes]: the staticdungeons.xml event of the static dungeon the player is in, or whose entrance is nearest within
+    /// <see cref="EventRange"/> m, starts now for <paramref name="minutes"/> (over the schedule, not saved; <see cref="StaticDungeons.Force"/>);
+    /// the players on the dungeon's clusters and on its entrances' clusters get 499 and the entrance clusters' ClusterInfoUpdate (keys 65-68).
+    /// </summary>
+    [Command("sd event", Level = AccountLevel.GameMaster, Help = "starts now the event of the static dungeon you are in or whose entrance is nearest (200 m) [minutes=60]")]
+    public static void SdEvent(CommandContext ctx, float minutes = 60)
+    {
+        var player = ctx.RequirePlayer();
+        var world = ctx.World;
+        if (minutes is <= 0 or > 24 * 60) throw new CommandError($"minutes: {minutes} is not 1..1440");
+        if (player.Map is not { } map || world.Clusters?.WorldIfLoaded is not { } info || info.Find(map.Cluster) is not { } cluster)
+            throw new CommandError("the player is on no world.xml cluster");
+        var sd = world.StaticDungeons;
+        var at = player.PositionAt(DateTime.UtcNow);
+        var dungeon = sd.Of(map.Cluster) ?? cluster.Exits
+            .Where(e => e.Attrs.TryGetValue("staticdungeonid", out var s) && Guid.TryParse(s, out var g) && sd.Dungeons.ContainsKey(g) && Vector2.Distance(e.Position, at) <= EventRange)
+            .OrderBy(e => Vector2.Distance(e.Position, at)).Select(e => sd.Dungeons[Guid.Parse(e.Attrs["staticdungeonid"])]).FirstOrDefault()
+            ?? throw new CommandError($"no static dungeon here or with an entrance within {EventRange:0} m (.exits lists the exits)");
+        var ev = sd.Force(dungeon, minutes);
+        var clusters = dungeon.Clusters.Concat(dungeon.Entrances.Select(e => e.Cluster)).ToHashSet(StringComparer.Ordinal);
+        var told = 0;
+        foreach (var p in CommandRegistry.Players(world).Where(p => !p.IsBot && p.Map is { } m && clusters.Contains(m.Cluster)))
+        {
+            sd.Joined(p); // 499 for the dungeon here and those entered from here
+            foreach (var id in dungeon.Entrances.Select(e => e.Cluster).Distinct())
+                if (Network.WorldSession.ClusterInfo(info, id, sd) is { } update) p.Session.Send(update);
+            told++;
+        }
+        ctx.Reply(string.Create(CultureInfo.InvariantCulture,
+            $"static dungeon {dungeon.Type} T{dungeon.Tier} ({string.Join(", ", dungeon.Clusters)}): event {ev.Def.Name} for {minutes:0.#} min, {told} player(s) told"));
     }
 }

@@ -7,7 +7,8 @@ using AlbionLocal.Server.Entities;
 namespace AlbionLocal.Server.Systems;
 
 /// <summary>A passive spell a worn item gives (its chosen passive slot): the item and the ability power its values scale with.</summary>
-public sealed record PassiveSpell(SpellTemplate Spell, Item Source, double Ap, double CcAp);
+/// <remarks><see cref="Factor"/>: an awakened weapon's trait spell runs with its traitvar1 (variablefactor="traitvar1"); 1 for the others.</remarks>
+public sealed record PassiveSpell(SpellTemplate Spell, Item Source, double Ap, double CcAp, double Factor = 1);
 
 /// <summary>
 /// A resourcegatheringbuff (passive, a tool's or gatherer gear's) or resourcegatheringbuffovertime (a food's or potion's): the yield
@@ -113,14 +114,20 @@ public static class Passives
         var hash = new HashCode();
         var any = false;
         var e = p.Inventory.Equipment;
+        var plugins = p.World.Plugins.WantsPassives; // an OnCalcPassives listens: every worn item counts
         for (var s = 0; s < Slots; s++)
         {
-            if (e[s] is not { } item || item.Passive.Length == 0) continue;
+            if (e[s] is not { } item || item.Passive.Length == 0 && item.Soul is null && !plugins) continue;
             any = true;
             hash.Add(s);
             hash.Add(item.Id);
             hash.Add(Broken(item));
             foreach (var id in item.Passive) hash.Add(id);
+            if (item.Soul is { } soul)
+            {
+                hash.Add(soul.AttunedTo(p.Character.Id));
+                foreach (var t in soul.Traits) hash.Add((t.Name, t.Roll));
+            }
         }
         return any ? hash.ToHashCode() | 1 : 0;
     }
@@ -160,7 +167,9 @@ public static class Passives
                             break;
                     }
             }
+            Traits(p, item, spells, buffs, settings);
         }
+        p.World.Plugins.CalcPassives(p, buffs); // the plugins' Items.OnCalcPassives
         var set = new PassiveSet { Key = key, Spells = spells, Buffs = buffs, Weight = weight, Gathering = gathering };
         var now = p.World.GameNow;
         foreach (var ps in spells)
@@ -170,6 +179,45 @@ public static class Passives
                 set.Pulses[node] = (now + SpellCasts.Seconds(SpellTemplate.Float(node, "initialinterval")), count > 0 ? count : -1);
             }
         return set;
+    }
+
+    /// <summary>
+    /// The traits of an awakened weapon attuned to <paramref name="p"/> (stageN awakening SPEC §4): each trait's PASSIVE_TRAIT_* spell as a
+    /// passive with its traitvar1 (<see cref="LegendaryData.Factor"/> of the roll): its buff values × traitvar1, scaled with the item's
+    /// ability power as the other passive buffs (the legendaryitemtraits progressions of gamedata are not used), and its healonhitpassive
+    /// (TRAIT_LIFESTEAL) × traitvar1 in <see cref="OnHit"/>. TRAIT_ITEM_POWER's itempower goes to the weapon's item power instead
+    /// (<see cref="Combat.ItemPower"/>). A soul attuned to someone else gives nothing.
+    /// </summary>
+    private static void Traits(Player p, Item item, List<PassiveSpell> spells, Dictionary<string, double> buffs, Game.EffectSettings settings)
+    {
+        if (item.Soul is not { } soul || !soul.AttunedTo(p.Character.Id) || p.World.Legendary is not { } data || p.World.Spells is not { } table) return;
+        var ap = Combat.AbilityPowerOf(p, item);
+        foreach (var trait in soul.Traits)
+        {
+            if (data.Trait(trait.Name) is not { } def || table.Template(def.Spell) is not { } spell) continue;
+            var factor = data.Factor(trait.Roll);
+            spells.Add(new PassiveSpell(spell, item, ap, Combat.CcAbilityPowerOf(p, item), factor));
+            foreach (var node in spell.Effects)
+            {
+                if (node.Name.LocalName != "buff") continue;
+                var type = (string?)node.Attribute("type") ?? "";
+                if (type == "itempower") continue;
+                var value = SpellTemplate.Float(node, "value") * factor;
+                buffs[type] = buffs.GetValueOrDefault(type) + (SpellTemplate.Bool(node, "ignoreabilitypowerscaling") ? value : SpellEffects.Scale(type, value, ap, settings));
+            }
+        }
+    }
+
+    /// <summary>The item power TRAIT_ITEM_POWER adds to <paramref name="item"/> worn by <paramref name="p"/> (its buff value × traitvar1); 0 without one.</summary>
+    public static double TraitItemPower(Player p, Item item)
+    {
+        if (item.Soul is not { } soul || !soul.AttunedTo(p.Character.Id) || p.World.Legendary is not { } data || p.World.Spells is not { } table) return 0;
+        var sum = 0.0;
+        foreach (var trait in soul.Traits)
+            if (data.Trait(trait.Name) is { } def && table.Template(def.Spell) is { } spell)
+                sum += spell.Effects.Where(n => n.Name.LocalName == "buff" && (string?)n.Attribute("type") == "itempower")
+                    .Sum(n => SpellTemplate.Float(n, "value")) * data.Factor(trait.Roll);
+        return sum;
     }
 
     /// <summary>A gathering buff node: tier (exact) or mintier..maxtier (the over-time form), resourcetype, bufftype, value.</summary>
@@ -239,13 +287,13 @@ public static class Passives
     {
         if (damage <= 0 || p.Map is not { } map) return;
         var auto = origin is HitOrigin.MeleeAutoAttack or HitOrigin.RangedAutoAttack;
-        var nodes = Of(p).Spells.SelectMany(s => s.Spell.Effects.Where(n => n.Name.LocalName == "healonhitpassive").Select(n => (s.Spell, Node: n)))
-            .Concat(p.Effects.On(p.World.GameNow).Where(x => x.Sub.Tag == "healonhit").Select(x => (x.Spell.Spell, x.Sub.Node))).ToList();
-        foreach (var (spell, node) in nodes)
+        var nodes = Of(p).Spells.SelectMany(s => s.Spell.Effects.Where(n => n.Name.LocalName == "healonhitpassive").Select(n => (s.Spell, Node: n, s.Factor)))
+            .Concat(p.Effects.On(p.World.GameNow).Where(x => x.Sub.Tag == "healonhit").Select(x => (x.Spell.Spell, x.Sub.Node, Factor: 1.0))).ToList();
+        foreach (var (spell, node, factor) in nodes)
         {
             if ((string?)node.Attribute("damagetype") == "autoattack" && !auto) continue;
             if (node.Attribute("chance") is not null && map.Random.NextDouble() >= SpellTemplate.Float(node, "chance", 1)) continue;
-            var amount = damage * SpellTemplate.Float(node, "percentage");
+            var amount = damage * SpellTemplate.Float(node, "percentage") * factor;
             if (SpellTemplate.Bool(node, "usehealingmodifiers", true)) amount *= SpellEffects.HealFactor(p, ticks);
             if (amount <= 0) continue;
             if ((string?)node.Attribute("attribute") == "energy") SpellCasts.GainEnergy(p, amount, spell, ticks, HitOrigin.OnHitPassive);

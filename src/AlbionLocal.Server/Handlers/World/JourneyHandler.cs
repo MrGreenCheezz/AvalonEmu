@@ -31,7 +31,7 @@ public enum BuyJourneyRefusal : short
 
 /// <summary>
 /// Fast travel from a travel point (the harbour NPC of a city; ROADMAP stage 3, SPEC stage 3 §10 "travel-point journeys",
-/// captures/albion_20261016_002835 1000 → 0000). The client works out the destinations and the price itself (travel window
+/// capture 002835 1000 → 0000). The client works out the destinations and the price itself (travel window
 /// ggq/ggd) and sends BuyJourney; the official server answers it with a bare RC 0, then pushes the ChangeCluster response
 /// {0: target cluster} without a request id, which runs the whole change as after an exit (§2.6): the client drops the game
 /// connection, asks the login connection for the game server (op 17) and joins on a new one. The commit and the new Join

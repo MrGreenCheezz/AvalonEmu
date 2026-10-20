@@ -212,6 +212,21 @@ public sealed class Character
     /// <summary>StageN qol (SPEC §2): the saved loadouts (LoadoutCreate/Update 425/428), in no order (<see cref="Loadout.Position"/>); schema v29.</summary>
     public List<Loadout> Loadouts { get; set; } = [];
 
+    /// <summary>
+    /// StageN faction (analysis/work/stageN/faction/SPEC.md §2): the standing per faction (a7m, index FlaggingStatus − 1: Join key 105, event 86
+    /// key 3), the faction points per faction (the FACTION_* currencies, a7m: Join key 104, UpdateCurrency 85) and when the enlistment last
+    /// changed (GameTimeStamp; 0 = never: the cooldown of a switch); schema v30.
+    /// </summary>
+    public long[] FactionStanding { get; set; } = new long[6];
+    public long[] FactionPoints { get; set; } = new long[6];
+    public long FactionChangedAt { get; set; }
+
+    /// <summary>
+    /// StageN vanity (analysis/work/stageN/vanity/SPEC.md §2): the cosmetics this character unlocked (the account's are the union of its
+    /// characters'), its wardrobe and its mount skins; null = none yet; schema v35.
+    /// </summary>
+    public VanityLog? Vanity { get; set; }
+
     /// <summary>A deep copy: what the repository hands out and what a save snapshot holds share nothing with the original.</summary>
     public Character Clone() => new()
     {
@@ -236,6 +251,8 @@ public sealed class Character
         Infamy = Infamy?.Clone(),
         MistStanding = MistStanding, MistFavor = MistFavor,
         Loadouts = [.. Loadouts],
+        FactionStanding = [.. FactionStanding], FactionPoints = [.. FactionPoints], FactionChangedAt = FactionChangedAt,
+        Vanity = Vanity?.Clone(),
     };
 
 }
@@ -249,6 +266,22 @@ public sealed record AutoLearnSet(int[] Ids, byte Groups, byte[]? Categories, in
 
 /// <summary>The Black Market sales of a character: the day (<see cref="Systems.BlackMarket.Day"/>) and the silver sold on it (a7m raw, before tax). Immutable.</summary>
 public sealed record BlackMarketLog(int Day, long Sold);
+
+/// <summary>
+/// A character's cosmetics (analysis/work/stageN/vanity/SPEC.md §2): the vanity unlock ids it got (<see cref="Data.VanityCatalog"/>), its
+/// wardrobe (seven wardrobe skin numbers by EquipmentSlot, -1 = none: Join 108, NewCharacter 55) and its mount skin per mount category.
+/// </summary>
+public sealed class VanityLog
+{
+    public List<short> Unlocks { get; set; } = [];
+
+    public int[] Wardrobe { get; set; } = [-1, -1, -1, -1, -1, -1, -1];
+
+    /// <summary>Mount category index → mount skin number.</summary>
+    public Dictionary<int, int> MountSkins { get; set; } = new();
+
+    public VanityLog Clone() => new() { Unlocks = [.. Unlocks], Wardrobe = [.. Wardrobe], MountSkins = new(MountSkins) };
+}
 
 /// <summary>
 /// A saved active spell of the player's own (ActiveSpellEffectsUpdate keys 1-5): the spell by uniquename, its start
@@ -395,6 +428,9 @@ public sealed record InventoryItem(string Name, int Count = 1)
     /// <summary>A journal's fame (a7m raw) when it is neither 0 (_EMPTY) nor the maxfame (_FULL); null = that default (stageH journals SPEC §A.5).</summary>
     public long? Fame { get; init; }
 
+    /// <summary>An awakened weapon's legendary soul (stageN awakening SPEC §2); null = not awakened. Immutable, so copies may share it.</summary>
+    public ItemSoul? Soul { get; init; }
+
     /// <summary>A copy with its own spell name arrays.</summary>
     public InventoryItem Copy() => this with { Active = Active?.ToArray(), Passive = Passive?.ToArray() };
 }
@@ -403,16 +439,17 @@ public sealed record InventoryItem(string Name, int Count = 1)
 public sealed class InventoryItemConverter : JsonConverter<InventoryItem>
 {
     private sealed record Stored(string Name, int Count = 1, int Quality = 1, long? Durability = null,
-        string?[]? Active = null, string?[]? Passive = null, long? Fame = null);
+        string?[]? Active = null, string?[]? Passive = null, long? Fame = null,
+        [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] ItemSoul? Soul = null);
 
     public override InventoryItem? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.String) return new InventoryItem(reader.GetString()!);
         var s = JsonSerializer.Deserialize<Stored>(ref reader, options);
         return s is null ? null : new InventoryItem(s.Name, s.Count)
-            { Quality = s.Quality, Durability = s.Durability, Active = s.Active, Passive = s.Passive, Fame = s.Fame };
+            { Quality = s.Quality, Durability = s.Durability, Active = s.Active, Passive = s.Passive, Fame = s.Fame, Soul = s.Soul };
     }
 
     public override void Write(Utf8JsonWriter writer, InventoryItem value, JsonSerializerOptions options) =>
-        JsonSerializer.Serialize(writer, new Stored(value.Name, value.Count, value.Quality, value.Durability, value.Active, value.Passive, value.Fame), options);
+        JsonSerializer.Serialize(writer, new Stored(value.Name, value.Count, value.Quality, value.Durability, value.Active, value.Passive, value.Fame, value.Soul), options);
 }

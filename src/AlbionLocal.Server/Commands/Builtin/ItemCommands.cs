@@ -1,10 +1,13 @@
+using System.Numerics;
+using System.Xml.Linq;
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
 using AlbionLocal.Server.Persistence;
+using AlbionLocal.Server.Systems;
 
 namespace AlbionLocal.Server.Commands.Builtin;
 
-/// <summary>Item commands: .item add, .kit (content/kits.json).</summary>
+/// <summary>Item commands: .item add, .kit (content/kits.json), .drop.</summary>
 public static class ItemCommands
 {
     /// <summary>Count limit of one stack: items.xml maxstacksize, 999 for nearly every stackable item (22 differ; <see cref="ItemTemplate.MaxStackSize"/>, not applied yet).</summary>
@@ -84,5 +87,59 @@ public static class ItemCommands
         if (added == 0 && missed.Count > 0) throw new CommandError($"kit {kit.Name}: nothing added; the inventory is full ({missed.Count} entr{(missed.Count == 1 ? "y" : "ies")} left)");
         ctx.Reply($"kit {kit.Name}: added {added} item{(added == 1 ? "" : "s")}"
             + (missed.Count > 0 ? $"; did not fit: {string.Join(", ", missed)}" : ""));
+    }
+
+    /// <summary>The mob whose bag .drop makes (NewLoot keys 1-3: the bag's look and title); any mob of mobs.xml would do.</summary>
+    public const string DropMob = "T4_MOB_UNDEAD_SOLDIER";
+
+    /// <summary>How near an earlier .drop bag must lie for the next .drop to go into it (m).</summary>
+    public const float DropMerge = 3;
+
+    /// <summary>
+    /// <paramref name="count"/> of <paramref name="item"/> (same rules as .item add) as a mob's loot bag at the player's feet (<see cref="LootBag"/>,
+    /// NewLoot 98) that only this player may open (no party), for the loot window checks (content/checks.json LOOT-01/02). A .drop within
+    /// <see cref="DropMerge"/> m of the player's own earlier .drop bag adds to it: that bag goes (Leave) and one with all its items comes in
+    /// its place. The bag lives Combat:LootBagSeconds like a mob's.
+    /// </summary>
+    [Command("drop", Level = AccountLevel.GameMaster, Help = "drops an item as a loot bag at your feet only you may loot (quality 1-5, equipment only); repeated calls add to it")]
+    public static void Drop(CommandContext ctx, ItemTemplate item, int count = 1, int quality = 1)
+    {
+        var player = ctx.RequirePlayer();
+        var world = ctx.World;
+        if (!item.CanCreate) throw new CommandError($"{item.Name} is a {item.Kind}: only equipment, simple items and journals (_EMPTY, _FULL) can be created yet");
+        if (count is < 1 or > MaxStack) throw new CommandError($"count: {count} is not 1..{MaxStack}");
+        if (quality is < 1 or > 5) throw new CommandError($"quality: {quality} is not 1..5 (1 normal ... 5 masterpiece)");
+        if (item.IsEquipment && quality > item.MaxQuality) throw new CommandError($"quality: {item.Name} has quality 1..{item.MaxQuality} only (maxqualitylevel)");
+        if (player.Map is not { Grid: not null } map) throw new CommandError("the player is on no loaded map");
+        var mobs = world.Clusters?.MobsIfLoaded ?? throw new CommandError("mobs.xml is not loaded yet (it comes with the first cluster's data)");
+        var at = player.PositionAt(DateTime.UtcNow);
+        var items = new List<Item>();
+        var old = map.Objects.Values.OfType<LootBag>().Where(b => b.Mob.Spawn.Key.Slot == "gmdrop" && b.Looters is [var only] && only == player.Character.Id
+            && Vector2.Distance(b.Position, at) <= DropMerge).MinBy(b => Vector2.Distance(b.Position, at));
+        if (old is not null)
+        {
+            items.AddRange(old.Items.Items);
+            for (var slot = 0; slot < old.Items.Size; slot++) old.Items.Take(slot);
+            Combat.RemoveBag(old, "a .drop adds to it");
+        }
+        if (item.IsEquipment)
+            for (var i = 0; i < count; i++) items.Add(player.Session.NewItem(item, 1, quality));
+        else items.Add(player.Session.NewItem(item, count));
+        var template = mobs.Find(DropMob) ?? throw new CommandError($"mobs.xml has no {DropMob}");
+        var at3 = old?.Position ?? at;
+        var point = new MobSpawnPoint
+        {
+            Key = new SpawnKey(map.Cluster, "gmdrop", map.CustomSpawns++), Tile = "", Position = at3, Direction = player.Facing,
+            Component = new XElement("mobspawnpoint", new XAttribute("mobname", template.Name)), Mob = template.Name, Template = template,
+        };
+        // The dead mob of NewLoot key 2: never on the map (a mob's corpse has gone by the time its bag is looted too).
+        var mob = new Mob(world.ObjectIds.Next(), point, template, 0, world.GameNow, world.Now) { World = world };
+        var container = new Container(Guid.NewGuid(), items.Count);
+        for (var i = 0; i < items.Count; i++) container.Put(i, items[i]);
+        var bag = new LootBag(world.ObjectIds.Next(), mob, container, [player.Character.Id], 1, world.GameNow);
+        map.AddObject(bag);
+        map.Timers.At(world.Clock.Now + world.Combat.LootBagTime, () => Combat.RemoveBag(bag, "its time is up"));
+        ctx.Reply($"loot bag (object {bag.Id}) with {string.Join(", ", items.Select(i => $"{i.Count} x {i.Template.Name}{(i.Quality > 1 ? $" q{i.Quality}" : "")}"))}"
+            + (old is null ? "" : " (added to the bag here)"));
     }
 }

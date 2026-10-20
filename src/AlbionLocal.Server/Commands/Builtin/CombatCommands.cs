@@ -37,6 +37,38 @@ public static class CombatCommands
     }
 
     /// <summary>
+    /// The player's health (and with <paramref name="energy"/> its energy) at <paramref name="percent"/> % of the maximum (the checker's setups,
+    /// content/checks.json). Lower than now: a HealthUpdate caused by itself as .damage sends; higher: the bars set and
+    /// RegenerationPlayerComboChanged to it and its observers (as .heal). 0 knocks it down as a mob would (<see cref="Knockdown.DamageSelf"/>:
+    /// with a party or guild mate or a companion on the map the bleed-out of Pve:PartyRevive starts).
+    /// </summary>
+    [Command("hp", Level = AccountLevel.GameMaster, Help = "sets your health (and energy) to <percent> % of the maximum; 0 knocks you down as a mob would")]
+    public static void Hp(CommandContext ctx, float percent, float? energy = null)
+    {
+        var player = ctx.RequirePlayer();
+        if (percent is < 0 or > 100) throw new CommandError($"percent: {percent} is not 0..100");
+        if (energy is < 0 or > 100) throw new CommandError($"energy: {energy} is not 0..100");
+        if (player.Map is null) throw new CommandError("the player is not in the world");
+        if (player.Combat.Down is not null) throw new CommandError("the player is knocked down (.heal gets it up first)");
+        var now = Math.Max(ctx.World.GameNow, Math.Max(player.Health.Stamp, player.Energy.Stamp));
+        if (energy is { } e) player.Energy.Set(player.Energy.Max * e / 100, now);
+        var target = percent <= 0 ? 0 : Math.Max(1, Combat.Rounded(player.Health.Max * percent / 100));
+        var current = player.Health.At(now);
+        if (target <= 0) Knockdown.DamageSelf(player, player.Health.Max + current); // lethal whatever the regeneration did meanwhile
+        else if (target < current) Knockdown.DamageSelf(player, current - target);
+        if (player.Combat.Down is null && (target > current || energy is not null))
+        {
+            if (target > current) player.Health.Set(target, now);
+            var combo = Combat.PlayerCombo(player, now);
+            player.Session.Send(combo);
+            player.SendToObservers(combo);
+        }
+        ctx.Reply(player.Combat.Down is not null
+            ? "knocked down; it gets up 18 s after the fight around it has ended (.heal: at once)"
+            : string.Create(CultureInfo.InvariantCulture, $"health {player.Health.At(ctx.World.GameNow):0} / {player.Health.Max:0}, energy {player.Energy.At(ctx.World.GameNow):0} / {player.Energy.Max:0}"));
+    }
+
+    /// <summary>
     /// The player's defence as the server uses it (stageJ armour SPEC §5.3-§5.4): the worn items' armour, magic and crowd
     /// control resistance and defence vs mobs / players, and with the buffs the share of a mob's physical / magic hit that lands
     /// (the character window's "% mitigated" is 100 − that share, before the defence vs mobs).

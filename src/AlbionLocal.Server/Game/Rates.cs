@@ -10,7 +10,7 @@ namespace AlbionLocal.Server.Game;
 /// on a harvest (Handlers/World/HarvestHandler.FinishHarvest), × <see cref="CraftingFame"/> on a craft (BuildingActionHandler),
 /// <see cref="Fame"/> alone on a tome; <see cref="Harvest"/> on a harvest's base amount (HarvestFinished key 5, nodes and
 /// corpses; the fraction rounded at random as the yield bonus); <see cref="Silver"/> on a mob's silver pile (key 2) and the
-/// awardsilver effects; <see cref="Loot"/> on a mob's total loot factor and Loot:BlackMarketChance; <see cref="Respawn"/> and
+/// awardsilver effects; <see cref="Loot"/> on the total loot factor of a mob or an opened chest; <see cref="Respawn"/> and
 /// <see cref="Regrowth"/> divide the mob respawn and node regrowth times; <see cref="CraftingReturn"/> on a craft's resource
 /// return share (at most all of them); <see cref="ChampionWeight"/> on the elite picks of the RANDOM spawn points and
 /// <see cref="ChestRespawn"/> dividing the open-world chest respawn times. The world's are <see cref="World.Rates"/>: the config's, then data/rates.json (a GM's
@@ -36,7 +36,10 @@ public sealed record Rates
     /// <summary>Rates:Silver: a mob's silver pile and the silver-giving effects (awardsilver).</summary>
     public double Silver { get; init; } = 1;
 
-    /// <summary>Rates:Loot: a mob's item drop chances (its total loot factor and the Black Market chance); not the loot of opened items (generateloot).</summary>
+    /// <summary>
+    /// Rates:Loot: the item drop chances of a mob or an opened chest (once, on its total loot factor; not on the Black Market chance,
+    /// loot-balance SPEC §2.1); not the loot of opened items (generateloot).
+    /// </summary>
     public double Loot { get; init; } = 1;
 
     /// <summary>Rates:Respawn: the mob respawn speed (2 = back in half the time); replaces World:MobRespawnScale (= 1 / this).</summary>

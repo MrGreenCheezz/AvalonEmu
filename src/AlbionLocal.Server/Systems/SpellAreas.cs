@@ -154,6 +154,7 @@ public static class SpellAreas
             CcAp = c.CcAbilityPower, Channel = SpellTemplate.Bool(node, "linktochanneling") ? c.Channel : null,
         };
         map.AddObject(area);
+        world.Plugins.AreaCreated(area); // the plugins' Spells.OnAreaCreate
         Log.Debug("combat", string.Create(CultureInfo.InvariantCulture,
             $"'{c.Caster.Character.Name}' {spell}: area #{area.Id} [{index}] at ({origin.X:0.##}, {origin.Y:0.##}) facing {area.Yaw:0.#} for {seconds:0.##} s"));
         Tick(world, area);
@@ -207,6 +208,7 @@ public static class SpellAreas
                 SpellEffects.Send(world, unit);
                 SpellEffects.Refresh(world, unit);
             }
+        if (world.Plugins.WantsAreaTick(area)) world.Plugins.AreaTicked(area, inside); // the plugins' Spells.OnAreaTick
         area.InsideLast.Clear();
         area.InsideLast.UnionWith(inside);
         if (max > 0 && area.Hits >= max && SpellTemplate.Bool(node, "deletewhenmaxtargetshit")) Remove(area);

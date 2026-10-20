@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The stable plugin API (server/plugins/README.md). Plugins reference only this assembly, never the server's: the server
+    implements these interfaces and loads each plugin in its own collectible AssemblyLoadContext, sharing this assembly with it.
+    No package references: it must build offline and stay small.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+</Project>

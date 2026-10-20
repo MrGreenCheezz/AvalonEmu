@@ -10,7 +10,7 @@ namespace AlbionLocal.Server;
 
 /// <summary>
 /// The return codes of a refused HarvestStart (op 52; client enum fp, Albion.Common, 2080-2092, names obfuscated). Only
-/// 2083 was captured: 8 of 8 auto-repeat requests that came when the node had 0 charges (captures/albion_20261016_002835,
+/// 2083 was captured: 8 of 8 auto-repeat requests that came when the node had 0 charges (capture 002835,
 /// HARVEST.md §3). The rest is a guess, documented: fp has 13 members and the client's own check result cn2.a (cxp.u
 /// 0x1809f55f0 → cn2.af 0x180b87bf0, 0 = can harvest) has the codes 1-13 that the server can check too (14, not possible
 /// while …, is a state of the client's own); with fp = 2079 + code the captured one fits (cn2.a 4, "charges == 0", shows
@@ -67,7 +67,7 @@ public sealed record HarvestPlan(Harvestable Node, Item? Tool, float Duration, i
 /// Gathering the harvestables (ROADMAP stage 4a, ARCHITECTURE.md §8 step 14: the static trees and rocks of list 39 that
 /// <see cref="MapSpawner"/> places, and since 4b the resource nodes of the client's placement, the same way; an enchanted
 /// node gives its RareState item), as the official server does in
-/// captures/albion_20261016_002835 (analysis/work/cap002835/harvest/HARVEST.md with its verifier's corrections; every
+/// capture 002835 (analysis/work/cap002835/harvest/HARVEST.md with its verifier's corrections; every
 /// number below fits the 15 own harvests of that capture). The flow is the session's (Handlers/World/HarvestHandler.cs):
 /// HarvestStart (op 52) → HarvestStart event (59) and an rc-0 answer, the world tick finishes it at the end of the
 /// client's progress bar with the burst HarvestableChangeState (46), the tool's NewEquipmentItem, NewSimpleItem

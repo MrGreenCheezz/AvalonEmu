@@ -1,0 +1,12 @@
+{
+  // The welcome plugin's defaults. To change them without touching this folder, put the keys you change into
+  // data/plugins/welcome/config.json (it is laid over this file key by key), then .plugins reload welcome.
+  // Placeholders: {name} the player, {online} players online, {logins} the player's logins counted by this plugin.
+  "Greeting": "Welcome back, {name}! {online} player(s) online. Type .motd for the news.",
+  "FirstGreeting": "Welcome to the server, {name}! Type .help for the commands and .motd for the news.",
+  "Motd": [
+    "Message of the day: this is a local PvE server.",
+    "Change these lines in data/plugins/welcome/config.json or with .motd set <text>."
+  ],
+  "AnnounceLogins": false
+}

@@ -193,7 +193,9 @@ public sealed partial class WorldSession
         }
         if (world.Fishing.RodWear > 0)                                              // the rod is still the player's (FishingFinish checked)
         {
+            var rodBefore = s.Rod.DurabilityRaw;
             s.Rod.DurabilityRaw = Math.Max(0, s.Rod.DurabilityRaw - (long)Math.Round(world.Fishing.RodWear * 10000));
+            if (rodBefore > 0 && s.Rod.DurabilityRaw <= 0) world.Plugins.Broke(player, s.Rod, "fishing"); // Items.OnBreak
             SendItemObject(s.Rod);                                                  // 1. the rod, key 8 = its new durability
         }
         var factor = Combat.DangerOf(world, map)?.FishingFameFactor ?? 1;
@@ -205,6 +207,7 @@ public sealed partial class WorldSession
             if (Fishing.Fame(item) > 0)
             {
                 world.Bounties.Fished(player, item); // PVE-DESIGN step 11: a catch for the fish bounties (not trash)
+                world.Plugins.Harvested(player, item.Name, amount, "fish"); // the plugins' Harvested
                 world.GuildGoals.OnFish(player); // stage I: the weekly guild goals
             }
         }

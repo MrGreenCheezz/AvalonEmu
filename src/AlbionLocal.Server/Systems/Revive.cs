@@ -46,10 +46,10 @@ public static class Revive
 
     /// <summary>Whether <paramref name="a"/> may revive <paramref name="b"/>: party or guild mates, not Hostile to each other.</summary>
     public static bool Allies(Player a, Player b) =>
-        a != b && !a.IsBot && !b.IsBot && (Pvp.SameParty(a, b) || a.World.Guilds.Same(a.Character.Id, b.Character.Id)) && Pvp.Of(a, b) != Relation.Hostile;
+        a != b && (!a.IsBot || a.IsCompanion) && (!b.IsBot || b.IsCompanion) && (Pvp.SameParty(a, b) || a.World.Guilds.Same(a.Character.Id, b.Character.Id)) && Pvp.Of(a, b) != Relation.Hostile;
 
     private static IEnumerable<Player> AlliesOn(Player p) =>
-        p.Map is { } map ? map.Players.Values.Where(q => q != p && Allies(q, p)) : [];
+        p.Map is { } map ? map.Fighters.Where(q => q != p && Allies(q, p)) : []; // stageN: the party's companions too
 
     // ---- the bleed-out ----
 
@@ -61,7 +61,7 @@ public static class Revive
     internal static bool Begin(Player p, KnockedDownState down, long ticks)
     {
         var world = p.World;
-        if (!world.Config.PvePartyRevive || p.IsBot || down.Kind is not (KnockdownKind.Pve or KnockdownKind.Pvp) || !AlliesOn(p).Any()) return false;
+        if (!world.Config.PvePartyRevive || p.IsBot && !p.IsCompanion || down.Kind is not (KnockdownKind.Pve or KnockdownKind.Pvp) || !AlliesOn(p).Any()) return false;
         down.BleedOutPoints = Settings(world).TotalPoints;
         down.BleedOutStamp = world.Now;
         down.BleedOutRate = -Rate(p);
@@ -125,7 +125,7 @@ public static class Revive
     {
         down.BleedOutPoints = null;
         Log.Info("combat", $"'{p.Character.Name}' {why}");
-        if (Pvp.Lethal(p.World, p.Map))
+        if (Pvp.Lethal(p.World, p.Map) && !p.IsBot) // stageN: a companion never dies, it lies on until its get-up
         {
             Death.BledOut(p);
             return true;
@@ -169,7 +169,8 @@ public static class Revive
         var name = Settings(world).ReviveSpell;
         var spell = world.Spells?.Template(name);
         if (spell is not null && spellId != spell.Id) return $"spell {spellId} is not {name}";
-        if (p.Map?.Players.GetValueOrDefault(targetId) is not { } target || !p.Observers.Contains(target)) return "no player in view";
+        if (p.Map?.FindPlayer(targetId) is not { } target || target.IsBot && !target.IsCompanion || !p.Observers.Contains(target) && !(p.IsCompanion && target.Map == p.Map))
+            return "no player in view";
         if (Refusal(p, target) is { } why) return why;
         if (p.PvpState.Revive is not null || p.PvpState.Execute is not null || p.PvpState.FlagCast is not null || p.Combat.Cast is not null) return "a cast is under way";
         Knockdown.Acted(p, "revives");

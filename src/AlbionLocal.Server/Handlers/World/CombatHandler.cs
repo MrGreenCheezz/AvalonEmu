@@ -145,6 +145,10 @@ public sealed partial class WorldSession
             Log.Info(Name, $"'{player.Character.Name}' revive of object {req.d1} refused: {refused}");
             return new CastStartResponse { ReturnCode = CastRefused, anl = req.d0, anq = req.d4, anr = req.d1, Extra = { [1] = req.dx } };
         }
+        // StageN extra bars (SPEC §4.2): the mod casts an extra slot's spell through the client's fake slot 25; a spell with a useobject is the
+        // client's own object use (a chest, an entrance) whatever the bars hold.
+        if (req.dx == FakeSlotCasts.Slot && world.Spells?.Template(req.d0) is { UseObject: null } && world.ExtraBars.IndexOf(player, req.d0) is var extra and >= 0)
+            return ExtraSlotCastStart(player, extra, req);
         if (req.dx == FakeSlotCasts.Slot) return FakeSlotCast(player, req);
         if (req.dx == FakeSlotCasts.EscapeSlot && world.FakeCasts.MayEscape(player))
         {
@@ -178,6 +182,15 @@ public sealed partial class WorldSession
                 Extra = { [1] = req.dx }, // [1] the slot, also 0 (must be a valid slot)
             };
         }
+        // The plugins' formulas (cast time, energy cost) and Spells.OnCheckCast: a refusal is answered as the engine's own.
+        var (gated, refusedBy) = world.Plugins.CheckCast(player, cast);
+        if (refusedBy is not null)
+        {
+            Log.Info(Name, $"'{player.Character.Name}' CastStart of {cast.Spell.Name} in slot {req.dx} refused by a plugin: {refusedBy}");
+            if (refusedBy.Length > 0) player.Session.Send(new SystemMessageEvent { d0p = refusedBy, d0q = 1 });
+            return new CastStartResponse { ReturnCode = CastRefused, anl = req.d0, anq = req.d4, anr = req.d1, Extra = { [1] = req.dx } };
+        }
+        cast = gated;
         Knockdown.Acted(player, "casts");
         CancelAction(player, "the player casts", tellClient: true); // a station action (stage 6 SPEC §6a.1)
         if (mountSpell) Mounts.CastsMountSpell(player); // the mount's own ability: still mounted

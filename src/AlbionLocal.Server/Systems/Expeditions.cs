@@ -368,7 +368,7 @@ public sealed class Expeditions(World world)
         var skipped = new List<string>();
         foreach (var m in party.Members)
         {
-            if (m.Id == leader.Character.Id) continue;
+            if (m.Id == leader.Character.Id || m.Companion) continue; // stageN: companions follow their owner in, unregistered
             var q = world.Parties.Online(m.Id);
             var no = q is null ? "offline"
                 : q.Map != leader.Map || Vector2.Distance(q.PositionAt(DateTime.UtcNow), agent.Position) > Settings.InviteRange ? "not at the agent"
@@ -447,7 +447,8 @@ public sealed class Expeditions(World world)
     private void Settle(ExpeditionGroup group)
     {
         if (group.QueueUntil is not null || group.Members.Count == 0 || group.Members.Any(m => m.State == ExpeditionState.Invited)) return;
-        if (group.Members.Count == 1 && !Settings.SoloGroupCategories && group.Instance is null)
+        // StageN companions: a player with companions in its party is a group.
+        if (group.Members.Count == 1 && !Settings.SoloGroupCategories && group.Instance is null && !world.Companions.HasAny(group.Members[0].Character))
         {
             var only = group.Members[0];
             if (world.Parties.Online(only.Character) is { } q) Tell(q, $"{group.Category.Name} needs at least two players here (Expeditions:SoloGroupCategories is off)");
@@ -852,6 +853,39 @@ public sealed class Expeditions(World world)
         i.Owed.UnionWith(i.Members.Keys);
         foreach (var p in Inside(i).ToList())
             if (i.Owed.Remove(p.Character.Id)) Reward(p, i);
+        if (LevelOf(i) is { BonusChest: true }) SpawnBonusChest(i);
+    }
+
+    /// <summary>The LootChestSpawnpoint of the level-18 bonus chest (lootchests.xml: HARCORE_EXPEDITION_LVL_18, ishardcoreexpeditionreward).</summary>
+    public const string BonusChestSpawnpoint = "HCE_FINAL_REWARD";
+
+    /// <summary>
+    /// A completed level with spawnbonuslootchest (T6_HARDCORE level 18, econ SPEC §3.1): the chest of the map's lootchestspawnpoint
+    /// HCE_FINAL_REWARD (every hardcore map has one, SpawnPoint_LOOTCHEST_HCE_FINAL_REWARD; expedition maps spawn no chests otherwise), as a
+    /// dungeon chest (<see cref="RandomDungeons.MakeChest"/>: shared, opened with OPEN_LOOTCHEST, its LootByTier of the category's tier
+    /// rolled once with the cluster's loot factor, not the level's lootfactor: the chest's lists are the level-18 reward already
+    /// [design]). Null when it could not be placed (no map or point, lootchests.xml not readable).
+    /// </summary>
+    public LootChest? SpawnBonusChest(ExpeditionInstance i)
+    {
+        if (world.Maps.Find(i.Id) is not { Template: { } template } map) return null;
+        if (template.LootChests.FirstOrDefault(p => p.SpawnBehaviour == BonusChestSpawnpoint) is not { } point)
+        {
+            Log.Warn("world", $"{i}: {template.Id} has no {BonusChestSpawnpoint} chest point: no bonus chest");
+            return null;
+        }
+        try
+        {
+            if (world.Clusters?.LootChests is not { } data || world.Dungeons.MakeChest(map, point, data, lootTier: i.Category.Tier) is not { } chest) return null;
+            map.AddObject(chest);
+            Log.Info("world", $"{i}: level {i.Difficulty} bonus chest {chest} at {point.Position}");
+            return chest;
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException)
+        {
+            Log.Warn("world", $"{i}: the bonus chest was not placed: {e.Message}");
+            return null;
+        }
     }
 
     /// <summary>

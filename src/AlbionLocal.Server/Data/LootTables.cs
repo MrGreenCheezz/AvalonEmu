@@ -19,12 +19,18 @@ namespace AlbionLocal.Server.Data;
 /// Loot:BlackMarketChance (the client's "drops only via blackmarket": the official server takes it from its Black Market).
 /// Not modelled: scalewithgoldeconomy (the gold price), the per-listtype factors (1 in the client) and the continent filter
 /// (no loot.xml entry has one). The mob's &lt;Harvestable&gt; children (silver, skinning) are not items and are left to the
-/// caller. Immutable; read off the world thread (<see cref="ClusterStore.Loot"/>).
+/// caller. Tier sanity (loot-balance SPEC §3 [design]): with a content tier, an item more than one tier above it drops as such only
+/// when an entry on its way rolled with a chance of at most <see cref="RareChance"/> (the data's explicitly rare entries, e.g.
+/// T7_DIRECTLOOTDROP_WHITE 0.40 in a T5 chest list); otherwise it comes one tier above the content (T7_X in a T5 roll: T6_X).
+/// Immutable; read off the world thread (<see cref="ClusterStore.Loot"/>).
 /// </summary>
 public sealed class LootTables
 {
     /// <summary>Recursion depth past which a reference is not followed (a list that names itself).</summary>
     private const int MaxDepth = 16;
+
+    /// <summary>The chance at or below which an entry counts as explicitly rare for the tier sanity (loot-balance SPEC §3).</summary>
+    public const double RareChance = 0.5;
 
     private readonly Dictionary<string, XElement> _lists;
 
@@ -48,33 +54,45 @@ public sealed class LootTables
     /// A roll of a mob's &lt;Loot&gt; element with the total loot factor <paramref name="factor"/> and
     /// <paramref name="blackMarketChance"/> for useblackmarket items: the item uniquenames (NAME@N with an enchantment) and
     /// amounts, in roll order, the same name merged. <paramref name="unknown"/> gets each list name loot.xml does not have.
+    /// <paramref name="contentTier"/> (0 = none): the tier of the mob or chest for the tier sanity (an item above it + 1 only through an
+    /// explicitly rare entry). <paramref name="blackMarketSoftCap"/> (0 = none; Loot:BlackMarketSoftCap): past that many useblackmarket
+    /// items in this roll each further one only with cap / (its number), so a list of hundreds of Black Market rolls (an Avalonian or
+    /// static dungeon chest) gives tens of items, not hundreds (loot-balance SPEC §2.3 [design]: the official Black Market supplies only
+    /// what it holds).
     /// </summary>
-    public List<(string Item, int Amount)> RollMob(XElement loot, Random random, double factor = 1, double blackMarketChance = 1, Action<string>? unknown = null)
+    public List<(string Item, int Amount)> RollMob(XElement loot, Random random, double factor = 1, double blackMarketChance = 1, Action<string>? unknown = null,
+        int contentTier = 0, int blackMarketSoftCap = 0)
     {
-        var roll = new Roll(this, random, blackMarketChance, unknown);
-        roll.Children(loot, factor, 1, 1, 0);
+        var roll = new Roll(this, random, blackMarketChance, unknown, contentTier > 0 ? contentTier + 1 : int.MaxValue, blackMarketSoftCap);
+        roll.Children(loot, factor, 1, 1, 0, 1);
         return [.. roll.Drops.GroupBy(d => d.Item, StringComparer.Ordinal).Select(g => (g.Key, g.Sum(d => d.Amount)))];
     }
 
     /// <summary>The roll of the list named <paramref name="name"/> (once, chance 1, every useblackmarket item dropping).</summary>
     public List<(string Item, int Amount)> RollList(string name, Random random)
     {
-        var roll = new Roll(this, random, 1, null);
-        if (_lists.TryGetValue(name, out var list)) roll.Children(list, 1, 1, 1, 0);
+        var roll = new Roll(this, random, 1, null, int.MaxValue, 0);
+        if (_lists.TryGetValue(name, out var list)) roll.Children(list, 1, 1, 1, 0, 1);
         return roll.Drops;
     }
 
-    /// <summary>One roll: its random, the black market chance and the drops so far.</summary>
-    private sealed class Roll(LootTables tables, Random random, double blackMarketChance, Action<string>? unknown)
+    /// <summary>
+    /// One roll: its random, the black market chance and soft cap, the highest tier a common entry gives, the useblackmarket items so
+    /// far and the drops so far.
+    /// </summary>
+    private sealed class Roll(LootTables tables, Random random, double blackMarketChance, Action<string>? unknown, int maxTier, int softCap)
     {
         public readonly List<(string Item, int Amount)> Drops = [];
+
+        private int _blackMarket;
 
         /// <summary>
         /// The entries of a list, an &lt;AND&gt; or the mob's &lt;Loot&gt;, each with its own chance (bd0.abo's container
         /// branch). <paramref name="factor"/> is the total loot factor of this level, <paramref name="inherited"/> the chance
-        /// of an evaluateChance="false" reference above, <paramref name="amountFactor"/> the factor on item amounts.
+        /// of an evaluateChance="false" reference above, <paramref name="amountFactor"/> the factor on item amounts, <paramref name="rare"/>
+        /// the smallest entry chance on the way here (1 = none below 1; the tier sanity).
         /// </summary>
-        public void Children(XElement container, double factor, double inherited, double amountFactor, int depth)
+        public void Children(XElement container, double factor, double inherited, double amountFactor, int depth, double rare)
         {
             if (depth > MaxDepth) return;
             foreach (var child in container.Elements())
@@ -95,40 +113,45 @@ public sealed class LootTables
                 var (childFactor, childInherited) = (1.0, 1.0);
                 if (kind == "LootListReference" && !XmlAttr.Bool(child, "evaluateChance", true))
                     (chance, childFactor, childInherited) = (1, factor, modified ? inherited * own : own);
+                var way = Math.Min(rare, Math.Min(1, chance));
                 for (; chance > 0; chance -= 1)
-                    if (chance >= 1 || random.NextDouble() < chance) Node(child, childFactor, childInherited, amounts, depth + 1);
+                    if (chance >= 1 || random.NextDouble() < chance) Node(child, childFactor, childInherited, amounts, depth + 1, way);
             }
         }
 
         /// <summary>One entry whose chance came: an item drops, a reference rolls its list, an &lt;OR&gt; picks, an &lt;AND&gt; rolls its entries.</summary>
-        private void Node(XElement e, double factor, double inherited, double amountFactor, int depth)
+        private void Node(XElement e, double factor, double inherited, double amountFactor, int depth, double rare)
         {
             if (depth > MaxDepth) return;
             switch (e.Name.LocalName)
             {
                 case "Item":
-                    Item(e, amountFactor);
+                    Item(e, amountFactor, rare);
                     break;
                 case "LootListReference":
                     if ((string?)e.Attribute("name") is not { } name) break;
-                    if (tables._lists.TryGetValue(name, out var list)) Children(list, factor, inherited, amountFactor, depth + 1);
+                    if (tables._lists.TryGetValue(name, out var list)) Children(list, factor, inherited, amountFactor, depth + 1, rare);
                     else unknown?.Invoke(name);
                     break;
                 case "OR":
                     // The pick's chance is not rolled; a picked reference starts without an inherited chance (bd0.abo's OR branch).
                     if (Pick([.. e.Elements().Where(IsEntry)]) is { } one)
-                        Node(one, 1, one.Name.LocalName == "LootListReference" ? 1 : inherited, amountFactor, depth + 1);
+                        Node(one, 1, one.Name.LocalName == "LootListReference" ? 1 : inherited, amountFactor, depth + 1, rare);
                     break;
                 case "AND":
-                    Children(e, factor, inherited, amountFactor, depth + 1);
+                    Children(e, factor, inherited, amountFactor, depth + 1, rare);
                     break;
             }
         }
 
-        /// <summary>An item that came: its amount (× <paramref name="amountFactor"/>, the rest a chance of one more); a useblackmarket item only with the black market chance.</summary>
-        private void Item(XElement e, double amountFactor)
+        /// <summary>
+        /// An item that came: its amount (× <paramref name="amountFactor"/>, the rest a chance of one more); a useblackmarket item only with
+        /// the black market chance and under the soft cap; above the highest tier of a common entry one tier above the content unless <paramref name="rare"/>.
+        /// </summary>
+        private void Item(XElement e, double amountFactor, double rare)
         {
             if ((string?)e.Attribute("type") is not { Length: > 0 } type) return;
+            if (rare > RareChance && TierOf(type) > maxTier) type = $"T{maxTier}{type[2..]}";
             var amount = Amount(e, random);
             if (amount <= 0) return;
             if (amountFactor != 1)
@@ -138,7 +161,12 @@ public sealed class LootTables
                 amount = whole + (scaled > whole && random.NextDouble() < scaled - whole ? 1 : 0);
                 if (amount <= 0) return;
             }
-            if (blackMarketChance < 1 && XmlAttr.Bool(e, "useblackmarket", false) && !(random.NextDouble() < blackMarketChance)) return;
+            if (XmlAttr.Bool(e, "useblackmarket", false))
+            {
+                if (blackMarketChance < 1 && !(random.NextDouble() < blackMarketChance)) return;
+                if (softCap > 0 && _blackMarket >= softCap && !(random.NextDouble() < (double)softCap / (_blackMarket + 1))) return;
+                _blackMarket++;
+            }
             Drops.Add((XmlAttr.Int(e, "enchantmentlevel", 0) is > 0 and var level ? $"{type}@{level}" : type, amount));
         }
 
@@ -156,6 +184,10 @@ public sealed class LootTables
             return children[^1];
         }
     }
+
+    /// <summary>The tier of an item name (T5_X: 5; 0 without a T&lt;n&gt;_ prefix).</summary>
+    public static int TierOf(string item) =>
+        item.Length > 3 && item[0] == 'T' && char.IsAsciiDigit(item[1]) && item[2] == '_' ? item[1] - '0' : 0;
 
     /// <summary>Whether <paramref name="e"/> is a loot entry (not a &lt;Harvestable&gt; or anything else).</summary>
     private static bool IsEntry(XElement e) => e.Name.LocalName is "Item" or "LootListReference" or "OR" or "AND";

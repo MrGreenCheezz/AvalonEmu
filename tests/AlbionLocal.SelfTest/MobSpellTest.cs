@@ -32,6 +32,7 @@ public static class MobSpellTest
         ("mob spells: interpreter units (references, all <AI> compile, slots, SelectRandom, If/SelectFirst/CompoundAction, variables, IfChance cadence, case)", Interpreter),
         ("mob spells: .mob spells off fights as in 5d (no CastStart)", Off),
         ("mob spells (stageN spells-bosses): a spawn spell (MOB_IS_BOSS), a death spell's area (DEMON_SOLDIER_DEATH_AOE), a mob knockback on a player, a <Movement> reposition", BossMechanics),
+        ("mob spells (stageN spells2): IfTargetTookDamage, the dragon's threat areas, RandomGroundTarget, an alarm's changeaggro, an onDeath spell, a tracking mob's escape", Spells2),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -495,6 +496,96 @@ public static class MobSpellTest
         events = Record(arena, peer, 3, [me]);
         Check(events.Any(e => e.Code == EventCodes.CastStart && Is(e.P, mage.Id)), "on again (.mob spells on): it casts");
     }
+
+    private static void Spells2()
+    {
+        using var arena0 = new Arena(ai: true, spells: true);
+        var world = arena0.World;
+        var (_, peer, me) = arena0.Join("Tracker", new InventoryItem("T4_MAIN_SWORD"));
+        var (arena, map) = Quiet(arena0);
+        MobAiTest.OpenGrid(map, arena.Stand); // the escape point and the ring do not wait on the real grid's pool build
+        static AiCond Cond(string xml) => AiScript.Compile(XElement.Parse($"<AI><Behaviour><Spell name=\"X\" target=\"self\">{xml}</Spell></Behaviour></AI>"), "T", _ => null)!.Behaviour[0].When!;
+
+        // IfTargetTookDamage on the spell's target (a self node: the mob), for 1 s; DamageType Magic does not take a physical hit.
+        var ghoul = arena.Spawn("T4_MOB_ROAMING_UNDEAD_GHOUL", new Vector2(30, 0));
+        var ai = (BehaviourAI)ghoul.AI;
+        bool before, hit, magic, later;
+        lock (world.Sync)
+        {
+            before = ai.Check(Cond("<IfTargetTookDamage DamageType=\"All\" />"), ghoul);
+            Combat.Damage(me, ghoul, 10, EffectType.Physical, HitOrigin.Direct, -1, world.GameNow);
+            hit = ai.Check(Cond("<IfTargetTookDamage DamageType=\"All\" />"), ghoul);
+            magic = ai.Check(Cond("<IfTargetTookDamage DamageType=\"Magic\" />"), ghoul);
+        }
+        arena.Run(BehaviourAI.TookDamageWindow + 0.1);
+        lock (world.Sync) later = ai.Check(Cond("<IfTargetTookDamage DamageType=\"All\" />"), ghoul);
+        Check(!before && hit && !magic && !later, $"IfTargetTookDamage: after the hit only, for {BehaviourAI.TookDamageWindow} s, of its type ({before} {hit} {magic} {later})");
+
+        // RandomGroundTarget radius 9 innerradius 4 origin caster: the meteor's area lands in that ring.
+        lock (world.Sync) ai.Try(new AiSpell { Spell = "MOB_DRAGON_FIRE_METEOR_TARGETED_QUICK", Target = "self", RandomGround = (9, 4, false) });
+        var meteor = map.Objects.Values.OfType<MobArea>().FirstOrDefault(a => a.Owner == ghoul);
+        var ring = meteor is null ? -1 : Vector2.Distance(meteor.Position, ghoul.Position);
+        Check(ring is >= 3.99f and <= 9.01f, $"RandomGroundTarget: the area {ring:0.#} m from the mob, within 4-9 m");
+
+        // The fire dragon's TargetAreaDefinition (front 110°, right 70°, back 110°, left 70° of its facing): the player behind it.
+        var dragon = arena.Spawn("T6_MOB_RD_DRAGON_FIRE_ELITE_BOSS", new Vector2(0, 40));
+        var dai = (BehaviourAI)dragon.AI;
+        bool back, front, inBack, far, players;
+        lock (world.Sync)
+        {
+            dragon.Threat[me] = 100;
+            me.Teleport(dragon.Position + SpellMovementFacing(dragon.Direction) * -10, 0, DateTime.UtcNow);
+            back = dai.Check(Cond("<IfHighestArea type=\"threat\" area=\"back\" />"));
+            front = dai.Check(Cond("<IfHighestArea type=\"threat\" area=\"front\" />"));
+            players = dai.Check(Cond("<IfPlayersInArea area=\"back\" op=\"greaterOrEqual\" value=\"1\" />")) && !dai.Check(Cond("<IfPlayersInArea area=\"left\" op=\"greaterOrEqual\" value=\"1\" />"));
+            var farCond = Cond("<IfTargetIsInHighestArea area=\"back\" type=\"threat\"><IfTargetRange op=\"greater\" value=\"15\" /></IfTargetIsInHighestArea>");
+            inBack = dai.Check(farCond, me);
+            me.Teleport(dragon.Position + SpellMovementFacing(dragon.Direction) * -20, 0, DateTime.UtcNow);
+            far = dai.Check(farCond, me);
+        }
+        Check(dai.Areas(world).Count == 8 && back && !front && players && !inBack && far,
+              $"the dragon's areas ({dai.Areas(world).Count}): the threat behind it (back {back}, front {front}, IfPlayersInArea {players}), IfTargetIsInHighestArea with its own range 15 m ({inBack} at 10 m, {far} at 20 m)");
+
+        // MOB_HERETIC_ALARMTRAP's changeaggro (effectarearadius 30, aggroradius 15): the idle friend 8 m from the caster takes the player.
+        var friend = arena.Spawn("T4_MOB_ROAMING_UNDEAD_GHOUL", ghoul.Position - arena.Stand + new Vector2(0, 8)); // the caster chased the player a little
+        lock (world.Sync)
+        {
+            me.Teleport(arena.Stand, 0, DateTime.UtcNow);
+            var alarm = T("MOB_HERETIC_ALARMTRAP");
+            MobCasts.Execute(new MobCasts.MobHit(ghoul, map, alarm, 1, 100, me, me.PositionAt(DateTime.UtcNow), world.GameNow), alarm);
+        }
+        Check(friend.AI.State == MobState.Combat && friend.Threat.ContainsKey(me), $"changeaggro: the friend within 15 m of the caster fights the player ({friend.AI.Describe()})");
+
+        // An onDeath event spell (MOB_DEMON_BRUTE_BOSS_ONDEATH) goes out as the boss dies.
+        var brute = arena.Spawn("T5_MOB_DEMON_BRUTE_VETERAN_BOSS", new Vector2(-20, 0));
+        var mark = peer.Events.Count;
+        lock (world.Sync) Combat.Damage(me, brute, 1e9, EffectType.Physical, HitOrigin.Direct, -1, world.GameNow);
+        var dying = T("MOB_DEMON_BRUTE_BOSS_ONDEATH");
+        Check(brute.Dead && Since(peer, mark).Any(e => e.Code == EventCodes.CastSpell && Is(e.P, brute.Id) && Convert.ToInt16(e.P[3]) == dying.Id), "the brute's onDeath spell: CastSpell MOB_DEMON_BRUTE_BOSS_ONDEATH");
+
+        // A tracking boss flees: its EscapeSpellSequence in order (immunity, escape volley, dash to the escape point), then it leaves.
+        var archer = arena.Spawn("T3_MOB_TR_UNDEAD_ARCHER_BOSS", new Vector2(0, -12));
+        mark = peer.Events.Count;
+        IReadOnlyList<string> sequence;
+        lock (world.Sync)
+        {
+            archer.Threat[me] = 1;
+            sequence = ((BehaviourAI)archer.AI).Escape(world, map, "test");
+        }
+        var start = archer.Position;
+        var moved = 0f;
+        for (var i = 0; i < 200 && !archer.Removed; i++)
+        {
+            arena.Run(0.05);
+            if (!archer.Removed) moved = Math.Max(moved, Vector2.Distance(archer.Position, start));
+        }
+        var cast = Since(peer, mark).Where(e => e.Code == EventCodes.CastSpell && Is(e.P, archer.Id)).Select(e => Client.Spells!.Template((int)Convert.ToInt16(e.P[3]))?.Name).ToList();
+        Check(sequence.SequenceEqual(["MOB_TRACKING_ESCAPE_IMMUNITY", "MOB_TRACKING_UNDEAD_ARCHER_ESCAPE", "MOB_TRACKING_UNDEAD_ARCHER_ESCAPE_DASH"]) && cast.SequenceEqual(sequence)
+              && archer.Removed && moved > 5,
+              $"the escape: CastSpell {string.Join(", ", cast)}, a dash of {moved:0.#} m away from the player, then gone ({archer.Removed})");
+    }
+
+    private static Vector2 SpellMovementFacing(float degrees) => SpellMovement.Facing(degrees);
 
     private static void BossMechanics()
     {

@@ -181,6 +181,7 @@ public static class Seasons
             if (!log.Rewards.ContainsKey(r.Id)) log.Rewards[r.Id] = Eligible(p, r) ? Claimable : Ineligible;
         p.Session.Send(new NewUnlockedPersonalSeasonRewardsEvent { dcr = id, dcs = [.. unlocked.Select(r => r.Id)] });
         Log.Info("season", $"'{p.Character.Name}' unlocked {string.Join(", ", unlocked.Select(r => r.Id))} of {id}");
+        p.World.Vanity.SeasonRewards(p, unlocked.Count); // stageN vanity
         foreach (var r in unlocked)
             if (settings.GrantPremiumRewards && log.Rewards[r.Id] == Ineligible && r.BoughtPremium)
             {

@@ -19,7 +19,7 @@ public static class PveTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
-        ("pve preset: Preset pve by default (Consensual, no deaths, BM 0.35, rates), official = today's defaults, explicit keys win", Config),
+        ("pve preset: Preset pve by default (Consensual, no deaths, BM 0.15, rates), official = today's defaults, explicit keys win", Config),
         ("pve preset: Pvp:Mode Consensual / Off relations (only Red vs Red, black as red), Official unchanged", Relations),
         ("pve preset: 0204 and black: no hit on Blue, Red on Red knocks down (no bag, no wear), no execute or die button, Red lock 0; Pve:KnockdownWear", Arena),
     ];
@@ -32,10 +32,10 @@ public static class PveTest
         var path = Path.Combine(dir, "albionlocal.json");
         var pve = ServerConfig.Load(path, []);
         Check(pve is { Preset: ServerPreset.Pve, PvpMode: PvpMode.Consensual, PvpLethalDeath: false, PvpFullLoot: false, PvpKnockdownWear: 0,
-                  PvpRedLockMinutes: 0, PveKnockdownWear: 0, LootBlackMarketChance: 0.35, PvpDeathSilverDrop: false, SilverPickupTax: 0,
+                  PvpRedLockMinutes: 0, PveKnockdownWear: 0, LootBlackMarketChance: 0.15, PvpDeathSilverDrop: false, SilverPickupTax: 0,
                   OpenWorldChests: true, ChestsPoiLimit: 0 }
-              && pve.Rates == new Rates { Fame = 2, Silver = 1.5, Loot = 1.5, Respawn = 2, Harvest = 1.5, Regrowth = 2, ChampionWeight = 2 },
-              "no file: the pve preset (Consensual, no lethal death or full loot, no knockdown wear, no Red lock, BM 0.35, every POI chest, Fame 2 Silver 1.5 Loot 1.5 Respawn 2 Harvest 1.5 Regrowth 2 ChampionWeight 2)");
+              && pve.Rates == new Rates { Fame = 2, Silver = 1.5, Loot = 1, Respawn = 2, Harvest = 1.5, Regrowth = 2, ChampionWeight = 2 },
+              "no file: the pve preset (Consensual, no lethal death or full loot, no knockdown wear, no Red lock, BM 0.15, every POI chest, Fame 2 Silver 1.5 Loot 1 Respawn 2 Harvest 1.5 Regrowth 2 ChampionWeight 2)");
         var official = ServerConfig.Load(path, ["--Preset=official"]);
         var record = new ServerConfig();
         Check(official == record with { ContentPath = official.ContentPath, ClientGameDataPath = official.ClientGameDataPath, SavesPath = official.SavesPath, Preset = ServerPreset.Official }

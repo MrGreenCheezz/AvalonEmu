@@ -27,6 +27,7 @@ public sealed partial class WorldSession
         if (!IsCommand(req.aa9))
         {
             _say = ChatSay(req);
+            if (_say is not null && Player is { } speaker) world.Plugins.ChatLine(speaker, _say.bxm ?? ""); // the plugins' ChatMessage
             return new SayResponse().FillEmpty();
         }
         RunChatCommand(req.aa9!);
@@ -153,6 +154,9 @@ public sealed partial class WorldSession
     /// 0x180b11d20, the same from "error". The text goes through a8c.e 0x18051e9d0, which looks up a text starting with
     /// '@' as a localisation key, so such a line gets a leading space. One event per line; each is also logged.
     /// </summary>
+    /// <summary>A command reply to this player from elsewhere (the checker's setup runner, Systems/Checklist): SystemMessage lines as in chat.</summary>
+    internal void CommandReply(string text, bool error) => SendCommandReply(text, error);
+
     private void SendCommandReply(string text, bool error)
     {
         foreach (var line in text.Split('\n'))

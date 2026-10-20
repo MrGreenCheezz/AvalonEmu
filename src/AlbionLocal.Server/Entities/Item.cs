@@ -32,10 +32,28 @@ public sealed class Item(long id, ItemTemplate template, int count, int quality,
     public short[] Passive { get; } = passive;
 
     /// <summary>
+    /// A potion's or food's slot spell set by a plugin (<see cref="Systems.SlotSpells"/>): CharacterSpellSlot 12/13 casts it instead of the
+    /// consumespell while this stack lies in the slot. Not saved.
+    /// </summary>
+    public short? ConsumeOverride { get; set; }
+
+    /// <summary>
+    /// The temporary slot spells in force (<see cref="Systems.SlotSpells"/>), by (active, index; index -1 = <see cref="ConsumeOverride"/>): the
+    /// choice to save meanwhile (-1 = none) and the token of the revert timer. <see cref="ToRecord"/> writes the saved choice.
+    /// </summary>
+    public Dictionary<(bool Active, int Index), (short Saved, int Token)>? Temporary { get; set; }
+
+    /// <summary>
     /// A journal's fame (NewJournalItem key 8, a7m raw; stageH journals SPEC §A.1): 0 for an _EMPTY one that has not filled yet, the
     /// maxfame for a _FULL one; 0 for every other item.
     /// </summary>
     public long JournalFame { get; set; }
+
+    /// <summary>
+    /// An awakened weapon's legendary soul (stageN awakening SPEC): NewEquipmentItem key 11 = 1 and event 37 after it; null = a plain item.
+    /// Replaced as a whole on every change (immutable).
+    /// </summary>
+    public ItemSoul? Soul { get; set; }
 
     /// <summary>A journal between empty and full (0 &lt; fame &lt; maxfame): the client does not stack it (bdm.lk 0x22), neither does the server.</summary>
     public bool PartlyFilled => Template.Journal is { } j && JournalFame > 0 && JournalFame < j.MaxFame;
@@ -70,10 +88,21 @@ public sealed class Item(long id, ItemTemplate template, int count, int quality,
         {
             Quality = Quality,
             Durability = DurabilityRaw == Template.FullDurabilityRaw ? null : DurabilityRaw,
-            Active = Names(Active, Source?.Active, spellName),
-            Passive = Names(Passive, Source?.Passive, spellName),
+            Active = Names(Saved(Active, true), Source?.Active, spellName),
+            Passive = Names(Saved(Passive, false), Source?.Passive, spellName),
             Fame = Template.IsJournal && JournalFame != DefaultFame(Template) ? JournalFame : null,
+            Soul = Soul,
         };
+    }
+
+    /// <summary>The choices to save: <paramref name="ids"/> with each temporary slot spell's saved choice in its place.</summary>
+    private short[] Saved(short[] ids, bool active)
+    {
+        if (Temporary is not { Count: > 0 } temporary) return ids;
+        var saved = ids.ToArray();
+        foreach (var ((a, i), (s, _)) in temporary)
+            if (a == active && i >= 0 && i < saved.Length) saved[i] = s;
+        return saved;
     }
 
     public override string ToString() => $"{Template.Name} (object {Id})";

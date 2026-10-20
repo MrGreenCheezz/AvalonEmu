@@ -1,0 +1,68 @@
+{
+  // The extra action bars (analysis/work/stageN/extrabars/SPEC.md; README "Extra action bars"): spells the worn items grant in two
+  // extra bars of six slots, cast through the client mod (Shift+1..6, Ctrl+1..6). Without the mod nothing changes for a client.
+  // Bars: 0-2 (0 = off), BarSize: 1-6.
+  //
+  // Rules (content file only; packs cannot change them): what EVERY worn item grants from its own data, official spells only.
+  //   Slots.<MainHand|OffHand|Head|Armor|Shoes|Cape|Bag|Mount>: Count = spells before the bonuses; Own = candidates are the item's own
+  //     active spell lists' UNCHOSEN options (list order; a weapon round-robin Q, W, E); Map = candidates by items.xml shopsubcategory2,
+  //     then shopsubcategory1, then "*" (after the own ones). A pick skips toggles/passives, spells on the action bar (Q-F), spells
+  //     already granted, and (RespectUnlocks) locked spells unless the destiny board unlocks everything.
+  //   Enchantment / Quality: [{"Slots": [...], "Min": n, "Extra": k}] - an item in one of the slots with enchantment (quality) >= Min
+  //     grants k more from the same candidates; entries add up. Quality 4 = Excellent, 5 = Masterpiece.
+  //   Artifact: items with an ARTEFACT resource in their recipe (or a name tag of Tags) in Slots grant Extra more, their artifact-only
+  //     options first (ARMOR_PLATE_KEEPER FORCESHIELD); when that option is chosen (always so for a weapon's E), the next unchosen one.
+  //   Order: first every item's base picks (main hand, off hand, head, armour, shoes, cape, bag, mount), then the bonuses; what does not
+  //     fit into the 12 slots is left out (.extrabar explain shows it).
+  // Items: explicit overrides - item uniquename or pattern (* any text, ? one character; matched with and without @n) -> spells
+  //   (activespell uniquenames), each "SPELL" or {"spell": "SPELL", "bar": 1-2, "position": 1-6}. An item named here grants exactly
+  //   these instead of its rules. Packs add their own in mods/<pack>/server/extraspells.json (the Studio's item editor writes it);
+  //   .extrabar reload reads everything again.
+  "Bars": 2,
+  "BarSize": 6,
+  "Rules": {
+    "Enabled": true,
+    "RespectUnlocks": true,
+    "Slots": {
+      "MainHand": { "Count": 2, "Own": true },
+      "OffHand": {
+        "Count": 1, "Own": true,
+        "Map": {
+          "shieldtype": ["BLOCK", "TAUNT", "STONESKIN"],
+          "booktype": ["EMERGENCY_SHIELD", "LIFESAVIOR", "MAXHEALTHBUFF"],
+          "booktype_morgana": ["ENERGYSHIELD2", "LIFESAVIOR", "EMERGENCY_SHIELD"],
+          "booktype_hellsskull": ["BLOODLUST", "EMERGENCY_SHIELD", "LIFESAVIOR"],
+          "booktype_keeper": ["MAXHEALTHBUFF", "EMERGENCY_SHIELD", "LIFESAVIOR"],
+          "torchtype": ["FLAMESHIELD", "HASTE", "SPEEDCASTER"],
+          "torchtype_keeperhorn": ["HOWL", "HASTE", "FLAMESHIELD"],
+          "torchtype_avalon": ["PURGINGSHIELD2", "SPEEDCASTER", "HASTE"],
+          "torchtype_undead": ["RETALIATE2", "SPEEDCASTER", "HASTE"],
+          "*": ["HASTE", "STONESKIN"]
+        }
+      },
+      "Head": { "Count": 1, "Own": true },
+      "Armor": { "Count": 1, "Own": true },
+      "Shoes": { "Count": 1, "Own": true },
+      // Capes have passives only: Sprint (self, 30 s, no energy) for every cape.
+      "Cape": { "Count": 1, "Own": true, "Map": { "*": ["SPRINT"] } },
+      // Bags: a self utility - the cleanse (removes debuffs around you), else the energy barrier.
+      "Bag": { "Count": 1, "Map": { "*": ["SELF_CLEANSE", "ENERGY_BARRIER"] } },
+      // Mounts: a gallop on foot - the sprint variants of the shoes (player spells; the mounts' own mountspells are made for riding).
+      "Mount": { "Count": 1, "Map": { "*": ["SPRINT_CD_REDUCTION", "SPRINTEOT", "SPRINTHOT"] } }
+    },
+    "Enchantment": [
+      { "Slots": ["MainHand"], "Min": 2, "Extra": 1 },
+      { "Slots": ["Armor"], "Min": 3, "Extra": 1 }
+    ],
+    "Quality": [
+      { "Slots": ["MainHand", "Head", "Armor", "Shoes"], "Min": 5, "Extra": 1 }
+    ],
+    "Artifact": {
+      "Extra": 1,
+      "Slots": ["MainHand", "OffHand", "Head", "Armor", "Shoes"],
+      "Tags": []
+    }
+  },
+  "Items": {
+  }
+}

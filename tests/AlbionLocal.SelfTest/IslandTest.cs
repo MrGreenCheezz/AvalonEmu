@@ -25,6 +25,9 @@ public static class IslandTest
         ("islands: starter island, GetIslandInfos rows (keys 0-8, 10-22, no 9), BuyJourney onto it (push {0, 1, 2}), Join 8/9/81/82 + NewIslandManagement and preset 3, back to 1000, login on it, gone island, store", Live),
         ("islands phase 2-3: Join 91, buy 20,000 / upgrade 500,000 (8046 for 130 s), flags, showroom and back; starter farm + herb garden, plant 665 (slot, keys, FOI), water, harvest at 79200 s not 79199, destroy, store, GrowthSpeed 4", Farming),
         ("islands: animals: a T3 horse baby in a pasture grows only while fed (10 wheat = 480 nutrition = 158400 s), collected as T3_FARM_HORSE_GROWN", Animals),
+        ("islands phase 5: plots 1 (level 0) / 16 (level 5); a player builds a T1_PASTURE (op 68) for 100 silver + 30 wood/rock/planks/blocks, the plot then refused, gives it up (op 64)", Construction),
+        ("islands phase 5: a placed animal is picked up again (op 71: the baby back, the object gone); a seed cannot be", Pickup),
+        ("islands: labourers: a T2 house (op 68), a bed and a table in it (op 69), a wood labourer from its contract, a full T2 wood journal after settling in (op 257), its loot after 22 h (op 258)", Labourers),
     ];
 
     private static ClusterStore Store => Client.Clusters!;
@@ -385,6 +388,140 @@ public static class IslandTest
               && done.ReturnCode == 0 && got.la is ["T3_FARM_HORSE_GROWN", ..] && me.Inventory.Bag.Items.Any(i => i.Template.Name == "T3_FARM_HORSE_GROWN")
               && !me.Map.Objects.ContainsKey(animal.Id) && world.Islands.CropsOf(island.Id).Count == 0,
               $"unfed growth {unfed}; fed {string.Join(",", fed.lb ?? [])} wheat (left {wheat.Count}); at 79200 s RC {early.ReturnCode}, FOI 4 = {half.b9c}, 8 = {string.Join(",", half.b9g ?? [])}; collected RC {done.ReturnCode}: {string.Join(",", got.la ?? [])}");
+        world.Dispose();
+    }
+
+    /// <summary>A level-0 Lymhurst island (…0001a) and its owner standing on it with <paramref name="items"/> and 1000 silver, joined.</summary>
+    private static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
+        OnIsland(params (string Item, int Count)[] items)
+    {
+        var characters = Repository(NewDir());
+        var clock = new ManualClock();
+        var anchor = DateTime.UtcNow.Ticks;
+        var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, Client.Items, Client.GameData, Client.Spells)
+        {
+            Sync = new object(), Clusters = Store, MapSeed = 5, Clock = clock, GameTicks = () => anchor + clock.Now.Ticks,
+        };
+        world.MobAi = false;
+        _ = Store.Get("ISLAND-PLAYER-FOREST-0001a");
+        var hero = StarterKit.Default.NewCharacter("A" + Guid.NewGuid().ToString("N")[..10]);
+        hero.Silver = 1000 * Pricing.A7m;
+        foreach (var (item, count) in items) hero.Inventory.Add(new InventoryItem(item, count));
+        characters.Create(hero);
+        var island = world.Islands.Give(hero, world.Islands.Data!.PersonalOf("1000")!, 0, out _)!;
+        (hero.Cluster, hero.PositionX, hero.PositionY) = (island.Cluster, 180, 110);
+        characters.Save(hero);
+        var (s, peer, _) = Join(world, hero.Id);
+        OperationResponse Call(AlbionRequest req, int id)
+        {
+            lock (world.Sync) s.OnRequest(Request(req, id), encrypted: false);
+            return peer.Responses[^1];
+        }
+        void Tick(TimeSpan by)
+        {
+            clock.Advance(by);
+            lock (world.Sync) world.Update();
+        }
+        return (world, island, s, peer, Call, Tick);
+    }
+
+    /// <summary>
+    /// Islands phase 5 (analysis/work/stageN/islands5/SPEC.md §1): the plots of the templates (level 0 one, level 5 sixteen); ConstructionSiteCreate
+    /// of a T1_PASTURE on the level-0 plot takes its placecost (100 silver) and its craftingrequirements at once and answers its object id; the
+    /// same plot again and a spot off the buildable ground are refused; BuildingGiveup takes it away (nothing back).
+    /// </summary>
+    private static void Construction()
+    {
+        var lymhurst = Store.Islands.PersonalOf("1000")!;
+        var plots = (Islands.PlotCount(Store.Get(lymhurst.LevelAt(0)!.Cluster)), Islands.PlotCount(Store.Get(lymhurst.LevelAt(5)!.Cluster)));
+        var (world, island, s, _, call, _) = OnIsland(("T1_WOOD", 30), ("T1_ROCK", 30), ("T3_PLANKS", 30), ("T3_STONEBLOCK", 30));
+        var me = s.Player!;
+        var pasture = Store.Buildings.Find("T1_PASTURE")!;
+        var cell = me.Map!.Template!.BuildCells.OrderBy(c => c.X).ThenBy(c => c.Y).First();
+        var at = cell + new Vector2(5.4f, 4.6f);
+        var built = call(new ConstructionSiteCreateRequest { g3 = pasture.Id, g4 = [at.X, at.Y], g5 = 0 }, 3);
+        var building = me.Map.Objects.Values.OfType<PlayerBuilding>().SingleOrDefault();
+        var again = call(new ConstructionSiteCreateRequest { g3 = pasture.Id, g4 = [at.X, at.Y], g5 = 0 }, 4);
+        var off = call(new ConstructionSiteCreateRequest { g3 = pasture.Id, g4 = [20, 20], g5 = 0 }, 5);
+        Check(plots == (1, 16) && built.ReturnCode == 0 && building is { Template.Name: "T1_PASTURE" } && building.Position == cell + new Vector2(5, 5)
+              && Fill<ConstructionSiteCreateResponse>(built.Parameters).aoj == building.Id && me.Character.Silver == 900 * Pricing.A7m
+              && me.Inventory.Bag.Items.Count(i => i.Template.Name is "T1_WOOD" or "T1_ROCK" or "T3_PLANKS" or "T3_STONEBLOCK") == 0
+              && again.ReturnCode == 1 && off.ReturnCode == 1 && world.Islands.BuildingsOf(island.Id).Count == 1,
+              $"plots {plots}; pasture built RC {built.ReturnCode} at {building?.Position} (cell {cell}), silver {me.Character.Silver / Pricing.A7m}, resources taken; again RC {again.ReturnCode}, off RC {off.ReturnCode}");
+        var gone = building is null ? null : call(new BuildingGiveupRequest { c4 = building.Id }, 6);
+        Check(gone?.ReturnCode == 0 && world.Islands.BuildingsOf(island.Id).Count == 0 && !me.Map.Objects.Values.OfType<PlayerBuilding>().Any(),
+              $"given up: RC {gone?.ReturnCode}, no building left");
+        world.Dispose();
+    }
+
+    /// <summary>
+    /// analysis/work/stageN/labourers/SPEC.md: a T2_PLAYERHOUSE on the level-0 plot (op 68: 100 silver, its resources); a T2 bed and a T2 table
+    /// placed in it (op 69: happiness target 200); a T2_LABOURER_WOOD hired by placing its contract (op 69, the contract used up); before it
+    /// has settled in (1800 s) the job is refused; after, a T2_JOURNAL_WOOD_FULL starts the job at yield 1 (happiness 100 → 200 in 360 s);
+    /// the loot is refused before the 79200 s and then gives the journal's baselootamount of T2 wood and the labourer fame.
+    /// </summary>
+    private static void Labourers()
+    {
+        var (world, island, s, _, call, tick) = OnIsland(("T1_WOOD", 30), ("T1_ROCK", 3), ("T2_STONEBLOCK", 180), ("T2_FURNITUREITEM_BED", 1),
+            ("T2_FURNITUREITEM_TABLE", 1), ("T2_LABOURER_CONTRACT_WOOD", 1), ("T2_JOURNAL_WOOD_FULL", 1));
+        var me = s.Player!;
+        var house = Store.Buildings.Find("T2_PLAYERHOUSE")!;
+        var cell = me.Map!.Template!.BuildCells.OrderBy(c => c.X).ThenBy(c => c.Y).First();
+        var built = call(new ConstructionSiteCreateRequest { g3 = house.Id, g4 = [cell.X + 5, cell.Y + 5], g5 = 0 }, 3);
+        var centre = cell + new Vector2(5, 5);
+        long Stack(string name) => me.Inventory.Bag.Items.Single(i => i.Template.Name == name).Id;
+        var bed = Client.Items.Find("T2_FURNITUREITEM_BED")!;
+        var table = Client.Items.Find("T2_FURNITUREITEM_TABLE")!;
+        call(new PlaceableObjectPlaceRequest { x7 = Stack(bed.Name), x8 = world.Islands.ItemBuildingId(bed), x9 = centre + new Vector2(4, 4) }, 4);
+        call(new PlaceableObjectPlaceRequest { x7 = Stack(table.Name), x8 = world.Islands.ItemBuildingId(table), x9 = centre + new Vector2(-4, 4) }, 5);
+        var type = world.Islands.LabourerTypes["T2_LABOURER_WOOD"];
+        var hired = call(new PlaceableObjectPlaceRequest { x7 = Stack("T2_LABOURER_CONTRACT_WOOD"), x8 = type.Id, x9 = centre + new Vector2(0, -4) }, 6);
+        var labourer = me.Map.Objects.Values.OfType<LabourerObject>().SingleOrDefault();
+        var target = labourer is null ? -1 : world.Islands.HappinessTarget(labourer.Labourer);
+        Check(built.ReturnCode == 0 && hired.ReturnCode == 0 && labourer is not null && me.Map.Objects.Values.OfType<FurnitureObject>().Count() == 2 && target == 200
+              && me.Inventory.Bag.Items.All(i => i.Template.Name is not ("T2_STONEBLOCK" or "T2_FURNITUREITEM_BED" or "T2_LABOURER_CONTRACT_WOOD"))
+              && me.Character.Silver == 900 * Pricing.A7m,
+              $"house RC {built.ReturnCode}, hire RC {hired.ReturnCode}, labourer {labourer?.Labourer}, furniture {me.Map.Objects.Values.OfType<FurnitureObject>().Count()}, target {target}, silver {me.Character.Silver / Pricing.A7m}");
+        if (labourer is null) { world.Dispose(); return; }
+        var early = call(new LaborerStartJobRequest { tb = labourer.Id, tc = Stack("T2_JOURNAL_WOOD_FULL") }, 7);
+        tick(TimeSpan.FromSeconds(1800));
+        var started = call(new LaborerStartJobRequest { tb = labourer.Id, tc = Stack("T2_JOURNAL_WOOD_FULL") }, 8);
+        tick(TimeSpan.FromSeconds(79199));
+        var soon = call(new LaborerTakeJobLootRequest { td = labourer.Id }, 9);
+        tick(TimeSpan.FromSeconds(1));
+        var loot = call(new LaborerTakeJobLootRequest { td = labourer.Id }, 10);
+        var journal = Client.Items.Find("T2_JOURNAL_WOOD_FULL")!.Journal!;
+        var wood = me.Inventory.Bag.Items.Where(i => i.Template.BaseName.StartsWith("T2_WOOD", StringComparison.Ordinal)).Sum(i => i.Count);
+        Check(early.ReturnCode == 1 && started.ReturnCode == 0 && soon.ReturnCode == 1 && loot.ReturnCode == 0 && wood == (int)Math.Round(journal.BaseLoot)
+              && labourer.Labourer.Fame > 0 && labourer.Labourer.Journal is null && world.Islands.LabourersOf(labourer.Labourer.Building).Count == 1,
+              $"job before settling RC {early.ReturnCode}, after RC {started.ReturnCode}; loot at 79199 s RC {soon.ReturnCode}, at 79200 s RC {loot.ReturnCode}: {wood} wood (baselootamount {journal.BaseLoot}), fame {labourer.Labourer.Fame}");
+        world.Dispose();
+    }
+
+    /// <summary>
+    /// Islands phase 5 / mounts SPEC "not done": PlaceableObjectPickup of a placed (fed) T3 horse baby gives the baby back and takes the animal
+    /// off the map and out of the store; a planted seed (pickupable false) is refused.
+    /// </summary>
+    private static void Pickup()
+    {
+        var (world, island, s, _, call, tick) = OnIsland(("T3_FARM_HORSE_BABY", 1), ("T3_WHEAT", 5), ("T3_FARM_WHEAT_SEED", 1));
+        var me = s.Player!;
+        var baby = Client.Items.Find("T3_FARM_HORSE_BABY")!;
+        var seed = Client.Items.Find("T3_FARM_WHEAT_SEED")!;
+        world.Islands.Build(island, "T1_PASTURE", new Vector2(185, 115), 0, out _);
+        world.Islands.Build(island, "T1_FARMHOUSE", new Vector2(165, 110), 0, out _);
+        call(new PlaceableObjectPlaceRequest { x7 = me.Inventory.Bag.Items.Single(i => i.Template == baby).Id, x8 = world.Islands.ItemBuildingId(baby), x9 = new Vector2(185, 115) }, 3);
+        call(new PlaceableObjectPlaceRequest { x7 = me.Inventory.Bag.Items.Single(i => i.Template == seed).Id, x8 = world.Islands.ItemBuildingId(seed), x9 = new Vector2(171, 110) }, 4);
+        tick(TimeSpan.FromSeconds(1));
+        var placed = me.Map!.Objects.Values.OfType<FarmableObject>().ToList();
+        var animal = placed.SingleOrDefault(o => o.Seed == baby);
+        var crop = placed.SingleOrDefault(o => o.Seed == seed);
+        if (animal is not null) call(new FarmableFillRequest { ld = animal.Id, le = [me.Inventory.Bag.Items.Single(i => i.Template.Name == "T3_WHEAT").Id], lf = [5] }, 5);
+        var up = animal is null ? null : call(new PlaceableObjectPickupRequest { x5 = animal.Id }, 6);
+        var seedUp = crop is null ? null : call(new PlaceableObjectPickupRequest { x5 = crop.Id }, 7);
+        Check(up?.ReturnCode == 0 && me.Inventory.Bag.Items.Count(i => i.Template == baby) == 1 && !me.Map.Objects.ContainsKey(animal!.Id)
+              && world.Islands.CropsOf(island.Id).Count == 1 && seedUp?.ReturnCode == 1 && me.Map.Objects.ContainsKey(crop!.Id),
+              $"picked up: RC {up?.ReturnCode}, baby back {me.Inventory.Bag.Items.Count(i => i.Template == baby)}, the seed's pick-up RC {seedUp?.ReturnCode} ({placed.Count} placed)");
         world.Dispose();
     }
 

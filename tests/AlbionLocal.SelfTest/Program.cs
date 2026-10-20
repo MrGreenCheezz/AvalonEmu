@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Net;
 using System.Numerics;
 using System.Security.Cryptography;
@@ -48,6 +48,7 @@ tests.AddRange(DuelTest.All);
 tests.AddRange(OpenPvpTest.All);
 tests.AddRange(FlagToggleTest.All);
 tests.AddRange(QolTest.All);
+tests.AddRange(VanityTest.All);
 tests.AddRange(PvpDeathTest.All);
 tests.AddRange(PveTest.All);
 tests.AddRange(OpsAuditTest.All);
@@ -62,9 +63,11 @@ tests.AddRange(ExpeditionTest.All);
 tests.AddRange(CorruptedTest.All);
 tests.AddRange(CorruptedInvasionTest.All);
 tests.AddRange(HellgateTest.All);
+tests.AddRange(ArenaTest.All);
 tests.AddRange(AvalonRoadsTest.All);
 tests.AddRange(MistsTest.All);
 tests.AddRange(MistsBTest.All);
+tests.AddRange(FactionTest.All);
 tests.AddRange(GoalTest.All);
 tests.AddRange(PvpGoalTest.All);
 tests.AddRange(GuildGoalTest.All);
@@ -83,7 +86,20 @@ tests.AddRange(TradeTest.All);
 tests.AddRange(FocusTest.All);
 tests.AddRange(PvpSpellTest.All);
 tests.AddRange(ShrineTest.All);
+tests.AddRange(HuntTest.All);
 tests.AddRange(StaticDungeonTest.All);
+tests.AddRange(WebPanelTest.All);
+
+tests.AddRange(CompanionTest.All);
+tests.AddRange(ModKitTest.All);
+tests.AddRange(ModEditorTest.All);
+tests.AddRange(StudioTest.All);
+tests.AddRange(CheckerTest.All);
+tests.AddRange(PluginTest.All);
+tests.AddRange(PluginHooksTest.All);
+tests.AddRange(RulesTest.All);
+tests.AddRange(SlotSpellTest.All);
+tests.AddRange(ExtraBarTest.All);
 
 Log.Level = args.Contains("-v") ? LogLevel.Trace : LogLevel.Warn;
 // As the server's Program.cs: compressed GameTimeStamps count from the Login key 251 value.

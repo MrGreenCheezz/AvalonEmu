@@ -81,6 +81,51 @@ public sealed class GameDataFile
     public XmlReader CreateReader() => XmlReader.Create(OpenXml(), Settings);
 
     /// <summary>
+    /// The whole decrypted XML as bytes, with the 10-byte gzip header of the .bin (<paramref name="gzipHeader"/>): what
+    /// <see cref="Encode"/> needs to write a file the client reads the same way (modkit, tools/AlbionLocal.ModKit).
+    /// </summary>
+    public byte[] DecodeXml(out byte[] gzipHeader)
+    {
+        byte[] plain;
+        try
+        {
+            using var des = DES.Create();
+            des.Key = Key;
+            plain = des.DecryptCbc(_bin, IV, PaddingMode.PKCS7);
+        }
+        catch (CryptographicException e)
+        {
+            throw new InvalidDataException($"{Path}: cannot decrypt ({e.Message})", e);
+        }
+        if (plain.Length < 10) throw new InvalidDataException($"{Path}: {plain.Length} bytes after decryption, no gzip header");
+        gzipHeader = plain[..10];
+        using var inflate = new DeflateStream(new MemoryStream(plain, 10, plain.Length - 10), CompressionMode.Decompress);
+        using var xml = new MemoryStream();
+        inflate.CopyTo(xml);
+        return xml.ToArray();
+    }
+
+    /// <summary>
+    /// The inverse of <see cref="DecodeXml"/>: <paramref name="xml"/> gzip-compressed (with a correct CRC-32 and size trailer),
+    /// its 10-byte header replaced by <paramref name="gzipHeader"/> (the original file's, so that the client's reader sees the
+    /// header it always saw), then DES-CBC (PKCS7) encrypted with the client's key and IV.
+    /// </summary>
+    public static byte[] Encode(byte[] xml, ReadOnlySpan<byte> gzipHeader)
+    {
+        if (gzipHeader.Length != 10) throw new ArgumentException("the gzip header is 10 bytes", nameof(gzipHeader));
+        using var packed = new MemoryStream();
+        using (var gzip = new GZipStream(packed, CompressionLevel.Optimal, leaveOpen: true)) gzip.Write(xml);
+        var plain = packed.ToArray();
+        gzipHeader.CopyTo(plain);
+        using var des = DES.Create();
+        des.Key = Key;
+        return des.EncryptCbc(plain, IV, PaddingMode.PKCS7);
+    }
+
+    /// <summary>A .bin held in memory (modkit: a built file before it is installed), named like the file it stands for.</summary>
+    public static GameDataFile FromBytes(string path, byte[] bin) => new(path, bin);
+
+    /// <summary>
     /// The top-level elements (the children of the root) in file order, each read as its own <see cref="XElement"/>
     /// while the file streams: only one element is held at a time. Errors in the data throw <see cref="InvalidDataException"/>.
     /// </summary>
