@@ -124,7 +124,7 @@ public static class MultiplayerTest
         c.Cluster = "0000";
         c.PositionX = at.X;
         c.PositionY = at.Y;
-        c.Template = template;
+        c.Appearance = (byte)template;
         c.Equipment = [];
         c.Inventory = [];
         Check(characters.Create(c), $"character {name} created");
@@ -320,7 +320,7 @@ public static class MultiplayerTest
         var bobId = AccountOf(bob);
         Check(bobId != SqliteCharacterRepository.LocalAccountId && Names(bob) is [], "a new name: a new empty account");
         bobLogin.OnRequest(Request(new CreateCharacterRequest { h7 = "localhero" }, 2), encrypted: true);
-        Check(bobPeer.Responses[^1].ReturnCode == 1, "character names are unique on the whole server (ignoring case)");
+        Check(bobPeer.Responses[^1].ReturnCode == 482, "duplicate character names across accounts use NAME_NOT_UNIQUE (ignoring case)");
         bobLogin.OnRequest(Request(new CreateCharacterRequest { h7 = "Bobby" }, 3), encrypted: true);
         bobLogin.OnRequest(Request(new SelectCharacterRequest { abc = "LocalHero" }, null), encrypted: true);
         Check(bobPeer.Responses[^2].ReturnCode == 0 && bobPeer.Responses[^1].ReturnCode == 0x231, "Bobby created; another account's character cannot be selected");

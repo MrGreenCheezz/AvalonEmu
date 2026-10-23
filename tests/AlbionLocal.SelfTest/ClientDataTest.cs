@@ -58,8 +58,8 @@ public static class ClientDataTest
 
     private static void ItemsGolden()
     {
-        var items = Client.Items;
         if (Golden("items.tsv") is not { } tsv) return;
+        var items = Client.Items;
         var rows = File.ReadLines(tsv).Where(l => l.Length > 0 && !l.StartsWith('#')).ToList();
         // items.tsv has the items.xml variants; the client adds _EMPTY and _FULL of the 133 journals after them (JournalTest).
         Check(rows.Count == 11971 && items.Count == 11971 + 2 * 133, $"11971 items + 266 journal variants (items.tsv {rows.Count}, client {items.Count})");
@@ -83,8 +83,8 @@ public static class ClientDataTest
 
     private static void GameDataGolden()
     {
-        var client = Client.GameData!;
         if (Golden("gamedata.json") is not { } json) return;
+        var client = Client.GameData!;
         var golden = GameData.Load(json);
         static string Json(object? o) => JsonSerializer.Serialize(o);
         foreach (var (what, a, b) in new (string, object?, object?)[]
@@ -104,8 +104,8 @@ public static class ClientDataTest
 
     private static void SpellsGolden()
     {
-        var client = Client.Spells!;
         if (Golden("spells.json") is not { } json) return;
+        var client = Client.Spells!;
         var golden = SpellData.Load(json);
         Check(client.Count == 9326 && golden.Count == 9326, $"9326 spell ids (got {client.Count})");
         var badSpells = Enumerable.Range(0, 9326)

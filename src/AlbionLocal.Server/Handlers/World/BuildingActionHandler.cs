@@ -51,9 +51,6 @@ public sealed partial class WorldSession
     /// <summary>The salvage's duration (not captured; as <see cref="RepairTime"/>: gamedata gives both the crafttimefactor 0.1).</summary>
     public static readonly TimeSpan SalvageTime = RepairTime;
 
-    /// <summary>The time per craft at a station (observed 0.31-0.55 s at the meld building of 002835; Q-C3).</summary>
-    public static readonly TimeSpan CraftTime = TimeSpan.FromSeconds(0.4);
-
     /// <summary>
     /// ActionOnBuildingStart (op 55, client class ok; keys: 0 client time, 1 building object, 2 ACT, 3 counter, 4 the price
     /// the client expects (a7m), 5 repair: item object ids, 7 craft: item index, 8 recipe index, 9 amount, 10 craft by
@@ -69,6 +66,7 @@ public sealed partial class WorldSession
             return Generic($"object {req.o} is no building in the player's view");
         if (player.Action is { Over: false } busy)
             return Generic($"another station action runs at building {busy.Building.Id}");
+        if (Systems.OpeningTutorial.ForgeLocked(player, building)) return Generic("tutorial forge is locked until its quest is accepted");
         var far = Vector2.Distance(player.PositionAt(DateTime.UtcNow), building.Position) > StationRange;
         var answer = (StationAction)req.p switch
         {
@@ -303,10 +301,10 @@ public sealed partial class WorldSession
     /// craftingfocus, the whole batch's focus (<see cref="Focus.Cost"/> with the player's destiny board reduction) is spent at the start,
     /// partly when there is less (the efficiency bonus 0.59 × the share covered goes into the return bonus), key 2 = −used; without
     /// focus key 2 is left out, as captured. At a
-    /// crafting station a batch takes <see cref="CraftTime"/> per craft: silver and resources go at the start, each craft's
+    /// crafting station a batch uses <see cref="Pricing.CraftDuration"/>: silver and resources go at the start, each craft's
     /// output (and its returned resources) comes on a timer with a CraftItemFinished, the last with the rest of the burst; a
     /// cancel gives back the silver and resources of the crafts not done. Equipment gets a rolled quality
-    /// (<see cref="RollQuality"/>). Each craft at a station gives its fame (<see cref="AwardCraftFame"/>) after its output;
+    /// (<see cref="RollQuality"/>). Fame is granted once for the completed output when the batch finishes or is cancelled;
     /// shop purchases and dontgivefameoncraft items none. The nutrition fee is 0: ownerless stations send no fee data
     /// (SPEC §6c). A cancel gives back the focus of the crafts not done too [inference] (CraftingFocusUpdate +refund).
     /// </summary>
@@ -348,7 +346,9 @@ public sealed partial class WorldSession
 
         var instant = building.Template.IsShop || recipe.Time <= 0;
         var now = world.GameNow;
-        var action = new BuildingAction(building, req.p, req.q, now, instant ? now : now + CraftTime.Ticks * crafts);
+        var timeReduction = player.Effects.Sum("crafttime", now);
+        long Due(int completed) => checked(now + Pricing.CraftDuration(recipe, completed, timeReduction).Ticks);
+        var action = new BuildingAction(building, req.p, req.q, now, instant ? now : Due(crafts));
         Systems.Mounts.BeforeAction(player, "crafts"); // stageD mounts SPEC §4.3: an accepted station action dismounts first
         player.Action = action;
         SendEvent(building.NewBuilding(inUse: true));                                          // 1.
@@ -374,11 +374,19 @@ public sealed partial class WorldSession
             ? Math.Min(1, Pricing.ReturnFraction(world.Crafting.Bonus(player.Map!.Cluster, item.Attrs.GetValueOrDefault("craftingcategory", ""))
                 + world.Economy.FocusEfficiency * focusShare) * world.Rates.CraftingReturn) : 0; // × Rates:CraftingReturn
         Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
-            $"'{player.Character.Name}' crafts {output} x {item.Name} ({crafts} craft(s), recipe {req.v}) at {building.Template.Name} for {req.r / 10000.0:0.####} silver{(focusUsed > 0 ? $", {focusUsed:0} focus" : "")}{(returns > 0 ? $", {returns * 100:0.#} % of the resources back" : "")}{(instant ? "" : $", {CraftTime.TotalSeconds * crafts:0.##} s")}"));
+            $"'{player.Character.Name}' crafts {output} x {item.Name} ({crafts} craft(s), recipe {req.v}) at {building.Template.Name} for {req.r / 10000.0:0.####} silver{(focusUsed > 0 ? $", {focusUsed:0} focus" : "")}{(returns > 0 ? $", {returns * 100:0.#} % of the resources back" : "")}{(instant ? "" : $", {Pricing.CraftDuration(recipe, crafts, timeReduction).TotalSeconds:0.####} s")}"));
         var fames = !building.Template.IsShop && item.Attrs.GetValueOrDefault("dontgivefameoncraft") != "true";
         var done = 0;
+        var fameAwarded = false;
+        void SettleFame()
+        {
+            if (!fames || fameAwarded || done == 0) return;
+            fameAwarded = true;
+            AwardCraftFame(player, item, checked(done * recipe.AmountCrafted));
+        }
         action.OnCancel = () =>
         {
+            SettleFame();
             var left = crafts - done;
             if (left <= 0) return;
             foreach (var r in recipe.Resources)
@@ -395,13 +403,13 @@ public sealed partial class WorldSession
             for (var n = 0; n < (item.IsEquipment ? batch * recipe.AmountCrafted : 1); n++)
                 made.AddRange(GiveItem(player, item, item.IsEquipment ? 1 : batch * recipe.AmountCrafted, item.IsEquipment ? RollQuality(world.CraftRandom, world.Economy.QualityWeights, qualityBonus) : 1));
             if (returns > 0) GiveReturns(player, recipe, batch, returns);
-            if (fames) AwardCraftFame(player, item, batch * recipe.AmountCrafted);
+            if (done == crafts) SettleFame();
             world.Plugins.ItemCrafted(player, item.Name, batch * recipe.AmountCrafted, building.Template.Name); // the plugins' ItemCrafted
             SendEvent(new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] }); // 6.
             if (!instant) player.SendToObservers(new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] });
             if (done < crafts)
             {
-                player.Map!.Timers.At(world.ClockAt(action.Start + CraftTime.Ticks * (done + 1)), Craft);
+                player.Map!.Timers.At(world.ClockAt(Due(done + 1)), Craft);
                 player.SaveItems();
                 return;
             }
@@ -412,8 +420,14 @@ public sealed partial class WorldSession
             Finished(player, action);                                                            // 9.
             player.SaveItems();
         }
+        action.BeforeCancel = () =>
+        {
+            // A move can arrive after the client's bar ends but before the next world tick.
+            // Produce the elapsed portion first; if all units are due, this is a finish, not a cancel.
+            while (!action.Over && player == Player && player.Action == action && done < crafts && world.GameNow >= Due(done + 1)) Craft();
+        };
         if (instant) Craft();
-        else player.Map!.Timers.At(world.ClockAt(action.Start + CraftTime.Ticks), Craft);
+        else player.Map!.Timers.At(world.ClockAt(Due(1)), Craft);
         return null;
     }
 
@@ -496,6 +510,8 @@ public sealed partial class WorldSession
     internal void CancelAction(Player player, string why, bool tellClient)
     {
         if (player.Action is not { Over: false } a) return;
+        a.BeforeCancel?.Invoke();
+        if (a.Over || player.Action != a) return;
         a.Over = true;
         player.Action = null;
         a.OnCancel?.Invoke();

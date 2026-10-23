@@ -626,6 +626,7 @@ public static class Combat
         // a world boss's for every contributor too (its looters: in an open-world fight most of them are not in the killer's party).
         IReadOnlyList<Player> credited = bossLooters is null ? group : [.. group.Union(bossLooters)];
         AlbionJournal.Killed(map, killer, mob, credited);
+        TutorialJourney.MobKilled(killer, mob);
         world.Bounties.Killed(map, killer, mob, credited);
         world.Guilds.Killed(map, mob, credited); // guilds SPEC §10.3/§10.6: the clear experience of a dungeon boss, the contracts
         world.GuildGoals.OnKill(map, killer, mob, credited); // stage I: the weekly guild goals (killmobs, bosses, dungeons)
@@ -877,6 +878,7 @@ public static class Combat
     /// </summary>
     public static void Update(Player p, TimeSpan now)
     {
+        SpellEffects.ExpireAfterMovement(p);
         Knockdown.Update(p, now);
         Passives.Update(p); // the pulsingspellpassive pulses (stageD effects batch 2)
         var c = p.Combat;

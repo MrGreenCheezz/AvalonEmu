@@ -3,6 +3,9 @@ using AlbionLocal.Photon;
 using AlbionLocal.Server;
 using AlbionLocal.Server.Commands;
 using AlbionLocal.Server.Data;
+using AlbionLocal.Server.Protocol;
+
+ProtocolTrace.Enabled = args.Contains("--protocol-trace");
 
 ServerConfig config;
 try
@@ -15,6 +18,16 @@ catch (Exception e) when (e is InvalidDataException or JsonException)
     return 1;
 }
 Log.Level = args.Contains("-v") ? LogLevel.Debug : args.Contains("-vv") ? LogLevel.Trace : config.LogLevel;
+// Offline inspection deliberately runs before logging to a save folder or constructing ServerHost.
+if (args.Contains("--check-tutorial"))
+{
+    try { return TutorialCheck.Run(config.ClientGameDataPath, Console.Out, details: args.Contains("-v")); }
+    catch (Exception e) when (e is InvalidDataException or System.Xml.XmlException)
+    {
+        Log.Error("tutorial", e.Message);
+        return 1;
+    }
+}
 // --check-content: the offline golden checks of the cluster data over every world.xml cluster (Data/ContentCheck), a
 // summary, then the exit code. No port, save or log file is touched, so a build of its own (README: a running server
 // locks its bin folder) can run next to a running server.

@@ -12,12 +12,25 @@ public static class PersistenceTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
+        ("persistence: native SQLite is at least 3.50.2 (CVE-2025-6965)", NativeVersion),
         ("persistence: characters round trip through a new repository, names unique, deleted stays deleted", RoundTrip),
         ("persistence: characters.json imported once (bare item names too) and renamed", Import),
         ("persistence: a save that fails halfway leaves the previous record", AbortedSave),
         ("persistence: a failed write stays queued for a join and is retried", FailedWrite),
         ("persistence: a link merged while its group is being written stays for the member not yet written", LinkDuringWrite),
     ];
+
+    private static void NativeVersion()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sqlite_version()";
+        var actual = (string)command.ExecuteScalar()!;
+        Check(Version.TryParse(actual, out var version) && version >= new Version(3, 50, 2),
+            $"loaded SQLite {actual}; CVE-2025-6965 requires SQLite >= 3.50.2");
+        Console.WriteLine($"      native SQLite {actual}");
+    }
 
     /// <summary>Every saved field, compared as JSON.</summary>
     private static string Json(Character c) => JsonSerializer.Serialize(c);
@@ -28,6 +41,7 @@ public static class PersistenceTest
         var path = Path.Combine(dir, "albionlocal.db");
         var a = StarterKit.Default.NewCharacter("Alpha");
         a.Template = 3;
+        a.PlayedMilliseconds = 123456789;
         a.Appearance = 2;
         a.Customization = [1, 2, 3];
         a.Clothes = [7];

@@ -82,11 +82,11 @@ public static class OpsAuditTest
         Check(Listed.All(o => table.Unhandled.GetValueOrDefault(o) == before[o]), "none of them took the unhandled path (its warning)");
         // Ignore: nothing at all, as before, but counted as stubbed.
         var ignored = Listed.Where(o => stubs.KindOf(o) == OpcodeStubs.StubKind.Ignore).ToList();
-        Check(ignored.Count == 10 && ignored.All(o => table.Stubbed.GetValueOrDefault(o) > 0),
-              "ten ignore stubs (BoostFarmable has its handler since the island farms, SetAchievementsAutoLearn since stageJ focus-lp), counted as stubbed");
+        Check(ignored.Count == 9 && ignored.All(o => table.Stubbed.GetValueOrDefault(o) > 0),
+              "nine ignore stubs; UseFunction now has the opening-tutorial handler, counted as handled");
         var answered = peer.Responses.Skip(responses).Select(r => (OperationCodes)Convert.ToInt16(r.Parameters[ReservedKeys.OperationCode])).ToHashSet();
         Check(!answered.Overlaps(ignored) && !answered.Contains(OperationCodes.SubscribeToCluster) && !answered.Contains(OperationCodes.TrackAlbionJournalAchievements)
-              && !answered.Contains(OperationCodes.GetPersonalSeasonPastRewardData),
+              && !answered.Contains(OperationCodes.GetPersonalSeasonPastRewardData) && !answered.Contains(OperationCodes.UseFunction),
               "no OperationResponse to an op without a response class (but the island showroom's RC)");
 
         void Refused(string text, string words)

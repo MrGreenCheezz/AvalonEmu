@@ -124,7 +124,9 @@ public sealed partial class WorldSession
             return Refuse(player, exitId, ChangeClusterRefusal.ExitNotConnected, $"no arrival point in {targetId}");
         }
         Commit(player, to, $"exit:{exit.World.Id}");
-        return new ChangeClusterResponse { anu = to.Cluster }; // [0] the target, byte-identical to the new Join's key 8 (ciy+0x10)
+        var clientCluster = TutorialInstances.ClientCluster(player.Character, world);
+        return new ChangeClusterResponse { anu = clientCluster,
+            anv = clientCluster != to.Cluster ? to.Cluster : null }; // the same identity as the next Join, with its authored base map
     }
 
     /// <summary>

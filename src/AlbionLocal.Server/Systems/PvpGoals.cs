@@ -118,7 +118,7 @@ public static class PvpGoals
     /// </summary>
     private static bool SameAccount(World world, Guid? a, Guid? b) =>
         a is { } x && b is { } y && x == y && x != Guid.Empty
-        && (x != SqliteCharacterRepository.LocalAccountId || world.Characters.FindAccount(x) is { Name: not null });
+        && (x != Account.LocalId || world.Characters.FindAccount(x) is { Name: not null });
 
     /// <summary>
     /// Why <paramref name="receiver"/> gets no credit for <paramref name="k"/> (§2.2 rules 1-4 and 6; null = it does). Reads only: the

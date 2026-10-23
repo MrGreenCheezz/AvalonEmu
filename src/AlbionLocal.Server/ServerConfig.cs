@@ -173,6 +173,9 @@ public sealed record ServerConfig
     /// </summary>
     public NewCharacterProgression NewCharacters { get; init; } = NewCharacterProgression.UnlockAll;
 
+    /// <summary>Explicit tutorial lab for NEW characters, from the beach through departure to a starter town.</summary>
+    public bool TutorialOpening { get; init; }
+
     /// <summary>Answers of side requests without a handler (Content/OpcodeStubs).</summary>
     public string OpcodeStubsPath => Path.Combine(ContentPath, "opcode-stubs.json");
 
@@ -965,6 +968,8 @@ public sealed record ServerConfig
             NewCharacters = Take("Progression:NewCharacters") is not { } progression ? NewCharacterProgression.UnlockAll
                 : Enum.TryParse<NewCharacterProgression>(progression, ignoreCase: true, out var np) && Enum.IsDefined(np) ? np
                 : throw new InvalidDataException($"Progression:NewCharacters: '{progression}' is not one of {string.Join(", ", Enum.GetNames<NewCharacterProgression>())}"),
+            TutorialOpening = Take("Tutorial:Opening") is not { } tutorial ? false
+                : bool.TryParse(tutorial, out var opening) ? opening : throw new InvalidDataException("Tutorial:Opening must be true or false"),
             EventLayers = Take("World:EventLayers") is not { } layers ? Array.Empty<string>() : Flags(layers),
             BuildingIdOffset = Take("ClientNumbering:BuildingIdOffset") is not { } offset ? 1
                 : int.TryParse(offset, out var o) && o is >= 0 and <= 1000 ? o

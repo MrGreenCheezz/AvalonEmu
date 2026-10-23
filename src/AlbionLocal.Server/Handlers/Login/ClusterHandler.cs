@@ -24,11 +24,13 @@ public sealed partial class LoginSession
         if (World is { } world)
         {
             var selected = world.Accounts.Selected(_account.Id) is { } id ? world.LoadCharacter(id) : null;
-            var expected = selected?.PendingTransfer?.To ?? selected?.Cluster;
+            var expected = selected is null ? null : TutorialInstances.ClientCluster(selected, world);
             if (cluster != expected)
                 Log.Warn(Name, $"game server of cluster '{cluster}' asked, but the selected character is bound for '{expected ?? "(none selected)"}'; answered anyway");
             else Log.Info(Name, $"game server of cluster {cluster}: {config.GameServerAddress}");
-            if (cluster.Length > 0) world.PrefetchCluster(cluster);
+            // Private instance ids are protocol identities, never world.xml lookup keys.
+            if (selected is not null && cluster == expected) world.PrefetchCluster(selected.Cluster);
+            else if (cluster.Length > 0 && !cluster.StartsWith("@TUTORIALSINGLE@", StringComparison.Ordinal)) world.PrefetchCluster(cluster);
         }
         else Log.Info(Name, $"game server of cluster {cluster}: {config.GameServerAddress}");
         // [0] "ip:port" → ci7+0x118 → c32.i(string); 255 echoed (RequestId of this request).

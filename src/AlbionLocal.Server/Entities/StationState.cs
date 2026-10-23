@@ -35,6 +35,9 @@ public sealed class BuildingAction(Building building, byte act, byte counter, lo
     /// <summary>What the cancel gives back (the refund of the crafts not done); null = nothing.</summary>
     public Action? OnCancel { get; internal set; }
 
+    /// <summary>Settle output whose deadline has already elapsed before deciding what to cancel.</summary>
+    public Action? BeforeCancel { get; internal set; }
+
     /// <summary>Set once it ended (finished or cancelled): a timer that comes later does nothing.</summary>
     public bool Over { get; internal set; }
 }

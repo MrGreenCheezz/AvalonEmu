@@ -30,6 +30,11 @@ public sealed partial class WorldSession
     private AlbionResponse? TrackAlbionJournalAchievements(TrackAlbionJournalAchievementsRequest req)
     {
         if (Player is not { } player) return null;
+        if (Systems.OpeningTutorial.Active(player))
+        {
+            Systems.OpeningTutorial.TrackerReady(player);
+            return null;
+        }
         var c = player.Character;
         var asked = req.ag3 ?? [];
         var first = !_journalTracked;

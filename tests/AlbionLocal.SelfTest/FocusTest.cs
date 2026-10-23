@@ -43,7 +43,7 @@ public static class FocusTest
               && ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Premium:Mode=none", "--Focus:Max=data", "--Premium:FameFactor=2"]) is { PremiumMode: PremiumMode.None, FocusMax: null, PremiumFameFactor: 2 },
               "presets: Premium:Mode pve Free, official None; Focus:Start 30000 / 0, LearningPoints:Start 500 / 0; 'data' = the client data's value");
         var now = DateTime.UtcNow.Ticks;
-        Check(Premium.ListEnd(pve, now) > now + TimeSpan.FromDays(300).Ticks && Premium.ListEnd(official, now) == now, "Login key 35: a year ahead under Free, now (no premium) under None");
+        Check(Premium.ListDays(pve) == 365 && Premium.ListDays(official) == 0, "Login key 35: remaining premium days, not UTC ticks");
 
         var nonpremium = new PersonalSeasonData.Reward("LP", "learningpointsreward", null, 5, BoughtPremium: false, Premium: false, NonPremium: true);
         var bought = new PersonalSeasonData.Reward("ITEM", "itemreward", "T4_ORE", 1, BoughtPremium: true, Premium: false, NonPremium: false);

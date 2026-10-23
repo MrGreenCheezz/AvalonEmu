@@ -2,10 +2,24 @@
 using System.Net;
 using System.Numerics;
 using System.Security.Cryptography;
+using System.Diagnostics;
+using System.Text.Json;
 using AlbionLocal.Photon;
 using AlbionLocal.Photon.Crypto;
 using AlbionLocal.Photon.Serialization;
 using AlbionLocal.SelfTest;
+using AlbionLocal.Server.Protocol;
+
+TestRunOptions options;
+try { options = TestRunOptions.Parse(args); }
+catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 2; }
+if (options.Help)
+{
+    Console.WriteLine("SelfTest [--client-gamedata=<folder>] [--only=<text>] [--report=<file.json>] [--lab=all|serialization|transport|session|messages] [--protocol-trace] [-v]");
+    return 0;
+}
+AlbionTests.ClientGameDataOverride = options.ClientGameData;
+ProtocolTrace.Enabled = options.Trace;
 
 var tests = new List<(string Name, Action Body)>
 {
@@ -19,6 +33,14 @@ tests.AddRange(ClientDataTest.All);
 tests.AddRange(AlbionTests.All);
 tests.AddRange(WorldTest.All);
 tests.AddRange(PersistenceTest.All);
+tests.AddRange(RepositoryContractTest.All);
+tests.AddRange(TutorialDataTest.All);
+tests.AddRange(TutorialJourneyDataTest.All);
+tests.AddRange(TutorialObtainabilityTest.All);
+tests.AddRange(TutorialJourneyTest.All);
+tests.AddRange(TutorialWorldTest.All);
+tests.AddRange(OpeningTutorialTest.All);
+tests.AddRange(CharacterEntryTest.All);
 tests.AddRange(CommandTest.All);
 tests.AddRange(ClusterDataTest.All);
 tests.AddRange(WorldObjectTest.All);
@@ -100,28 +122,59 @@ tests.AddRange(PluginHooksTest.All);
 tests.AddRange(RulesTest.All);
 tests.AddRange(SlotSpellTest.All);
 tests.AddRange(ExtraBarTest.All);
+tests.AddRange(LabExercises.All);
+tests.AddRange(LabTests.All);
 
-Log.Level = args.Contains("-v") ? LogLevel.Trace : LogLevel.Warn;
+Log.Level = options.Verbose ? LogLevel.Trace : LogLevel.Warn;
 // As the server's Program.cs: compressed GameTimeStamps count from the Login key 251 value.
 AlbionLocal.Server.Protocol.AlbionSerializer.CompressedTimeBase = AlbionLocal.Server.Game.GameTime.StartTicks;
 // --only=<text>: just the tests whose name contains it (a quick run while working on one system).
-if (args.FirstOrDefault(a => a.StartsWith("--only=", StringComparison.Ordinal)) is { } only)
-    tests = [.. tests.Where(t => t.Name.Contains(only["--only=".Length..], StringComparison.OrdinalIgnoreCase))];
+if (options.Lab is { } lab)
+    tests = [.. tests.Where(t => LabExercises.InStage(t.Name, lab))];
+if (options.Only is { } only)
+    tests = [.. tests.Where(t => t.Name.Contains(only, StringComparison.OrdinalIgnoreCase))];
+var results = new List<TestResult>();
 var failed = 0;
+var skipped = 0;
 foreach (var (name, body) in tests)
 {
+    var watch = Stopwatch.StartNew();
     try
     {
         body();
+        results.Add(new(name, "passed", watch.Elapsed.TotalMilliseconds));
         Console.WriteLine($"PASS  {name}");
+    }
+    catch (TestSkippedException e)
+    {
+        skipped++;
+        results.Add(new(name, "skipped", watch.Elapsed.TotalMilliseconds, e.Message));
+        Console.WriteLine($"SKIP  {name}\n      {e.Message}");
     }
     catch (Exception e)
     {
         failed++;
+        results.Add(new(name, "failed", watch.Elapsed.TotalMilliseconds, $"{e.GetType().Name}: {e.Message}"));
         Console.WriteLine($"FAIL  {name}\n      {e.GetType().Name}: {e.Message}\n{e.StackTrace}");
     }
 }
-Console.WriteLine(failed == 0 ? $"all {tests.Count} passed" : $"{failed} of {tests.Count} failed");
+var passed = tests.Count - failed - skipped;
+Console.WriteLine($"{passed} passed, {failed} failed, {skipped} skipped; {tests.Count} selected");
+if (options.Report is { } report)
+{
+    try
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(report)!);
+        File.WriteAllText(report, JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1, generatedAtUtc = DateTimeOffset.UtcNow,
+            passed, failed, skipped, selected = tests.Count, results,
+        }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+    catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+    { Console.Error.WriteLine($"cannot write report: {e.Message}"); return 2; }
+}
+if (tests.Count == 0) { Console.Error.WriteLine("no tests selected"); return 2; }
 return failed == 0 ? 0 : 1;
 
 static void Check(bool cond, string what)
@@ -225,6 +278,7 @@ static void EndToEnd(double dropRate)
     client.Connect();
     Check(client.InitDone.Task.Wait(10000), "init response");
     Check(client.EncryptionDone.Task.Wait(10000), "encryption established");
+    if (ProtocolTrace.Enabled) Console.WriteLine($"SYNTHETIC UDP: Init complete; DH/AES ready; simulated loss {dropRate:P0}");
 
     var big = new byte[10000];
     Random.Shared.NextBytes(big);
@@ -233,6 +287,7 @@ static void EndToEnd(double dropRate)
     Check(resp!.ReturnCode == 0 && (int)resp.Parameters[255]! == 7, "request id echoed");
     Check(((byte[])resp.Parameters[0]!).AsSpan().SequenceEqual(big), "fragmented 10 KB payload intact");
     Check(client.Events.TryTake(out var ev, 15000) && ev!.Code == 1, "event received");
+    if (ProtocolTrace.Enabled) Console.WriteLine("SYNTHETIC UDP: encrypted 10 KB request/response reassembled intact; event received");
 }
 
 /// <summary>Echoes request parameters back in an encrypted response and raises one event.</summary>
@@ -240,7 +295,9 @@ sealed class EchoHandler : IPhotonPeerHandler
 {
     public void OnOperationRequest(PhotonPeer peer, OperationRequest request, bool encrypted)
     {
+        ProtocolTrace.Write("client->server", "request", request.Code, request.Parameters, encrypted);
         peer.SendOperationResponse(new OperationResponse(request.Code, new(request.Parameters)), encrypted);
+        ProtocolTrace.Write("server->client", "response", request.Code, request.Parameters, encrypted, 0);
         peer.SendEvent(new EventData(1, new() { [252] = (short)1 }));
     }
 

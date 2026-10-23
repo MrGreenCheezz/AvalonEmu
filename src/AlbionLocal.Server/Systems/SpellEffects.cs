@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using System.Numerics;
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
 using AlbionLocal.Server.Game;
@@ -75,6 +76,10 @@ public sealed class ActiveSpell
 
     /// <summary>Key 4: the GameTimeStamp of the (latest) application, the hit time.</summary>
     public long Start { get; internal set; }
+
+    /// <summary>Accepted position where movement-limited effects were applied to a player.</summary>
+    public Vector2? MovementOrigin { get; internal set; }
+    public string? MovementCluster { get; internal set; }
 
     /// <summary>Key 5: the stacks (1 to <see cref="SpellTemplate.StackLimit"/>).</summary>
     public byte Stacks { get; internal set; } = 1;
@@ -440,6 +445,11 @@ public static class SpellEffects
         entry.Ap = (float)ap;
         entry.CcAp = (float)ccAp;
         entry.Start = start;
+        if (unit is Player movingPlayer && spell.Effects.Any(e => SpellTemplate.Float(e, "expireafterdistance") > 0))
+        {
+            entry.MovementOrigin = movingPlayer.PositionAt(DateTime.UtcNow);
+            entry.MovementCluster = movingPlayer.Map?.Cluster;
+        }
         for (var i = 0; i < entry.Subs.Length; i++)
         {
             if (i < planned.Length && planned[i] is { } plannedSub) entry.Subs[i].Take(plannedSub);
@@ -740,6 +750,37 @@ public static class SpellEffects
 
     /// <summary>Silenced: no CastStart unless the spell is castablewhensilenced; auto-attacks allowed.</summary>
     public static bool Silenced(IUnit unit, long now) => unit.Effects.Count > 0 && unit.Effects.Has("silence", now);
+
+    /// <summary>Expire individual effects after displacement from their application position.
+    /// Client spells.bin declares expireafterdistance per effect: the tutorial protection's
+    /// cannotattack ends after 0.1 m, independently of its invisibility/invincibility thresholds.</summary>
+    public static void ExpireAfterMovement(Player player)
+    {
+        if (player.Map is not { } map || player.Effects.Count == 0) return;
+        var world = player.World;
+        var now = world.GameNow;
+        var position = player.PositionAt(DateTime.UtcNow);
+        if (!float.IsFinite(position.X) || !float.IsFinite(position.Y)) return;
+        var changed = false;
+        foreach (var entry in player.Effects.Spells)
+        {
+            if (entry.Pending || entry.MovementOrigin is not { } origin) continue;
+            var moved = entry.MovementCluster != map.Cluster ? float.PositiveInfinity : Vector2.DistanceSquared(position, origin);
+            foreach (var sub in entry.Subs)
+            {
+                var limit = SpellTemplate.Float(sub.Node, "expireafterdistance");
+                if (!entry.On(sub, now) || limit <= 0 || moved < limit * limit) continue;
+                sub.Active = false;
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        player.Effects.Prune(now);
+        Send(world, player);
+        Refresh(world, player);
+        Consumables.Store(player);
+        world.Saves.MarkChanged(player.Character);
+    }
 
     /// <summary>No auto-attack: stunned or cannotattack.</summary>
     public static bool CannotAttack(IUnit unit, long now) => unit.Effects.Count > 0 && (unit.Effects.Has("cannotattack", now) || unit.Effects.Has("stun", now));

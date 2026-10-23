@@ -67,7 +67,7 @@ public sealed class BuffShrines(World world)
     {
         if (_shrines.Count == 0 || world.Now < _next) return;
         _next = world.Now + TimeSpan.FromSeconds(1);
-        _shrines.RemoveAll(s => s.Map is not { } m || world.Maps.Find(m.Cluster) != m || !m.Objects.ContainsKey(s.Id));
+        _shrines.RemoveAll(s => s.Map is not { } m || world.Maps.Find(m.InstanceKey) != m || !m.Objects.ContainsKey(s.Id));
         foreach (var p in _pending.Where(x => x.Value.Until < world.Now).Select(x => x.Key).ToList()) _pending.Remove(p);
         var ticks = world.GameNow;
         foreach (var s in _shrines)

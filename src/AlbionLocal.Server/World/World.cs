@@ -124,6 +124,8 @@ public sealed class World : IDisposable
     /// <summary>Item stats, constants and achievements; null only in hand-made test tables (default stats, nothing sent for the destiny board).</summary>
     public GameData? GameData { get; }
 
+    public OpeningTutorialData? OpeningTutorial { get; init; }
+
     /// <summary>StageN qol (SPEC §3): until when (<see cref="Now"/>) each character's /stuck is on cooldown; kept over relogs, not over a restart.</summary>
     public Dictionary<Guid, TimeSpan> StuckCooldowns { get; } = [];
 
@@ -542,6 +544,7 @@ public sealed class World : IDisposable
     private static void PlayerSystems(Entities.Player player, TimeSpan now)
     {
         Systems.Combat.Update(player, now);
+        Systems.OpeningTutorial.Update(player);
         Systems.Mounts.Update(player); // the mounted speed buff (stageD mounts SPEC §4.7)
         Systems.Flagging.Update(player); // a flag cast that is due ends (stageE pvp SPEC §3.1)
         Systems.Death.UpdateExecute(player); // an execute that is due kills (stageE pvp SPEC §4.2)
@@ -646,6 +649,7 @@ public sealed class World : IDisposable
         if (map.Template is not null) return; // the fast path of a later Join was first
         if (map.Unloaded) return; // unloaded while its cluster was read: the next Join builds a new map
         MapSpawner.Populate(map, template, this);
+        foreach (var player in map.Players.Values) Systems.TutorialWorld.Prepare(map, player.Character);
         var now = DateTime.UtcNow;
         // Every player's cell off the temporary origin-(0, 0) grid first: a Refresh compares its new cell with the others'
         // cells, which must not be on the old grid (30 cells off at 0000: Leave and NewCharacter again for every pair).

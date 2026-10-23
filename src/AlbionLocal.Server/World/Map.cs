@@ -21,6 +21,10 @@ public sealed class Map(string cluster)
 
     public string Cluster { get; } = cluster;
 
+    /// <summary>Private opening-tutorial owner. Cluster remains the authored data id.</summary>
+    public Guid? TutorialOwner { get; init; }
+    public string InstanceKey => TutorialOwner is { } owner ? TutorialInstances.Key(Cluster, owner) : Cluster;
+
     /// <summary>The cluster's objects as the client data places them; null until the load (<see cref="World.LoadTemplate"/>) is in.</summary>
     public ClusterTemplate? Template { get; private set; }
 

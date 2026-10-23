@@ -58,6 +58,7 @@ public abstract class AlbionSession : IPhotonPeerHandler
     /// <summary>One operation request of this connection (Albion operations travel as Photon operation 1).</summary>
     public void OnRequest(OperationRequest request, bool encrypted)
     {
+        ProtocolTrace.Write("client->server", "request", request.Code, request.Parameters, encrypted);
         if (request.Code == KeepaliveCode)
         {
             // No response, as on the official server. Taken before the Albion parse, which knows no Photon codes:

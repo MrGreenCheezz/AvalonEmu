@@ -43,6 +43,7 @@ public sealed partial class WorldSession
         Death.Interrupt(player, "the player attacks", interrupted: false); // the client has left its execute for this attack [infer]
         world.FakeCasts.Interrupt(player, "the player attacks", interrupted: false); // and its fake-slot cast (a corrupted or mists entrance, a chest)
         Emotes.Stop(player, "attacks"); // stageN qol: a looping emote ends for the observers
+        SpellEffects.ExpireAfterMovement(player); // a move can precede this request within the same world tick
         if (player.Combat.Down is not null)
         {
             Log.Debug(Name, $"'{player.Character.Name}' AttackStart while knocked down, refused ({AttackInvalidTarget})");

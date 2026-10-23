@@ -33,6 +33,8 @@ public static class EconomyTest
         ("economy: awakening (ACT 8) a T4 sword@4 at the meld building: silver and 2 + 2 tokens taken, NewEquipmentItem key 11 = 1 and event 37 with 3 traits, kept over a relog; a sword@3 refused (ItemEnchantmentTooLow)", Awakening),
         ("economy: trait value reroll (ACT 8 sub 4): attunement and silver charged, event 552 old -> new (never lower), soul re-sent; an attuned TRAIT_HITPOINTS_MAX adds hitpointsmax", TraitReroll),
         ("economy: crafting: refine 10 T3 planks at the carpenter, craft a T4 sword at the forge (quality, returns, crafting fame into CRAFT_REFINE_WOOD_T4 / CRAFT_SWORDS)", Crafting),
+        ("economy: crafting batch fame settles only completed units on cancellation and logout", CraftBatchCancellation),
+        ("economy: crafting uses client recipe time and a move after the deadline finishes the batch before the world tick", CraftTiming),
         ("economy: content/spawns of the royal cities and Caerleon: 12 stations and a stable each on RealEstate plot centres, Martlock refines hide at its own +40 % bonus", CityStations),
         ("economy: a T3 horse crafted at a stable from a grown T3 horse + 20 T3 leather (the horse never returned)", StableCraft),
         ("economy: split 10 into 6 + 4 (revision echoed), stack all, destroy", Housekeeping),
@@ -326,7 +328,7 @@ public static class EconomyTest
         var bag = me.Inventory.Bag;
         Check(crafted.Count(e => e.Code == EventCodes.CraftItemFinished) == 10 && crafted[^1].Code == EventCodes.ActionOnBuildingFinished && me.Action is null
               && bag.Items.Where(i => i.Template == bar).Sum(i => i.Count) == 10 && bag.Items.Where(i => i.Template.Name == "T4_ORE").Sum(i => i.Count) is 7,
-              $"10 crafts in 4 s: 10 x T4_METALBAR, 7 of the 20 ore back (36.7 %), 66 last (got {Show(crafted.Where(e => e.Code != EventCodes.NewSimpleItem))})");
+              $"10 completed crafts: 10 x T4_METALBAR, 7 of the 20 ore back (36.7 %), 66 last (got {Show(crafted.Where(e => e.Code != EventCodes.NewSimpleItem))})");
     }
 
     /// <summary>
@@ -599,23 +601,27 @@ public static class EconomyTest
             lock (world.Sync) session.OnRequest(Request(req, 7), encrypted: false);
         }
 
-        // Refining: T3_PLANKS = 2 × T3_WOOD + 1 × T2_PLANKS, 10 crafts of 0.4 s at the carpenter (no silver). Thetford wood
+        // Refining: T3_PLANKS = 2 × T3_WOOD + 1 × T2_PLANKS, 10 crafts of 0.03125 s at the carpenter (no silver). Thetford wood
         // returns 1 − 1/1.18 of the resources (floored over the batch with the carry); each craft gives 8 × 1.5 = 12 fame to the
         // total and to CRAFT_REFINE_WOOD_T4 (REFINE_T4 row 0 takes T2-T8 planks), none to CRAFT_TRAINEE (T2 validitems only).
         var planks = Catalog.Find("T3_PLANKS")!;
         var answers = peer.Responses.Count;
         var mark = peer.Events.Count;
         Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = town.Station("T8_CARPENTERSWORKSHOP").Id, p = 1, q = 1, u = planks.Index, w = 10 });
-        town.Run(4.5);
+        town.Run(0.1);
+        Check(Count("T3_PLANKS") == 3 && me.Character.Fame == 0 && !Since(peer, mark).Any(e => e.Code == EventCodes.UpdateFame),
+              "three completed planks retain their output while fame waits for the batch settlement");
+        town.Run(0.3);
         var refined = Since(peer, mark);
         var back = Pricing.ReturnFraction(Client.Crafting.Bonus("0000", "wood"));
         var progress = refined.Where(e => e.Code == EventCodes.AchievementProgressInfo).ToList();
         Check(Answers(peer, answers).Count == 0 && me.Action is null && Count("T3_PLANKS") == 10
               && Count("T3_WOOD") == (int)Math.Floor(20 * back + 1e-9) && Count("T2_PLANKS") == (int)Math.Floor(10 * back + 1e-9)
-              && refined.Count(e => e.Code == EventCodes.CraftItemFinished) == 10 && refined.Count(e => e.Code == EventCodes.UpdateFame) == 10
-              && progress.All(e => L(e.P, 1) == refine) && progress.Count == 10 && L(progress[^1].P, 0) == me.Id
+              && refined.Count(e => e.Code == EventCodes.CraftItemFinished) == 10 && refined.Count(e => e.Code == EventCodes.UpdateFame) == 1
+              && L(refined.Single(e => e.Code == EventCodes.UpdateFame).P, 2) == 120 * Pricing.A7m
+              && progress.All(e => L(e.P, 1) == refine) && progress.Count == 1 && L(progress[^1].P, 0) == me.Id
               && (string?)progress[^1].P[4] == "[[1200000]]" && me.Character.Fame == 120 * Pricing.A7m && progression.Progress.GetValueOrDefault(refine) == 120 * Pricing.A7m,
-              $"10 x T3_PLANKS from 20 wood + 10 T2 planks, {back * 100:0.#} % back, 10 x 12 fame into CRAFT_REFINE_WOOD_T4 only (got planks {Count("T3_PLANKS")}, wood {Count("T3_WOOD")}, T2 {Count("T2_PLANKS")}, fame {me.Character.Fame}; {Show(refined.Where(e => e.Code is EventCodes.UpdateFame or EventCodes.AchievementProgressInfo).Take(4))})");
+              $"10 x T3_PLANKS from 20 wood + 10 T2 planks, {back * 100:0.#} % back, one 120-fame award into CRAFT_REFINE_WOOD_T4 only (got planks {Count("T3_PLANKS")}, wood {Count("T3_WOOD")}, T2 {Count("T2_PLANKS")}, fame {me.Character.Fame}; {Show(refined.Where(e => e.Code is EventCodes.UpdateFame or EventCodes.AchievementProgressInfo).Take(4))})");
 
         // A T4 item: T4_MAIN_SWORD = 16 bars + 8 leather at the forge, one craft; a rolled quality, 384 × 1.5² = 864 fame into
         // CRAFT_SWORDS (CRAFT_BASE row 0: item tier 3-8), the craft's output before its fame and CraftItemFinished.
@@ -629,6 +635,83 @@ public static class EconomyTest
               && order.SequenceEqual([EventCodes.NewEquipmentItem, EventCodes.UpdateFame, EventCodes.CraftItemFinished, EventCodes.ActionOnBuildingFinished])
               && progression.Progress.GetValueOrDefault(swords) == 864 * Pricing.A7m && progression.Progress.GetValueOrDefault(refine) == 120 * Pricing.A7m && me.Character.Fame == 984 * Pricing.A7m,
               $"a T4 sword of quality {sword?.Quality}, full durability; 864 fame into CRAFT_SWORDS (got fame {me.Character.Fame}, bars {Count("T4_METALBAR")}; {Show(forged.Where(e => e.Code != EventCodes.NewSimpleItem))})");
+    }
+
+    private static void CraftBatchCancellation()
+    {
+        foreach (var logout in new[] { false, true })
+        foreach (var made in new[] { 0, 3 })
+        {
+            using var town = new Town(config: new ServerConfig { JoinByCharacterId = true, CraftingReturns = false });
+            var refine = town.World.GameData!.Board!.Find("CRAFT_REFINE_WOOD_T4")!.Id;
+            var (session, peer, me) = town.Join("BatchCancel", 0, new Progression { Levels = new() { [refine] = 0 } },
+                new InventoryItem("T3_WOOD", 20), new InventoryItem("T2_PLANKS", 10));
+            var id = me.Character.Id;
+            var mark = peer.Events.Count;
+            lock (town.World.Sync) session.OnRequest(Request(new ActionOnBuildingStartRequest
+            { wf = town.World.GameNow, o = town.Station("T8_CARPENTERSWORKSHOP").Id, p = 1, q = 1,
+                u = Catalog.Find("T3_PLANKS")!.Index, w = 10 }, 7), false);
+            town.Run(made == 0 ? 0 : 0.1);
+            Check(me.Character.Fame == 0, "batch fame is not granted before settlement");
+            void Move() => session.OnRequest(Request(new MoveRequest { wf = town.World.GameNow,
+                v6 = [0f, 0f], v8 = [1f, 0f], v9 = 5.5f }, null), false);
+            lock (town.World.Sync)
+            {
+                if (logout) session.OnDisconnected("partial crafting test");
+                else Move();
+            }
+            var expected = made * 12 * Pricing.A7m;
+            var events = Since(peer, mark).Where(e => e.Code == EventCodes.UpdateFame).ToArray();
+            Check(events.Length == (made == 0 ? 0 : 1) && me.Character.Fame == expected
+                && me.Character.Progression!.Progress.GetValueOrDefault(refine) == expected,
+                "cancel/logout awards exactly the completed output once, including the destiny board");
+            if (made > 0) Check(L(events[0].P, 2) == expected, "partial batch notification has the combined gain");
+            if (!logout) lock (town.World.Sync) Move();
+            town.Run(5);
+            Check(me.Character.Fame == expected && Since(peer, mark).Count(e => e.Code == EventCodes.UpdateFame) == events.Length,
+                "cancelled timers and repeated cancellation cannot award again");
+            if (!logout) lock (town.World.Sync) session.OnDisconnected("persist batch settlement");
+            town.World.Saves.Flush();
+            var (_, _, restored) = town.Rejoin(id);
+            int Count(string name) => restored.Inventory.Bag.Items.Where(i => i.Template.Name == name).Sum(i => i.Count);
+            Check(restored.Character.Fame == expected && restored.Character.Progression!.Progress.GetValueOrDefault(refine) == expected
+                && Count("T3_PLANKS") == made && Count("T3_WOOD") == 20 - made * 2 && Count("T2_PLANKS") == 10 - made,
+                "completed output, exact refunds and settled fame survive reconnect");
+        }
+    }
+
+    private static void CraftTiming()
+    {
+        var recipe = Catalog.Find("T2_PLANKS")!.Recipes[0];
+        var duration = Pricing.CraftDuration(recipe, 48);
+        Check(Math.Abs(duration.TotalSeconds - 0.99984) < 0.000001
+            && Pricing.CraftDuration(Catalog.Find("T3_PLANKS")!.Recipes[0], 10).TotalSeconds == 0.3125,
+            "actual client recipe times: 48 birch planks take about one second, ten T3 planks 0.3125 seconds");
+        Check(Math.Abs(Pricing.CraftDuration(recipe, 48, 0.5).TotalSeconds - duration.TotalSeconds * 0.5) < 0.000001
+            && Math.Abs(Pricing.CraftDuration(recipe, 48, 1).TotalSeconds - duration.TotalSeconds * 0.1) < 0.000001,
+            "client CraftTime reduction and minimum factor 0.1 are respected");
+        using var town = new Town(config: new ServerConfig { JoinByCharacterId = true, CraftingReturns = false });
+        var (session, peer, me) = town.Join("TimingProbe", 0, new InventoryItem("T2_WOOD", 48));
+        var mark = peer.Events.Count;
+        lock (town.World.Sync) session.OnRequest(Request(new ActionOnBuildingStartRequest { wf = town.World.GameNow,
+            o = town.Station("T8_CARPENTERSWORKSHOP").Id, p = 1, q = 1, u = Catalog.Find("T2_PLANKS")!.Index, w = 48 }, 7), false);
+        Check(me.Action is { } action && action.End - action.Start == duration.Ticks, "server action deadline matches client batch calculation");
+        // Advance real server time without a map tick, reproducing movement just after the client bar ends.
+        town.Clock.Advance(duration + TimeSpan.FromMilliseconds(1));
+        lock (town.World.Sync) session.OnRequest(Request(new MoveRequest { wf = town.World.GameNow,
+            v6 = [0f, 0f], v8 = [1f, 0f], v9 = 5.5f }, null), false);
+        int Count(string name) => me.Inventory.Bag.Items.Where(i => i.Template.Name == name).Sum(i => i.Count);
+        var events = Since(peer, mark);
+        Check(me.Action is null && Count("T2_PLANKS") == 48 && Count("T2_WOOD") == 0
+            && events.Count(e => e.Code == EventCodes.CraftItemFinished) == 48
+            && events.Count(e => e.Code == EventCodes.ActionOnBuildingFinished) == 1
+            && !events.Any(e => e.Code == EventCodes.ActionOnBuildingCancel)
+            && events.Count(e => e.Code == EventCodes.UpdateFame) == 1 && me.Character.Fame == 192 * Pricing.A7m,
+            "movement after the client deadline finishes every due plank and one fame award instead of refunding wood");
+        town.Run(1);
+        Check(Count("T2_PLANKS") == 48 && me.Character.Fame == 192 * Pricing.A7m
+            && Since(peer, mark).Count(e => e.Code == EventCodes.CraftItemFinished) == 48,
+            "old timer callbacks cannot duplicate settled output or fame");
     }
 
     /// <summary>
@@ -666,7 +749,7 @@ public static class EconomyTest
         var (session, _, me) = town.Join("Rider", 10, new InventoryItem("T3_FARM_HORSE_GROWN", 1), new InventoryItem("T3_LEATHER", 20));
         lock (world.Sync)
             session.OnRequest(Request(new ActionOnBuildingStartRequest { wf = world.GameNow, o = town.Station("T8_STABLE").Id, p = 1, q = 1, u = Catalog.Find("T3_MOUNT_HORSE")!.Index, w = 1 }, 7), encrypted: false);
-        town.Run(1.5);
+        town.Run(Pricing.CraftDuration(Catalog.Find("T3_MOUNT_HORSE")!.Recipes[0], 1).TotalSeconds + 0.1);
         var bag = me.Inventory.Bag.Items.ToList();
         Check(bag.Any(i => i.Template.Name == "T3_MOUNT_HORSE" && i.Quality >= 1) && !bag.Any(i => i.Template.Name == "T3_FARM_HORSE_GROWN") && me.Action is null,
               $"a T3 horse, the grown horse used up (bag: {string.Join(", ", bag.Select(i => $"{i.Count} x {i.Template.Name}"))})");

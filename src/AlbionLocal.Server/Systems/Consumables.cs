@@ -489,7 +489,8 @@ public static class Consumables
         var c = p.Character;
         c.Effects = [.. p.Effects.Spells.Where(s => s.Caster == p.Id && !s.Pending)
             .Select(s => new SavedEffect(s.Spell.Name, s.Start, s.Ap, s.CcAp, s.Stacks,
-                [.. s.Subs.Select(sub => s.On(sub, now) && Saved.Contains(sub.Tag) && sub.DurationMs > 0 ? sub.DurationMs : -1)]))
+                [.. s.Subs.Select(sub => s.On(sub, now) && Saved.Contains(sub.Tag) && sub.DurationMs > 0 ? sub.DurationMs : -1)])
+                { MovementOriginX = s.MovementOrigin?.X, MovementOriginY = s.MovementOrigin?.Y, MovementCluster = s.MovementCluster })
             .Where(e => e.Durations.Any(d => d > 0))];
         c.Cooldowns = [.. p.Combat.SlotCooldowns.Where(kv => kv.Value.End > now).Select(kv => new SavedCooldown(kv.Key, kv.Value.Start, kv.Value.End, kv.Value.Base))];
     }
@@ -518,6 +519,12 @@ public static class Consumables
             }
             if (subs.All(s => s is null)) continue;
             var entry = SpellEffects.Apply(world, p, spell, p.Id, saved.Ap, saved.CcAp, saved.Start, subs);
+            if (saved.MovementOriginX is { } originX && saved.MovementOriginY is { } originY
+                && float.IsFinite(originX) && float.IsFinite(originY))
+            {
+                entry.MovementOrigin = new System.Numerics.Vector2(originX, originY);
+                entry.MovementCluster = saved.MovementCluster ?? p.Map?.Cluster;
+            }
             entry.Stacks = Math.Max((byte)1, saved.Stacks);
         }
         foreach (var cd in c.Cooldowns)

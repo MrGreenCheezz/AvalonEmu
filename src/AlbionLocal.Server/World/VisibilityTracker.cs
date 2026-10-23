@@ -143,7 +143,7 @@ public sealed class VisibilityTracker(Player player)
         if (_accessPending is not { } pending) return;
         _accessPending = null;
         foreach (var b in pending)
-            if (b is WorldObject o && _known.Contains(o)) Send(b.AccessStatus());
+            if (b is WorldObject o && _known.Contains(o)) Send(Systems.OpeningTutorial.BuildingAccess(player, b));
     }
 
     /// <summary>
@@ -364,7 +364,7 @@ public sealed class VisibilityTracker(Player player)
         if (o is IAccessStatusObject b)
         {
             if (_accessPending is { } pending) pending.Add(b);
-            else Send(b.AccessStatus());
+            else Send(Systems.OpeningTutorial.BuildingAccess(player, b));
         }
     }
 

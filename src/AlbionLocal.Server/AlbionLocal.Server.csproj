@@ -7,8 +7,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The one NuGet package (ARCHITECTURE.md §5.5), restored offline from the local cache (server/nuget.config). -->
+    <!-- Keep the SQLite native library and provider on a patched, matching 2.1.x bundle.
+         Microsoft.Data.Sqlite 10.0.8 otherwise resolves the vulnerable 2.1.11 native library (CVE-2025-6965). -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.8" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
   <ItemGroup>

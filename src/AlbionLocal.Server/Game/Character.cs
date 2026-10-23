@@ -25,10 +25,11 @@ public sealed class Character
     /// </summary>
     public Guid Account { get; set; }
 
-    /// <summary>Race/body template id (CreateCharacter ri.h8); 0 = client default.</summary>
+    /// <summary>Avatar/portrait id (CreateCharacter ri.h8), retained under its historical persistence name.
+    /// Transient bots use this field for their body template and supply their avatar through BotInfo.</summary>
     public int Template { get; set; }
 
-    /// <summary>Gender/appearance byte (CreateCharacter ri.h9).</summary>
+    /// <summary>Body template id (CreateCharacter ri.h9), not an avatar ring or skin colour.</summary>
     public byte Appearance { get; set; }
 
     public int[] Customization { get; set; } = [];
@@ -66,6 +67,11 @@ public sealed class Character
     public DungeonReturn? DungeonReturn { get; set; }
 
     public DateTime Created { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Accumulated time actually joined to the world, in milliseconds (Login key 34). Offline time is excluded.</summary>
+    public long PlayedMilliseconds { get; set; }
+
+    public OpeningTutorialProgress? Tutorial { get; set; }
 
     /// <summary>Items by EquipmentSlot (MainHand, OffHand, Head, Armor, Shoes, Bag, Cape, Mount, Potion, Food); null = empty slot.</summary>
     public InventoryItem?[] Equipment { get; set; } = new InventoryItem?[Entities.Inventory.EquipmentSlots];
@@ -230,11 +236,11 @@ public sealed class Character
     /// <summary>A deep copy: what the repository hands out and what a save snapshot holds share nothing with the original.</summary>
     public Character Clone() => new()
     {
-        Id = Id, Name = Name, Account = Account, Template = Template, Appearance = Appearance,
+        Id = Id, Name = Name, Account = Account, Template = Template, Appearance = Appearance, Tutorial = Tutorial,
         Customization = [.. Customization], Clothes = [.. Clothes],
         Cluster = Cluster, PositionX = PositionX, PositionY = PositionY, Direction = Direction,
         PreviousCluster = PreviousCluster, LastLeftAt = LastLeftAt, LastCity = LastCity, PendingTransfer = PendingTransfer, DungeonReturn = DungeonReturn, Created = Created,
-        Fame = Fame, Silver = Silver, Gold = Gold,
+        Fame = Fame, Silver = Silver, Gold = Gold, PlayedMilliseconds = PlayedMilliseconds,
         Vaults = Vaults.ToDictionary(v => v.Key, v => v.Value.Select(i => i?.Copy()).ToList(), StringComparer.Ordinal),
         Equipment = [.. Equipment.Select(i => i?.Copy())],
         Inventory = [.. Inventory.Select(i => i?.Copy())],
@@ -287,7 +293,12 @@ public sealed class VanityLog
 /// A saved active spell of the player's own (ActiveSpellEffectsUpdate keys 1-5): the spell by uniquename, its start
 /// (GameTimeStamp ticks), Ap and CcAp, stacks, and per client effect index the duration in ms (-1 = not Active, 0 = until removed).
 /// </summary>
-public sealed record SavedEffect(string Spell, long Start, float Ap, float CcAp, byte Stacks, int[] Durations);
+public sealed record SavedEffect(string Spell, long Start, float Ap, float CcAp, byte Stacks, int[] Durations)
+{
+    public float? MovementOriginX { get; init; }
+    public float? MovementOriginY { get; init; }
+    public string? MovementCluster { get; init; }
+}
 
 /// <summary>A saved slot cooldown (SpellCooldownUpdate): CharacterSpellSlot, start and end GameTimeStamps, the base span in ticks.</summary>
 public sealed record SavedCooldown(byte Slot, long Start, long End, long Base);

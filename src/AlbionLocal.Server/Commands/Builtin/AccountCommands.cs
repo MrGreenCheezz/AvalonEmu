@@ -85,7 +85,7 @@ public static class AccountCommands
         ctx.World.Characters.DeleteAccount(account.Id); // one transaction: the characters are gone (or none is) when it returns
         foreach (var c in characters) ctx.World.Social.CharacterDeleted(c.Id); // off its friends' lists
         foreach (var c in characters) ctx.World.Guilds.CharacterDeleted(c.Id); // then out of its guild (a master's role passes on)
-        ctx.Reply(account.Id == SqliteCharacterRepository.LocalAccountId
+        ctx.Reply(account.Id == Account.LocalId
             ? $"{account}: its {count} character(s) deleted; it is the local account, so it stays, empty and without a name"
             : $"{account} deleted with its {count} character(s)");
     }

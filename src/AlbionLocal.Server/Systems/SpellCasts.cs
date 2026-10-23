@@ -383,6 +383,7 @@ public static partial class SpellCasts
         if (consumable) p.Combat.SlotCooldowns[cast.Slot] = new SlotCooldown(cast.End, cast.End + Seconds(spell.RecastDelay * cooldown), Seconds(spell.RecastDelay));
         MultiCast(p, cast);
         world.Plugins.CastDone(p, cast, point, cast.AbilityPower); // the plugins' Spells.OnCast, Mounts.OnMountSpell, a scripted spell's OnCast
+        OpeningTutorial.SpellFinished(p, spell);
         Log.Debug("combat", string.Create(CultureInfo.InvariantCulture,
             $"'{p.Character.Name}' cast {spell} ({cast.EnergyCost} energy, AP {cast.AbilityPower:0.#}){(cast.Target is { } t ? $" on {t}" : "")}"));
         var context = new SpellContext(p, map, spell, cast.Counter, cast.AbilityPower, cast.Target, point, hit)

@@ -69,6 +69,8 @@ public sealed class ClusterTemplate
     /// <summary>locationmarker tiles (NewLocationMarker 383).</summary>
     public IReadOnlyList<LocationMarkerSpawn> LocationMarkers { get; init; } = [];
 
+    public IReadOnlyList<TutorialBlockerSpawn> TutorialBlockers { get; init; } = [];
+
     /// <summary>Static trees and rocks: tiles with a harvestable component of a known type and tier (list 39).</summary>
     public IReadOnlyList<HarvestableSpawn> Harvestables { get; init; } = [];
 
@@ -416,6 +418,7 @@ public sealed class ClusterTemplate
         public readonly List<IslandAccessPointSpawn> Islands = [];
         public readonly List<ExpeditionAgentSpawn> Agents = [];
         public readonly List<LocationMarkerSpawn> Markers = [];
+        public readonly List<TutorialBlockerSpawn> TutorialBlockers = [];
         public readonly List<HarvestableSpawn> Harvestables = [];
         public List<MobSpawnPoint> Mobs = [];
         public readonly List<ResourceNodeSpawn> Nodes = [];
@@ -606,6 +609,9 @@ public sealed class ClusterTemplate
                         break;
                     case "locationmarker":
                         Markers.Add(new LocationMarkerSpawn { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, LocationId = A("locationid") ?? "", Radius = TileMath.Float(A("radius")) });
+                        break;
+                    case "tutorialblocker":
+                        TutorialBlockers.Add(new TutorialBlockerSpawn { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, BlockerId = A("id") ?? "" });
                         break;
                     case "fishingzone":
                         Fishing.Add(new FishingZoneSpawn { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, Zone = A("zone"), Radius = TileMath.Float(A("radius")) });
@@ -834,7 +840,7 @@ public sealed class ClusterTemplate
             {
                 Info = info, Name = name, Origin = origin, Size = size, Instances = instances, CriticalObjects = criticalObjects, Critical = Critical,
                 Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
-                ExpeditionAgents = Agents, LocationMarkers = Markers, Harvestables = Harvestables, MobSpawnPoints = Mobs, ResourceNodes = Nodes,
+                ExpeditionAgents = Agents, LocationMarkers = Markers, TutorialBlockers = TutorialBlockers, Harvestables = Harvestables, MobSpawnPoints = Mobs, ResourceNodes = Nodes,
                 RealEstates = Estates, FishingZones = Fishing, RespawnPoints = Respawns, Resources = resources, DungeonMarkers = DungeonMarkers, LootChests = ChestPoints,
                 LocalQuestAreas = QuestAreas, PoiChestLimit = poiLimit, ExpeditionObjects = ExpeditionObjects, Colliders = Colliders, Roads = Roads, IslandManagements = IslandManagements, BuildCells = BuildCells,
                 InvaderSpawns = InvaderSpawns, HellgateShrines = HellgateShrines, BuffShrines = BuffShrines, HellgateMarkers = HellgateMarkers,
@@ -1069,6 +1075,11 @@ public abstract record ClusterObject
 /// = world.xml criticalObjects[path] (null when world.xml lists none); <see cref="Component"/> = the one named like the
 /// type, else the first.
 /// </summary>
+public sealed record TutorialBlockerSpawn : ClusterObject
+{
+    public required string BlockerId { get; init; }
+}
+
 public sealed record CriticalMember : ClusterObject
 {
     public required string Type { get; init; }

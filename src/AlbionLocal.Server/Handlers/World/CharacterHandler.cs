@@ -100,8 +100,10 @@ public sealed partial class WorldSession
         // Phase A (SPEC stage 2 §6, all 15 captured Joins): the world objects in view go out before the items. The map
         // has them when its cluster is resolved (World.PrefetchCluster at SelectCharacter, or an earlier Join); else the
         // first Join into it starts reading the client data in the background and the objects follow when it is in.
-        var map = world.Maps.Get(c.Cluster);
+        var map = world.Maps.Get(c.Cluster,
+            TutorialInstances.Owns(c, world) ? c.Id : null);
         world.LoadTemplate(map);
+        Systems.TutorialWorld.Prepare(map, c);
         // Join key 118: the last PLAYERCITY_* cluster (world.xml type; the bank and market interiors count, captured "1001"
         // in the Lymhurst bank); known when the cluster is resolved, as it normally is by the Join (prefetched at
         // SelectCharacter, resolved at the cluster change).
@@ -137,7 +139,7 @@ public sealed partial class WorldSession
         else if (map.TemplateRequested) Log.Info(Name, $"cluster {c.Cluster} is still loading: its world objects follow when it is in");
         player.Inventory = SendItems(c, progression);
         Player = player;
-        world.Maps.Add(player);
+        world.Maps.Add(player, map);
         world.Dungeons.Joined(c.Cluster, c.Id); // stageG: a Join resets a dungeon's empty lifetime (SPEC §9)
         var inventory = player.Inventory;
         Systems.Consumables.Restore(player); // its saved buffs count in its bars (stageD consumables SPEC §6: Join key 14 with the food)
@@ -155,7 +157,9 @@ public sealed partial class WorldSession
             a8a = objectId,   // [0] long  local player object id
             a8b = c.Id,       // [1] Guid  character id
             a8c = c.Name,     // [2] string name
-            a8i = c.Cluster,  // [8] must equal the cluster the client loaded (ci7.e_25: "wrong cluster map loaded on join")
+            a8d = c.Template, // [3] avatar id (bbg.abo); historical storage name is Template
+            a8f = c.Appearance, // [5] body template id (creation key 2); [4] avatar ring stays default 0
+            a8i = Systems.OpeningTutorial.ClientCluster(c, world), // [8] must equal SelectCharacter's client instance id
             a8j = new Vector2(c.PositionX, c.PositionY), // [9] spawn position (cx2.ai7 → player vfunc +0x278, same setter as MoveResponse)
             a8k = facing,     // [10] facing in degrees (cx2.ai7, with key 9): the arrival's after a cluster change (SPEC stage 3 §3), else 0
             // Resource bars, 5 keys each (cur, max, regenCap, regen/s, stamp), applied in cx2.ai7 via a44.n(cur, max,
@@ -196,8 +200,9 @@ public sealed partial class WorldSession
         // Fixed-size arrays the official server always sends (captures: every Join has these
         // lengths); FillEmpty's empty arrays crash readers that index them, e.g. key 43 in
         // ctp.af(ReSpecFameType) 0x180994500 when the Destiny Board opens.
-        r.a8g = new int[5];                          // [6]
-        r.a8h = new int[5];                          // [7]
+        // Preserve creation choices. Only legacy characters without a stored look use the old default.
+        r.a8g = c.Customization.Length > 0 ? [.. c.Customization] : new int[5]; // [6]
+        r.a8h = c.Clothes.Length > 0 ? [.. c.Clothes] : new int[5];             // [7]
         r.a9h = new long[5];                         // [43] a7m per ReSpecFameType (ctp+0x580)
         r.ba7 = new long[6];                         // [105] a7m[6] (ctp.af(a7m[]) → ctp+0x588): the standing by faction (index FlaggingStatus − 1, bcj.a)
         world.Factions.JoinKeys(c, r);               // [104] the currencies by index (faction points, FAVOR), [105] (stageN faction SPEC §2)

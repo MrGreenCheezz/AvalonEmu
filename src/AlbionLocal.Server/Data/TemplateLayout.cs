@@ -29,7 +29,7 @@ internal sealed class TemplateLayout
     /// <summary>The components of ordinary tiles the resolver turns into objects (<see cref="ClusterTemplate.Resolve"/>).</summary>
     public static readonly IReadOnlySet<string> TileKinds = new HashSet<string>(StringComparer.Ordinal)
     {
-        "harvestable", "mobspawnpoint", "resourcenode", "locationmarker", "fishingzone",
+        "harvestable", "mobspawnpoint", "resourcenode", "locationmarker", "fishingzone", "tutorialblocker",
         "randomdungeonrandomexitpositionmarker", "randomdungeonfixedexit", // stageG dungeons: the exit markers and the fixed exits
         "lootchestspawnpoint", // stageG dungeons: the chests of the reward layers; stageH: the open world's chest spots
         "localquestarea", // stageH bosses: the camp quest circles

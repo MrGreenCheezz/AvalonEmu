@@ -37,9 +37,16 @@ public sealed partial class WorldSession
     {
         if (Player is { } registered)
         {
+            if (registered.Map?.Objects.GetValueOrDefault(req.zg) is Building forge)
+            {
+                if (OpeningTutorial.ForgeLocked(registered, forge)) return null;
+                OpeningTutorial.BuildingInteracted(registered, forge);
+            }
             registered.RegisteredTo = req.zg; // stage 6: ContainerOpen of a bank requires it (BankHandler)
             DetachVaults(registered, v => v.Building != req.zg); // another object: the vault tabs of the bank close
             PushBankVault(registered, req.zg); // a bank: its default tab into the main view (BankHandler)
+            if (registered.Map?.Objects.GetValueOrDefault(req.zg) is TutorialQuestGiver)
+                OpeningTutorial.Request(registered, req.zg, action: 0, slot: 0, selection: 0);
         }
         if (Player is not { Map: { } map } player || map.Objects.GetValueOrDefault(req.zg) is not LootObject bag) return null;
         if (player.Combat.Down is not null)

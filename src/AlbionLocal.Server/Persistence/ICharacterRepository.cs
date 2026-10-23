@@ -13,6 +13,9 @@ public enum AccountLevel { Player, GameMaster, Admin }
 /// </summary>
 public sealed record Account(Guid Id, AccountLevel Level)
 {
+    /// <summary>Stable legacy account identity, shared by all persistence backends and the login protocol.</summary>
+    public static readonly Guid LocalId = new("6c6f6361-6c00-0000-0000-000000000001");
+
     /// <summary>The login key: the name as typed at registration or first login, trimmed and lower case (<see cref="KeyOf"/>).</summary>
     public string? Name { get; init; }
 

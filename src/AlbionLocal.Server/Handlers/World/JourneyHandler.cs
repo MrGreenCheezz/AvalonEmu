@@ -105,12 +105,13 @@ public sealed partial class WorldSession
         Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
             $"'{player.Character.Name}' journey {from} -> {plan.Cluster} via {string.Join(" -> ", plan.Route.Clusters)} (cost {plan.Route.Cost:0.##}"
             + $"{(plan.Route.NoLuggage ? ", no luggage" : "")}): the client's price {req.dj / 10000.0:0.##} silver, charged"));
+        if (player.Map.TutorialOwner is not null) Systems.TutorialJourney.Departed(player);
         Commit(player, new Arrival(plan.Cluster, at, player.Facing), plan.Island is { } island ? $"island:{island.Id}" : $"journey:{Short(plan.FromGuid)}");
         SendResponse(OperationCodes.BuyJourney, new GenericResponse(), requestId, encrypted);
         // Onto an island (SPEC §1.3, +0.021 s): {0 "@ISLAND@<guid>", 1 the template of its level, 2 the owner's name}, no 255.
         SendResponse(OperationCodes.ChangeCluster, new ChangeClusterResponse
         {
-            anu = plan.Cluster, anv = plan.Island is null ? null : target.Id, anw = plan.Island?.OwnerName,
+            anu = TutorialInstances.ClientCluster(player.Character, world), anv = plan.Island is null ? null : target.Id, anw = plan.Island?.OwnerName,
         }, requestId: null, encrypted: false);
         return null;
     }
@@ -127,6 +128,8 @@ public sealed partial class WorldSession
             return (null, no, $"object {req.df} is not on {player.Map?.Cluster ?? player.Character.Cluster}");
         if (o is IslandAccessPoint ap) return IslandPlan(player, map, ap, req);
         if (o is not Travelpoint from) return (null, no, $"object {req.df} is a {o.Kind}, no travel point");
+        if (map.TutorialOwner is not null && !Systems.TutorialJourney.TravelAllowed(player))
+            return (null, no, "the tutorial departure objectives have not been completed");
         if (!player.Visibility.Known.Contains(from)) return (null, no, $"travel point {req.df} is not in the player's view");
         if (req.dh != 0 || req.di != Guid.Empty) return (null, no, $"journey kind {req.dh} (island {req.di}): only travel-point journeys are made");
         var text = req.dg ?? "";

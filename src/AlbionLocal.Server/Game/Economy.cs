@@ -322,6 +322,13 @@ public static class Pricing
     /// <summary>The silver price of <paramref name="crafts"/> crafts of <paramref name="recipe"/> (cl3.al_6), a7m raw: silver × crafts.</summary>
     public static long CraftPrice(CraftRecipe recipe, int crafts) => (long)Math.Round((decimal)recipe.Silver * A7m) * crafts;
 
+    /// <summary>Client cl3.aap → ctp.af: recipe seconds × completed crafts × CraftTime factor.
+    /// a4f.fg clamps the factor to max(0.1, 1 − reduction). Keep its single-precision arithmetic
+    /// and calculate each cumulative deadline from the batch start rather than adding rounded intervals.</summary>
+    public static TimeSpan CraftDuration(CraftRecipe recipe, int crafts, double reduction = 0)
+        => crafts <= 0 || recipe.Time <= 0 ? TimeSpan.Zero
+            : TimeSpan.FromSeconds((float)recipe.Time * crafts * MathF.Max(0.1f, 1 - (float)reduction));
+
     /// <summary>
     /// SPEC §0.1's price rule: the client's price <paramref name="client"/> is taken when 0 ≤ client ≤ expected + 1 silver
     /// (the unknown abp discount may lower it); anything else is PriceChanged.

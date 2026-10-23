@@ -163,6 +163,8 @@ public sealed partial class WorldSession
         player.SaveItems();
         Log.Info(Name, $"'{item.Template.Name}' {(req.kd ? "active" : "passive")} slot {req.ke} = {spells.Name(req.kf)}");
         if (equipped && before != req.kf) Systems.SlotSpells.PlayerChose(player, item, req.kd, req.ke, before);
+        Systems.OpeningTutorial.Update(player);
+        Systems.OpeningTutorial.SwordSpellSelected(player, item, req.kd, req.ke);
         return null;
     }
 

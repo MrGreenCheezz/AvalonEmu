@@ -16,6 +16,7 @@ namespace AlbionLocal.SelfTest;
 /// <summary>Login chain against in-process login and game servers, checked the way the client reads it.</summary>
 public static class AlbionTests
 {
+    internal static string? ClientGameDataOverride { get; set; }
     public static IEnumerable<(string, Action)> All =>
     [
         ("albion serializer round trip", SerializerRoundTrip),
@@ -47,7 +48,10 @@ public static class AlbionTests
         OpcodeTable.Build(typeof(LoginSession), typeof(WorldSession), typeof(ChatSession));
         var login = OpcodeTable.For(typeof(LoginSession));
         var game = OpcodeTable.For(typeof(WorldSession));
-        Check(login.Handlers.Count == 8 && game.Handlers.Count == 196 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+        Check(login.Handlers.Count == 8 && game.Handlers.Count == 199 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+              && game.Find(OperationCodes.QuestGiverRequest) is { Status: SessionStatus.InWorld }
+              && game.Find(OperationCodes.SetNextTutorialState) is { Status: SessionStatus.InWorld }
+              && game.Find(OperationCodes.UseFunction) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.Join) is { Status: SessionStatus.Connected } && login.Find(OperationCodes.SelectCharacter) is { Status: SessionStatus.Authed }
               && login.Find(OperationCodes.GetGameServerByCluster) is { Status: SessionStatus.Authed } && game.Find(OperationCodes.ChangeCluster) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.HarvestStart) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.HarvestCancel) is { Status: SessionStatus.InWorld }
@@ -589,7 +593,7 @@ public static class AlbionTests
     /// game-local (tools/AlbionLocal.ModKit), the official GameData beside it instead (only read), so that the golden checks
     /// (11971 items, 9326 spells, …) keep comparing the official data.
     /// </summary>
-    internal static string ClientGameDataDir() => GameDataDir.Value;
+    internal static string ClientGameDataDir() => ClientGameDataOverride ?? GameDataDir.Value;
 
     private static readonly Lazy<string> GameDataDir = new(() =>
     {
@@ -632,14 +636,13 @@ public static class AlbionTests
         throw new Exception("server/content/opcode-stubs.json not found");
     }
 
-    /// <summary>The path of golden file <paramref name="name"/> in <see cref="DataDir"/>, or null (with a note) when it was not generated:
-    /// a golden check then has nothing to compare against and passes.</summary>
+    /// <summary>The path of golden file <paramref name="name"/> in <see cref="DataDir"/>:
+    /// a missing reference is reported as skipped by the runner, never as a pass.</summary>
     internal static string? Golden(string name)
     {
         var path = Path.Combine(DataDir(), name);
         if (File.Exists(path)) return path;
-        Console.WriteLine($"      (golden {name} not generated: comparison skipped)");
-        return null;
+        throw new TestSkippedException($"golden reference {name} not published/generated");
     }
 
     /// <summary>The client's item table and game data, as the server runs on them.</summary>

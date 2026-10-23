@@ -12,6 +12,28 @@ namespace AlbionLocal.Server.Entities;
 /// </summary>
 public sealed class Player(WorldSession session, World world, long id, Character character, Inventory inventory, Progression? progression) : IUnit
 {
+    private TimeSpan _playedAt = world.Clock.Now;
+    private bool _playing = true;
+
+    internal TimeSpan? TutorialInsideSince { get; set; }
+    internal string? TutorialGatherProgress { get; set; }
+
+    /// <summary>Settle only elapsed online time; repeated save/disconnect snapshots cannot count it twice.</summary>
+    public void StorePlayedTime()
+    {
+        if (!_playing) return;
+        var elapsed = (World.Clock.Now - _playedAt).Ticks / TimeSpan.TicksPerMillisecond;
+        if (elapsed <= 0) return;
+        Character.PlayedMilliseconds = checked(Character.PlayedMilliseconds + elapsed);
+        _playedAt += TimeSpan.FromMilliseconds(elapsed);
+    }
+
+    internal void StopPlayedTime()
+    {
+        StorePlayedTime();
+        _playing = false;
+    }
+
     /// <summary>Object id of the player (Join key 0); new for every Join.</summary>
     public long Id { get; } = id;
 
@@ -262,8 +284,8 @@ public sealed class Player(WorldSession session, World world, long id, Character
     /// csc.v 0x180becdc0 either way, so a repeated one is a full update. Never sent to the player it describes, and never
     /// through FillEmpty: keys 16/17 (the obfuscated position, decoded only when 16 is non-null) must stay absent, and so
     /// they are, null fields are not written. Keys:
-    /// 0 id; 1 name; 4 template (characters.xml index; 0 HUMAN_MALE is left out as the default); 5/6 customization and
-    /// clothes only when both have the template's length (b3d.g_7: else the default look); 7 character Guid;
+    /// 0 id; 1 name; 2 avatar; 3 avatar ring (default 0); 4 body template (characters.xml index); 5/6 saved customization and
+    /// clothes when both arrays are present and have equal length (the client checks its template); 7 character Guid;
     /// 14/15/18/19/20 the movement sample (<see cref="MovementSample"/>); 22-26 health, 27-31 energy (24/29 the regeneration
     /// cap, 0 = 100 % left out); 32-36 the mount bar only with a mount in slot 7; 40 equipment type ids per EquipmentSlot,
     /// which alone dresses the remote model (no NewEquipmentItem for others); 43 the 14 active spell slots, required
@@ -276,11 +298,15 @@ public sealed class Player(WorldSession session, World world, long id, Character
     {
         var c = Character;
         var (position, target, stamp, direction, speed) = MovementSample(now);
-        var look = c.Customization.Length == c.Clothes.Length && c.Customization.Length == CustomizationCount(c.Template);
+        // Creation supplies the arrays for the selected body, independently of the avatar id.
+        // Preserve them and let the client's body template validate its customization count.
+        var look = c.Customization.Length > 0 && c.Customization.Length == c.Clothes.Length;
         ResourceBar hp = Health, en = Energy, mount = MountHealth;
         var e = new NewCharacterEvent
         {
-            cvx = Id, cvy = c.Name ?? "", cv1 = c.Template, cv2 = look ? c.Customization : null, cv3 = look ? c.Clothes : null, cv4 = c.Id,
+            cvx = Id, cvy = c.Name ?? "", cvz = IsBot ? 0 : c.Template,
+            cv1 = IsBot ? c.Template : c.Appearance,
+            cv2 = look ? c.Customization : null, cv3 = look ? c.Clothes : null, cv4 = c.Id,
             cwb = position, cwc = target, cwf = stamp, cwg = direction, cwh = speed,                        // [14] [15] [18] [19] [20]
             cwj = hp.Value, cwk = hp.Max, cwl = hp.RegenCap, cwm = hp.RegenPerSecond, cwn = hp.Stamp,        // [22-26]
             cwo = en.Value, cwp = en.Max, cwq = en.RegenCap, cwr = en.RegenPerSecond, cws = en.Stamp,        // [27-31]
@@ -301,13 +327,6 @@ public sealed class Player(WorldSession session, World world, long id, Character
 
     /// <summary>EquipmentSlot.Mount.</summary>
     private const int MountSlot = 7;
-
-    /// <summary>
-    /// Entries of NewCharacter keys 5/6 the template takes (b3d.g_7 compares them with the template's customization count):
-    /// 5 for HUMAN_MALE (0), 4 for HUMAN_FEMALE (1), as the captured arrays (5 bytes in 1132 events, 4 in the 519 with key 4
-    /// = 1); -1 = unknown template, the arrays are left out.
-    /// </summary>
-    private static int CustomizationCount(int template) => template switch { 0 => 5, 1 => 4, _ => -1 };
 
     /// <summary>
     /// NewCharacter keys 14, 15, 18, 19, 20 (stage 7 SPEC §2.2): the stored sample, not an extrapolated one (the client
@@ -337,6 +356,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
     /// <summary>Writes where the player is at <paramref name="now"/> (the last Move extrapolated) into its character, for saving.</summary>
     public void StorePosition(DateTime now)
     {
+        StorePlayedTime();
         if (Movement is not { } move) return;
         var p = move.PositionAt(now);
         Character.PositionX = p.X;

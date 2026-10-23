@@ -29,10 +29,10 @@ public static class Premium
             ? Is(online) : world.Config.PremiumMode == PremiumMode.Free;
 
     /// <summary>
-    /// The premium end of a character in the character list (Login key 35, CharacterEntryBase.SetPremium: shown as premium while it is in
-    /// the future): Free = <paramref name="now"/> + <see cref="FreeSpan"/>; None = now (no premium, as before).
+    /// Remaining premium days in the character list (Login key 35). The client converts days to its duration type;
+    /// this field is not the UTC expiry timestamp used by Join key 90.
     /// </summary>
-    public static long ListEnd(ServerConfig config, long now) => config.PremiumMode == PremiumMode.Free ? now + FreeSpan.Ticks : now;
+    public static long ListDays(ServerConfig config) => config.PremiumMode == PremiumMode.Free ? (long)FreeSpan.TotalDays : 0;
 
     /// <summary>The premium end of <paramref name="p"/> (Join key 90, 286 key 1): <paramref name="now"/> + <see cref="FreeSpan"/> while premium, else 0 (left out).</summary>
     public static long End(Player p, long now) => Is(p) ? now + FreeSpan.Ticks : 0;

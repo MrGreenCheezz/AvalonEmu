@@ -91,6 +91,8 @@ public sealed partial class WorldSession
             var n = Math.Min(left, max);
             left -= n;
             var record = (saved ?? new InventoryItem(type.Name, n)) with { Count = n, Quality = saved?.Quality ?? quality };
+            if (saved is null && Systems.OpeningTutorial.Active(player) && player.Character.Tutorial!.Stage == 21
+                && type.Name == "T1_MAIN_SWORD") record = record with { Active = [] };
             var item = CreateItem(type, record, SpellUsable(player.Progression));
             bag.Put(slot, item);
             SendEvent(new InventoryPutItemEvent { ckw = item.Id, ckx = slot, cky = bag.Id });

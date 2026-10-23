@@ -52,9 +52,9 @@ public sealed partial class WorldSession
     private string? MarketAt(Player player, long building)
     {
         if (world.Market is null || player.Map is not { } map) return null;
-        if (building == 0) return map.Cluster;
+        if (building == 0) return map.TutorialOwner is null ? map.Cluster : map.InstanceKey;
         if (!map.Objects.TryGetValue(building, out var o) || o is not Building b) return null;
-        return b.Template.Kind switch { "marketplacebuilding" => map.Cluster, "blackmarketbuilding" => BlackMarket.Location(map.Cluster), _ => null };
+        return b.Template.Kind switch { "marketplacebuilding" => map.TutorialOwner is null ? map.Cluster : map.InstanceKey, "blackmarketbuilding" => BlackMarket.Location(map.Cluster), _ => null };
     }
 
     private AlbionResponse? RefuseMarket(Player player, OperationCodes op, string why, AlbionResponse? answer = null)
@@ -131,6 +131,7 @@ public sealed partial class WorldSession
             wanted is not { } w || (mode switch { 1 => value <= w, 2 => value >= w, _ => value == w });
         var (quality, tier, enchantment) = (Number(filter.Quality), Number(filter.Tier), Number(filter.Enchantment));
         var open = Expire(world.Market!.Orders(location, type)).Concat(JournalMerchant.Orders(world, location, type))
+            .Concat(TutorialMerchant.Orders(player, location, type))
             .Concat(BlackMarket.Orders(world, player.Character, location, type))
             .Select(o => (Order: o, Item: world.Items.Find(o.ItemName)))
             .Where(x => x.Item is { } t && (types is null || types.Contains(t.Index))
@@ -295,7 +296,7 @@ public sealed partial class WorldSession
     {
         if (Player is not { } player) return null;
         if (MarketAt(player, req.bqs) is not { } location) return RefuseMarket(player, OperationCodes.AuctionBuyOffer, $"object {req.bqs} is no marketplace here");
-        if ((world.Market!.Order(req.bn3) ?? JournalMerchant.Order(world, req.bn3, location)) is not { Type: MarketOrder.Offer } offer
+        if ((world.Market!.Order(req.bn3) ?? JournalMerchant.Order(world, req.bn3, location) ?? TutorialMerchant.Order(player, req.bn3, location)) is not { Type: MarketOrder.Offer } offer
             || offer.Location != location || offer.Expires <= DateTime.UtcNow)
             return RefuseMarket(player, OperationCodes.AuctionBuyOffer, $"no open offer {req.bn3} here");
         if (req.bn2 <= 0 || req.bn2 > offer.Amount) return RefuseMarket(player, OperationCodes.AuctionBuyOffer, $"{req.bn2} of {offer.Amount} left");
@@ -303,7 +304,7 @@ public sealed partial class WorldSession
         var price = checked(offer.UnitPrice * req.bn2);
         if (player.Character.Silver < price) return RefuseMarket(player, OperationCodes.AuctionBuyOffer, "not enough silver");
         var proceeds = price - Pricing.MarketTax(price, world.Economy, Premium.TaxFactor(world, offer.Owner)); // the seller's premium halves it
-        var npc = JournalMerchant.Owns(offer); // the merchant's stock never runs out and nobody is paid for it
+        var npc = JournalMerchant.Owns(offer) || TutorialMerchant.Owns(offer); // NPC stock is private/standing, with no seller payment
         var seller = npc ? null : OnlinePlayer(offer.Owner);
         world.Market.Batch(b =>
         {
@@ -314,6 +315,7 @@ public sealed partial class WorldSession
             b.AddSale(new MarketSale(location, offer.ItemName, offer.Quality, req.bn2, offer.UnitPrice, DateTime.UtcNow));
         });
         Wallet.TrySpend(player, price, $"{req.bn2} x {offer.ItemName} from the market");
+        TutorialJourney.MarketBought(player, offer.ItemName, req.bn2);
         if (!npc && req.bn2 == offer.Amount) Mailer.MarketNotice(world, offer with { Amount = 0 }, finished: true); // stageJ mail SPEC §3
         if (seller is not null)
         {
@@ -534,17 +536,19 @@ public sealed partial class WorldSession
     internal string Dto(MarketOrder o, bool finished) =>
         Dto(o.Id, o.UnitPrice, o.Amount, o.Type, finished, o.ItemName, o.Quality, o.Expires, o.Reference);
 
-    /// <summary>A finished entry as the client's AuctionDTO JSON (IsFinished true, HasSellerFetched true as official).</summary>
-    internal string Dto(MarketFinished f) => Dto(f.Id, f.UnitPrice, f.Amount, f.Type, true, f.ItemName, f.Quality, f.Expires, f.Reference);
+    /// <summary>A private pending claim. The collector must be identified as its buyer: the client's
+    /// MarketPlaceCompleteView.CompleteEntry compares BuyerCharacterId with the local character before
+    /// sending op 91. Anonymous open listings do not need this field; pending collections do.</summary>
+    internal string Dto(MarketFinished f) => Dto(f.Id, f.UnitPrice, f.Amount, f.Type, true, f.ItemName, f.Quality, f.Expires, f.Reference, f.Owner);
 
     /// <summary>
     /// The AuctionDTO fields in the official order and spelling: Id, UnitPriceSilver, TotalPriceSilver (= unit × amount),
     /// DistanceFee 0, Amount, Tier, IsFinished, AuctionType, HasBuyerFetched, HasSellerFetched, SellerCharacterId, SellerName,
-    /// BuyerCharacterId, BuyerName (all four null: the counterparty is never sent, as official), ItemTypeId (T4_X@n),
+    /// BuyerCharacterId, BuyerName (pending claims identify their owner; other participant fields are null), ItemTypeId (T4_X@n),
     /// ItemGroupTypeId (without @n), EnchantmentLevel, QualityLevel, Expires (yyyy-MM-ddTHH:mm:ss.ffffff), ReferenceId,
     /// LocationId null.
     /// </summary>
-    private string Dto(long id, long unit, int amount, string type, bool finished, string itemName, int quality, DateTime expires, Guid reference)
+    private string Dto(long id, long unit, int amount, string type, bool finished, string itemName, int quality, DateTime expires, Guid reference, Guid? buyer = null)
     {
         var item = world.Items.Find(itemName);
         var buffer = new MemoryStream();
@@ -563,7 +567,8 @@ public sealed partial class WorldSession
             w.WriteBoolean("HasSellerFetched", finished);
             w.WriteNull("SellerCharacterId");
             w.WriteNull("SellerName");
-            w.WriteNull("BuyerCharacterId");
+            if (buyer is { } collector) w.WriteString("BuyerCharacterId", collector.ToString());
+            else w.WriteNull("BuyerCharacterId");
             w.WriteNull("BuyerName");
             w.WriteString("ItemTypeId", item?.Name ?? itemName);
             w.WriteString("ItemGroupTypeId", item?.BaseName ?? itemName);

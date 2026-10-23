@@ -218,6 +218,7 @@ public sealed partial class WorldSession
         }
         // The bonus loot (econ SPEC §2.1): the tier's <Loot> rolled once (× Rates:Loot), the items that fit after the resource; keys 9/10.
         var extras = BonusLoot(player, tier.LootOf(node.RareState), map.Random);
+        Systems.TutorialJourney.Gathered(player, item.Name, total);
         var finished = new HarvestFinishedEvent
         {
             HarvesterId = player.Id,               // [0]

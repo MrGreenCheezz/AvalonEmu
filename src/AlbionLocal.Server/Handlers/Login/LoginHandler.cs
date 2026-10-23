@@ -89,7 +89,7 @@ public sealed partial class LoginSession
             bfh = true,                 // [85] when false during a reconnect the client auto-selects a character
             bfv = LoginWorld.Features(), // [99] dew.a feature table, one entry per Features value
         };
-        FillCharacterList(r, characters.List(_account.Id), World?.Guilds, Systems.Premium.ListEnd(config, DateTime.UtcNow.Ticks));
+        FillCharacterList(r, characters.List(_account.Id), World?.Guilds, Systems.Premium.ListDays(config), World);
         r.FillEmpty();
         // [78] GameTimeStamp time scaling, same as Join key 70: c3d.cl(ahw) 0x180a5bae0 passes it to
         // GameTimeStamp.a(long[]), which needs exactly 5 values. Left out = unscaled real time.

@@ -30,10 +30,10 @@ own machine or LAN, for one player or a few friends.
 
 ## Modifications branch
 
-You are on the **`modifications`** branch: the server of `main` plus everything added since, and optional client-side
-mods. `main` stays the plain server.
+You are on the **`modifications`** branch: the server of `main` (the classic game) plus the modding tools, and optional
+client-side mods. `main` stays the classic game without any modding.
 
-**New on the server** (compared with `main`):
+**Modding on the server** (only on this branch):
 
 - **Modding without recompiling the server:** C# **plugins** on a stable plugin API (`src/AlbionLocal.Plugin.Api`,
   `plugins/README.md`; gameplay hooks, scripted spells, hot reload with `.plugins reload`), **no-code rules**
@@ -43,16 +43,10 @@ mods. `main` stays the plain server.
   with icons, pickers, live preview and validation.
 - **ModKit** (`tools/AlbionLocal.ModKit`, Russian guide in `docs/MODDING.ru.md`): content packs with your own items and
   abilities made from the official assets (`mods/example-blade` is a sample).
-- **Web panel** (`http://127.0.0.1:8080/`): status, registration, admin pages (players, accounts, bans, log, backups),
-  a mods editor with client icons.
+- **Mods editor** in the web panel (`http://127.0.0.1:8080/`), with client icons.
 - **Extra action bars:** two bars of six abilities granted by worn items (rules in `content/extraspells.json`: every
   official item grants spells from its own data, plus enchantment, masterpiece and artifact bonuses). Needs the
   client's `ActionBarsMod`.
-- **Gameplay:** companions (hire tank/healer/melee/ranged bots into the party), arena queues (1v1/2v2/5v5) with bots and
-  Elo ladders, hunts (tracking toolkits, wild tracks, hunt quest chains), labourers (island houses, furniture, labour),
-  awakened weapons and item traits, the PvE side of faction warfare, island construction and animals, gathering tomes
-  and fishing bait, expedition bonus chests, market price history, cosmetics from content, stronger hostile bots, a
-  richer starter kit, mob AI and spell-condition improvements, loot balance.
 - **Client checklist and checker:** `content/checks.json` (152 checks by area) and the GM command `.check`, which sets up
   each check in game and records the result.
 
@@ -94,9 +88,8 @@ build the mods yourself with `tools\build-client-mods.ps1` (after one client sta
 
 ### Кратко по-русски
 
-Ветка **`modifications`** — сервер из `main` плюс всё новое (плагины на C#, правила без кода, Студия `/studio`,
-ModKit, веб-панель, дополнительные панели способностей, компаньоны, арена, охота, работники, пробуждённое оружие и др.)
-и необязательные моды клиента в `client-mods/` (камера, графика, доп. панели; исходники и готовые DLL). Моды — только
+Ветка **`modifications`** — классический сервер из `main` плюс моддинг (плагины на C#, правила без кода, Студия
+`/studio`, ModKit, редактор модов, дополнительные панели способностей, чекер) и необязательные моды клиента в `client-mods/` (камера, графика, доп. панели; исходники и готовые DLL). Моды — только
 для этого локального сервера, никогда для официальных серверов. Игровых файлов здесь нет; BepInEx скачивается с
 официального сайта при установке и проверяется по SHA-256; установщик только добавляет файлы и ничего не обходит
 (античит не затрагивается). Ставите — на свою ответственность. Сервер: `tools\start-server.ps1 -GameDir "<папка клиента>"`;

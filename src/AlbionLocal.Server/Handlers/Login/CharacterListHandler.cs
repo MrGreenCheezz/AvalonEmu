@@ -1,4 +1,5 @@
 using AlbionLocal.Photon;
+using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Protocol;
 
@@ -12,16 +13,17 @@ namespace AlbionLocal.Server.Network;
 /// </summary>
 public sealed partial class LoginSession
 {
+    private static int SelectionEquipment(Character c, int slot, ItemStore? items) =>
+        c.Equipment.ElementAtOrDefault(slot) is { } item ? items?.Find(item.Name)?.Index ?? 0 : 0;
+
     /// <summary>
     /// Character list = parallel arrays (LoginInProcessDialog.CreateCharacterRecord → LoginGui.c).
     /// Every array must hold one entry per character or the client throws. A guild member's keys 19 (guild name), 20 (role) and
-    /// 22-28 (crest) come from <paramref name="guilds"/> (stageH guilds SPEC §2.7); null = none. Key 35 is each character's premium end
-    /// (<paramref name="premiumEnd"/>, <see cref="Systems.Premium.ListEnd"/>; stageJ focus-lp SPEC §2.2: the entry shows premium while it is
-    /// in the future); 0 = now (no premium).
+    /// 22-28 (crest) come from <paramref name="guilds"/>; null = none. Key 34 is played milliseconds (client c4.k),
+    /// key 35 is remaining premium days (client c4.p), not UTC timestamps. Zero means no premium.
     /// </summary>
-    private static void FillCharacterList(LoginResponse r, IReadOnlyList<Character> chars, Systems.Guilds? guilds = null, long premiumEnd = 0)
+    private static void FillCharacterList(LoginResponse r, IReadOnlyList<Character> chars, Systems.Guilds? guilds = null, long premiumDays = 0, World? world = null)
     {
-        if (premiumEnd == 0) premiumEnd = DateTime.UtcNow.Ticks;
         var n = chars.Count;
         T[] Each<T>(Func<Character, T> f) => chars.Select(f).ToArray();
         int[] Ints() => new int[n];
@@ -29,25 +31,32 @@ public sealed partial class LoginSession
         string[] Strings() => Enumerable.Repeat("", n).ToArray();
 
         r.bdd = Each(c => c.Name);            // [9]  c.a  name (sent back in SelectCharacter key 0)
-        r.bde = Each(c => c.Id.ToString());   // [10] c.b
+        r.bde = Each(c => Systems.OpeningTutorial.ClientCluster(c, world)); // [10] client instance id
         r.bdf = Strings();                    // [11] c.d
         r.bdg = Strings();                    // [12] c.e
-        r.bdh = Strings();                    // [13] c.c
-        r.bdi = Ints();                       // [14] c.f  appearance lookup
+        r.bdh = Each(c => world?.Islands.WorldOf(c.Cluster) ?? world?.Expeditions.WorldOf(c.Cluster)
+            ?? world?.Corrupted.Find(c.Cluster)?.World ?? world?.Hellgates.WorldOf(c.Cluster) ?? c.Cluster); // [13] base world map
+        r.bdi = Each(c => c.Template);        // [14] avatar lookup (creation key 1)
         r.bdj = Ints();                       // [15] c.g  appearance lookup
         r.bdk = new byte[n];                  // [16] c.h  FlaggingStatus
-        r.bdl = Each(c => (byte)c.Template);  // [17] c.i  character template (avatar built if found)
-        r.bdm = Strings();                    // [18] avatar detail string
+        r.bdl = Each(c => c.Appearance);      // [17] body template (creation key 2)
+        r.bdm = Each(c => world?.GameData?.Looks.SelectionJson(c) ?? ""); // [18] cpr customization JSON for selection preview
         r.bdn = Strings();                    // [19] c.j  guild name (logo built only when non-empty)
         r.bdo = new byte[n];                  // [20] c.k  GuildRole
         r.bdp = new byte[n];                  // [21] c.m  FlaggingStatus
         r.bdq = Ints(); r.bdr = Ints(); r.bds = Ints(); r.bdt = Ints(); r.bdu = Ints(); // [22-26] guild logo
         r.bdv = new float[n]; r.bdw = new float[n];                                      // [27-28] guild logo
         r.bdx = Longs(); r.bdy = Longs(); r.bdz = Longs(); r.bd0 = Longs(); r.bd1 = Longs(); // [29-33] a7m values
-        r.bd2 = Each(c => c.Created.Ticks);   // [34] c.s  c4
-        r.bd3 = Each(c => premiumEnd);        // [35] c.t c4, the premium end (LoginGui.c+0x98 → CharacterEntryBase.SetPremium)
+        r.bd2 = Each(c => c.PlayedMilliseconds); // [34] c.s: played duration in milliseconds
+        r.bd3 = Each(c => premiumDays);       // [35] c.t: remaining premium duration in days
         r.bd4 = Ints();                       // [36] c.u
-        r.bd5 = Ints(); r.bd6 = Ints(); r.bd7 = Ints(); r.bd8 = Ints(); r.bd9 = Ints(); r.bea = Ints();
+        // LoginGui.c stores head, armor, cape, mainhand, offhand, shoes in that wire order.
+        r.bd5 = Each(c => SelectionEquipment(c, 2, world?.Items));
+        r.bd6 = Each(c => SelectionEquipment(c, 3, world?.Items));
+        r.bd7 = Each(c => SelectionEquipment(c, 6, world?.Items));
+        r.bd8 = Each(c => SelectionEquipment(c, 0, world?.Items));
+        r.bd9 = Each(c => SelectionEquipment(c, 1, world?.Items));
+        r.bea = Each(c => SelectionEquipment(c, 4, world?.Items));
         r.beb = Ints(); r.bec = Ints(); r.bed = Ints(); r.bee = Ints(); r.bef = Ints(); r.beg = Ints(); // [37-48] equipment
         r.bfq = Longs();                      // [94] c.ai
         for (var i = 0; i < n && guilds is not null; i++)
@@ -96,10 +105,11 @@ public sealed partial class LoginSession
         var r = new SelectCharacterResponse
         {
             bln = config.GameServerAddress,   // [0] game server "ip:port" (ci7+0x118 → c32.i(string))
-            blo = c.Cluster,                  // [1] cluster id from world.xml (ciy.a), or the dungeon floor's instance id
+            blo = Systems.OpeningTutorial.ClientCluster(c, World), // [1] client instance, paired with Join key 8
             blw = DateTime.UtcNow.Ticks,      // [9] GameTimeStamp
             blx = DateTime.UtcNow.Ticks,      // [10] c4
         }.FillEmpty();
+        if (r.blo != c.Cluster) r.blp = c.Cluster; // [2] authored tutorial map cloned under its client instance id
         if (config.ChatEnabled && token is { } chat)
         {
             r.blu = config.ChatServerAddress; // [7] chat server "ip:port" (c31.i: "" = no chat peer)
@@ -128,27 +138,40 @@ public sealed partial class LoginSession
         // Progression:NewCharacters: FairStart = an empty destiny board and the kit its level allows; UnlockAll = no board
         // of its own (everything unlocked) and the usual kit.
         var fair = config.NewCharacters == NewCharacterProgression.FairStart;
-        var c = (fair ? FairStarter : starter).NewCharacter(name);
+        var opening = config.TutorialOpening ? World?.OpeningTutorial
+            ?? throw new InvalidOperationException("Opening tutorial data was not loaded.") : null;
+        var c = opening is null ? (fair ? FairStarter : starter).NewCharacter(name)
+            : opening.Create(name, World!.Items, World.GameData!);
         // Without the client's board data an empty board would have no START to grow from: unlock-all instead.
-        if (fair && World?.GameData?.Board is { } board) c.Progression = board.FairStart();
-        else if (fair) Log.Warn(Name, $"fair start for '{name}' without destiny board data: everything unlocked");
+        if (opening is null && fair && World?.GameData?.Board is { } board) c.Progression = board.FairStart();
+        else if (opening is null && fair) Log.Warn(Name, $"fair start for '{name}' without destiny board data: everything unlocked");
         c.Account = _account.Id; // in this login's account; the name must be free on the whole server
         c.Template = req.h8;
         c.Appearance = req.h9;
         c.Customization = req.ia ?? [];
         c.Clothes = req.ib ?? [];
         Systems.Focus.NewCharacter(c, config); // stageJ focus-lp: Focus:Start, LearningPoints:Start
-        if (name.Length == 0 || !characters.Create(c))
-            return new CreateCharacterResponse { ReturnCode = 1 }.FillEmpty();
-        Log.Info(Name, $"created character '{c.Name}' template {c.Template}{(fair ? ", fair start" : "")}");
+        if (name.Length == 0)
+            return new CreateCharacterResponse { ReturnCode = 483 }.FillEmpty(); // NAME_NOT_ALLOWED
+        if (!characters.Create(c))
+            return new CreateCharacterResponse { ReturnCode = 482 }.FillEmpty(); // NAME_NOT_UNIQUE
+        Log.Info(Name, $"created character '{c.Name}' avatar {c.Template}, body {c.Appearance}{(fair ? ", fair start" : "")}");
         if (World is { } world) world.Post(() => world.Bots.NameTaken(c.Name)); // stage I: a bot carrying the name goes
         return new CreateCharacterResponse
         {
             aop = c.Name,
+            aoq = Systems.OpeningTutorial.ClientCluster(c, World), // [1] client instance
+            aor = c.Cluster, // [2] world map used to resolve the entry's location label
             aos = c.Template,
             aou = c.Appearance,
             aov = c.Customization,
             aow = c.Clothes,
+            ao4 = SelectionEquipment(c, 2, World?.Items),
+            ao5 = SelectionEquipment(c, 3, World?.Items),
+            ao6 = SelectionEquipment(c, 6, World?.Items),
+            ao7 = SelectionEquipment(c, 0, World?.Items),
+            ao8 = SelectionEquipment(c, 1, World?.Items),
+            ao9 = SelectionEquipment(c, 4, World?.Items),
         }.FillEmpty();
     }
 

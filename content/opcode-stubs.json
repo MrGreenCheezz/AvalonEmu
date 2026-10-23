@@ -91,7 +91,6 @@
   "ClientFrametimeSpike": "ignore",                // telemetry, 4
   "ProductShopUserEvent": "ignore",                // shop telemetry, 2
   "EventBasedPopupAddSeen": "ignore",              // store/marketing pop-up seen, 3
-  "UseFunction": "ignore",                         // journal "usefunction" counter input, until the Albion Journal exists
   "PartyFinderRegisterForUpdates": "ignore",       // answered only by PartyFinder update events (no Party Finder here)
   "PartyFinderUnregisterForUpdates": "ignore",
   "PartyFinderRequestEquipmentSnapshot": "ignore",
