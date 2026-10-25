@@ -36,11 +36,11 @@ public static class FocusTest
 
     private static void PremiumState()
     {
-        var pve = ServerConfig.Load(Path.Combine(NewDir(), "none.json"), []);
-        var official = ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Preset=official"]);
+        var pve = LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=pve"]);
+        var official = LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=official"]);
         Check(pve is { PremiumMode: PremiumMode.Free, FocusStart: 30_000, LearningPointsStart: 500, FocusCrafting: true, FocusMax: null }
               && official is { PremiumMode: PremiumMode.None, FocusStart: 0, LearningPointsStart: 0 }
-              && ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Premium:Mode=none", "--Focus:Max=data", "--Premium:FameFactor=2"]) is { PremiumMode: PremiumMode.None, FocusMax: null, PremiumFameFactor: 2 },
+              && LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Premium:Mode=none", "--Focus:Max=data", "--Premium:FameFactor=2"]) is { PremiumMode: PremiumMode.None, FocusMax: null, PremiumFameFactor: 2 },
               "presets: Premium:Mode pve Free, official None; Focus:Start 30000 / 0, LearningPoints:Start 500 / 0; 'data' = the client data's value");
         var now = DateTime.UtcNow.Ticks;
         Check(Premium.ListDays(pve) == 365 && Premium.ListDays(official) == 0, "Login key 35: remaining premium days, not UTC ticks");

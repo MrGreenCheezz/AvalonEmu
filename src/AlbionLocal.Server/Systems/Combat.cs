@@ -565,7 +565,7 @@ public static class Combat
         var (gain, bonus) = t.Fame > 0 ? Fame(t.Fame, (danger?.FameFactor ?? 1) * (map.Difficulty?.MobFame ?? 1) * mob.FameFactor, t.MinDivisor, group.Count, groupBonus) : (0, 0);
         (gain, bonus) = (Rates.ScaleFame(gain, fameRate), Rates.ScaleFame(bonus, fameRate));
         if (gain > 0) // the scaled gain: Rates 0 sends no +0 popup
-            foreach (var p in group)
+            foreach (var p in group.Where(p => !p.IsBot)) // bot-party: a recruited bot's share of the split goes nowhere
             {
                 // The destiny board's 151/152 of the equipped gear's nodes, then UpdateFame {1 total, 2 fame × famefactor /
                 // divisor, 3 the danger bonus part, 5 PvE, 15} (PROGRESSION.md §6.6: all before the lethal HealthUpdate), to each alone.
@@ -660,7 +660,7 @@ public static class Combat
                 ? tables.RollMob(loot, map.Random, (danger?.MobLootFactor ?? 1) * (world.GameData?.GlobalMobLootFactor ?? 1) * (map.Difficulty?.Loot ?? 1) * world.Rates.Loot,
                     world.Config.LootBlackMarketChance,
                     name => LogOnce("loot:" + name, $"loot list {name} of {mob.Template.Name} is not in loot.xml"),
-                    mob.Template.Tier, world.Config.LootBlackMarketSoftCap)
+                    world.Config.LootTierCap ? mob.Template.Tier : 0, world.Config.LootBlackMarketSoftCap)
                 : []);
         if (world.LootOverride is null) drops = WithTicket(world, mob, map, drops);
         if (world.LootOverride is null) // content packs (Mods:Packs): drop rules, and a mob variant's loot lists (official ones rolled with loot.xml)

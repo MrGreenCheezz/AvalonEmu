@@ -59,8 +59,8 @@ public static class MistsBTest
               $"a resource zone {resource.Info.File}: {resource.MistsSpots.Count(x => x.Kind == "MistsSpawnpoint")} arrivals, {resource.MistsSpots.Count(x => x.Kind == "mistswispspawn")} wisp spawn(s)");
         Check(data.StaticMode(0)?.Name == "MISTS_SOLO_YELLOW" && data.StaticMode(1)?.Name == "MISTS_SOLO_YELLOW" && data.StaticMode(2)?.Name == "MISTS_SOLO_BLACK"
               && data.StaticMode(5)?.Name == "MISTS_DUO_BLACK" && data.StaticMode(7) is null
-              && ServerConfig.Load(Path.Combine(NewDir(), "none.json"), []).Mists is { StandingFactor: 2, StaticEntrance: true, DrifterNeedsRed: true }
-              && ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Preset=official"]).Mists.StandingFactor == 1,
+              && LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=pve"]).Mists is { StandingFactor: 2, StaticEntrance: true, DrifterNeedsRed: true }
+              && LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=official"]).Mists.StandingFactor == 1,
               "op 477's mode id names the open mode 0- or 1-based (0/1 yellow, 2 black, 5 duo, 7 none); Mists:StandingFactor 2 under pve, 1 official");
     }
 

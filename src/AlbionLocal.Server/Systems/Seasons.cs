@@ -39,7 +39,7 @@ public static class Seasons
     /// premiumDays = <see cref="Premium.Days"/>. Under Premium:Mode Free the premium and boughtpremium rewards become claimable and the
     /// nonpremium-only ones (the 12 learningpointsreward entries among them) do not, as officially for a premium player.
     /// </summary>
-    public static bool Eligible(Player p, PersonalSeasonData.Reward r) => Premium.Is(p) ? r.Eligible(isPremium: true, premiumDays: Premium.Days(p.World)) : Eligible(r);
+    public static bool Eligible(Player p, PersonalSeasonData.Reward r) => Premium.Is(p) ? r.Eligible(isPremium: true, premiumDays: Premium.Days(p)) : Eligible(r);
 
     /// <summary>
     /// The state of <paramref name="r"/> in <paramref name="log"/> as of now: an unlocked, unclaimed one is judged again by

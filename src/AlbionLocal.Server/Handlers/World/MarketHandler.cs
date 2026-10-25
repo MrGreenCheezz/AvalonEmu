@@ -497,13 +497,18 @@ public sealed partial class WorldSession
         return new AuctionFetchAuctionResponse { amr = Dto(entry with { Amount = amount }) };
     }
 
-    /// <summary>AuctionFetchFinishedAuctions (op 493): every finished entry that fits, as op 91; {0 cfd} sent as 0.</summary>
+    // Client MarketPlaceCompleteView.OnTakeAllResult(cfd): 0 shows GENERIC_ERROR; 4 refreshes without an error dialog.
+    private enum BulkMarketFetchResult : byte { Error = 0, Success = 4 }
+
+    /// <summary>AuctionFetchFinishedAuctions (op 493): attempts every finished entry, returning client success only when all fit.</summary>
     [Handles(OperationCodes.AuctionFetchFinishedAuctions, Status = SessionStatus.InWorld)]
     private AlbionResponse? AuctionFetchFinishedAuctions(AuctionFetchFinishedAuctionsRequest req)
     {
         if (Player is not { } player) return null;
-        foreach (var entry in world.Market?.FinishedOf(player.Character.Id) ?? []) Fetch(player, entry, entry.Amount);
-        return new AuctionFetchFinishedAuctionsResponse();
+        var allCollected = true;
+        foreach (var entry in world.Market?.FinishedOf(player.Character.Id) ?? [])
+            if (!Fetch(player, entry, entry.Amount)) allCollected = false;
+        return new AuctionFetchFinishedAuctionsResponse { arb = (byte)(allCollected ? BulkMarketFetchResult.Success : BulkMarketFetchResult.Error) };
     }
 
     /// <summary>Collects <paramref name="amount"/> of a finished entry (and its silver); false (nothing changed) when the items do not fit.</summary>

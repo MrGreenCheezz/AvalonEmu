@@ -309,7 +309,7 @@ public sealed class PatrolBrain(BotManager bots, BotGroup group) : IBotBrain
     }
 
     /// <summary>
-    /// A follower: to <see cref="FollowSpacing"/> m × its place behind the leader along its facing (on walkable ground near it), straight when
+    /// A follower: to Bots:Patrol:FollowSpacing (<see cref="FollowSpacing"/>) m × its place behind the leader along its facing (on walkable ground near it), straight when
     /// the line is clear, else along a path; on the leader's mount when it rides, off it when the leader stands unmounted. Every second.
     /// </summary>
     private void Follow(Player bot, Player leader, ClusterNav nav, Vector2 here, TimeSpan now)
@@ -326,7 +326,7 @@ public sealed class PatrolBrain(BotManager bots, BotGroup group) : IBotBrain
         }
         if (!leader.IsMounted && bot.IsMounted && !moving) Mounts.Dismount(bot);
         var angle = leader.Facing * Math.PI / 180;
-        var behind = lead - new Vector2((float)Math.Sin(angle), (float)Math.Cos(angle)) * FollowSpacing * Math.Max(1, group.SlotOf(bot));
+        var behind = lead - new Vector2((float)Math.Sin(angle), (float)Math.Cos(angle)) * (float)bots.Options.FollowSpacing * Math.Max(1, group.SlotOf(bot));
         var goal = nav.Grid.Walkable(behind) ? behind : nav.Grid.Nearest(behind, 4) ?? lead;
         if (Vector2.Distance(here, goal) <= FollowReach)
         {

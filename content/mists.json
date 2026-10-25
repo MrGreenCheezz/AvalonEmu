@@ -1,5 +1,5 @@
 // The Mists (analysis/work/stageL/mists/SPEC.md; README "The Mists"). The switches and the factors that differ between the presets are
-// config keys (config/albionlocal.json "Mists"); here the tables. Every key is optional; a missing key keeps the value shown here.
+// config keys (config/world.jsonc "Mists"); here the tables. Every key is optional; a missing key keeps the value shown here.
 // Read at the start.
 {
   // What each mists.xml <treasures> subtype of a zone spawns when its roll succeeds: one name of the list at random, "{tier}" the zone's

@@ -73,13 +73,13 @@ public static class HellgateTest
         var file = HellgateSettings.Parse(File.ReadAllText(Path.Combine(DataDir(), "..", "content", "hellgates.json")), "hellgates.json");
         var cfg = NewDir();
         var none = Path.Combine(cfg, "albionlocal.json");
-        var pve = ServerConfig.Load(none, []).Hellgates;
-        var off = ServerConfig.Load(none, ["--Preset=official"]).Hellgates;
+        var pve = LoadTestConfig(none, ["--Preset=pve"]).Hellgates;
+        var off = LoadTestConfig(none, ["--Preset=official"]).Hellgates;
         Check(file.Maps.Count == 0 && file.Texts.OrderBy(t => t.Key).SequenceEqual(HellgateSettings.DefaultTexts.OrderBy(t => t.Key))
               && pve is { ShrineMode: HellgateShrineMode.Fixed, CheckItemPower: false, BossMapFactor: 3, GroupScaling: true, EnemyTeamSize: HellgateEnemyTeam.Party, KnockdownSeconds: 30, LeaveCommand: true }
               && pve.VersusModes.SequenceEqual(HellgateOptions.LethalModes)
               && off is { ShrineMode: HellgateShrineMode.Gui, CheckItemPower: true, BossMapFactor: 1, GroupScaling: false, KnockdownSeconds: null, LeaveCommand: false } && off.VersusModes.Count == 4
-              && ServerConfig.Load(none, ["--Hellgates:VersusModes=hellgate_5v5", "--Hellgates:KnockdownSeconds=archetype"]).Hellgates is { KnockdownSeconds: null, VersusModes: ["hellgate_5v5"] },
+              && LoadTestConfig(none, ["--Hellgates:VersusModes=hellgate_5v5", "--Hellgates:KnockdownSeconds=archetype"]).Hellgates is { KnockdownSeconds: null, VersusModes: ["hellgate_5v5"] },
               "content/hellgates.json holds the built-in texts; Hellgates:* under pve (fixed shrine, lethal modes versus, scaling, 30 s knockdowns, .hg leave) and official; explicit keys win");
         try { Directory.Delete(cfg, true); } catch (IOException) { }
     }
@@ -358,8 +358,8 @@ public static class HellgateTest
     {
         var cfg = NewDir();
         var none = Path.Combine(cfg, "albionlocal.json");
-        var pve = ServerConfig.Load(none, []).Hellgates;
-        var off = ServerConfig.Load(none, ["--Preset=official"]).Hellgates;
+        var pve = LoadTestConfig(none, ["--Preset=pve"]).Hellgates;
+        var off = LoadTestConfig(none, ["--Preset=official"]).Hellgates;
         var data = Store.Hellgates;
         var mode = data.At(1)!;
         var af1 = 1 + 0.2 * (1 - Math.Exp(-1 / 43.44769151));

@@ -124,7 +124,7 @@ writes a `CameraMod perf` line every 10 s.
 
 **Limitations:** the game is designed for a top-down view: at low angles you may see unloaded map areas, holes,
 clipped shadows and LOD changes. Mobs and players farther than about 40 m are not sent by the server (`Visibility` in
-`config/albionlocal.json`). Inside buildings the game switches to its interior camera; extra zoom and rotation apply on
+`config/world.jsonc`). Inside buildings the game switches to its interior camera; extra zoom and rotation apply on
 top of it.
 
 ## GraphicsMod

@@ -99,10 +99,10 @@ public static class ClusterDataTest
         characters.Dispose();
         try { Directory.Delete(dir, true); } catch (IOException) { }
 
-        var config = ServerConfig.Load(Path.Combine(dir, "none.json"), ["--World:EventLayers=halloween, easter", "--ClientNumbering:BuildingIdOffset=0"]);
+        var config = LoadTestConfig(Path.Combine(dir, "none.json"), ["--World:EventLayers=halloween, easter", "--ClientNumbering:BuildingIdOffset=0"]);
         Check(config.Clusters is { BuildingIdOffset: 0 } o && o.EventLayers.SetEquals(["halloween", "easter"])
               && new ServerConfig().Clusters is { BuildingIdOffset: 1, EventLayers.Count: 0 }, "World:EventLayers and ClientNumbering:BuildingIdOffset, default none and 1");
-        try { ServerConfig.Load(Path.Combine(dir, "none.json"), ["--World:EventLayers=halloweem"]); Check(false, "an unknown event layer was accepted"); }
+        try { LoadTestConfig(Path.Combine(dir, "none.json"), ["--World:EventLayers=halloweem"]); Check(false, "an unknown event layer was accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("halloweem"), $"an unknown event layer is named (got {e.Message})"); }
     }
 

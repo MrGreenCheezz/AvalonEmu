@@ -35,6 +35,7 @@ public static class BotTest
         ("bots: a bot put off the walk grid steps onto it and blames no POI for its failed paths", OffGrid),
         ("bots: .bot spawn city 3 seen alike by two humans, .bot, .bot clear here, .bot off refuses .bot spawn", Commands),
         ("bots: Bots:* keys (pve on, official off, a range, a nested group, a bad value refused), characters.xml's 22 look presets and the shipped content/bots.json", Config),
+        ("bots switches: official all off, pve every kind on with today's figures; World/City off, Bots:Zones elsewhere: no population in Thetford", Switches),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -52,6 +53,9 @@ public static class BotTest
 
         public readonly string Cluster;
 
+        /// <summary>Ticks added to the game time (bot-schedule: a jump to another hour of the day).</summary>
+        public long TimeShift;
+
         /// <summary>A world of the pve preset (changed by <paramref name="config"/> when given) with <paramref name="bots"/> on <paramref name="cluster"/>.</summary>
         public Field(BotOptions bots, BotSettings? settings = null, ClusterPvp? rules = null, string cluster = "0000", Func<ServerConfig, ServerConfig>? config = null)
         {
@@ -63,7 +67,7 @@ public static class BotTest
             var options = ServerConfig.PveDefaults with { JoinByCharacterId = true, Bots = bots };
             World = new World(config?.Invoke(options) ?? options, Characters, Client.Items, Client.GameData, Client.Spells)
             {
-                Sync = new object(), Clock = Clock, Clusters = store, GameTicks = () => anchor + Clock.Now.Ticks, MapSeed = 17, PvpOverride = rules,
+                Sync = new object(), Clock = Clock, Clusters = store, GameTicks = () => anchor + Clock.Now.Ticks + TimeShift, MapSeed = 17, PvpOverride = rules,
                 BotSettings = settings ?? BotSettings.Default,
             };
         }
@@ -343,23 +347,72 @@ public static class BotTest
         Check(refused.StartsWith("error: bots are off", StringComparison.Ordinal) && f.World.Bots.Count == 0, $".bot off: .bot spawn refused ({refused}), no bots");
     }
 
+    private static void Switches()
+    {
+        var dir = NewDir();
+        var file = Path.Combine(dir, "albionlocal.json");
+        File.WriteAllText(file, "{}");
+        static bool Refused(string file, string arg)
+        {
+            try { LoadTestConfig(file, [arg]); return false; }
+            catch (InvalidDataException) { return true; }
+        }
+        // Official: the master off, so every kind off at run time (the kind switches true under it); pve: all on, today's figures.
+        var official = LoadTestConfig(file, ["--Preset=official"]);
+        using (var repo = new SqliteCharacterRepository(Path.Combine(dir, "o.db")))
+        using (var w = new World(official with { JoinByCharacterId = true }, repo, Client.Items, Client.GameData, Client.Spells) { Sync = new object() })
+            Check(!official.Bots.Enabled && !w.Bots.Enabled && !w.Bots.WorldEnabled && !w.Bots.ArenaBots && !w.Bots.HellgateBots && !w.Bots.InvaderBots,
+                  "official: Bots:Enabled false, so no world, arena, hellgate or invader bots");
+        var pve = LoadTestConfig(file, ["--Preset=pve"]).Bots;
+        Check(pve is { Enabled: true, WorldEnabled: true, CityEnabled: true, GathererEnabled: true, PatrolEnabled: true, DrifterEnabled: true, Zones.Count: 0,
+                  ArenaEnabled: true, HellgateEnabled: true, InvaderEnabled: true, PvpEnabled: true, RewardsEnabled: true,
+                  CityPoiShare: 0.6, CityWanderMeters: (15, 40), CityExitShare: 0.5, FleeSeconds: 20, FleeDistance: 25, FollowSpacing: 2.5,
+                  RetargetSeconds: 5, RetargetShare: 1.5, KiteSeconds: 1.2, KiteEverySeconds: 2.5 }
+              && pve == ServerConfig.PveDefaults.Bots,
+              "pve: every kind on, Pvp and Rewards on, the former constants at their values; the loaded pve equals PveDefaults");
+        var c = LoadTestConfig(file, ["--Bots:World:Enabled=false", "--Bots:Zones=city, 1207", "--Bots:Patrol:Enabled=false", "--Bots:Arena:Enabled=false", "--Bots:City:ExitShare=0.25"]).Bots;
+        Check(c is { WorldEnabled: false, PatrolEnabled: false, ArenaEnabled: false, CityExitShare: 0.25, HellgateEnabled: true } && c.Zones.SequenceEqual(["City", "1207"])
+              && c.ZoneAllowed("City", "0000") && c.ZoneAllowed("Red", "1207") && !c.ZoneAllowed("Yellow", "1000")
+              && Refused(file, "--Bots:City:PoiShare=2") && Refused(file, "--Bots:Rewards:Enabled=maybe") && Refused(file, "--Bots:Zones=[1"),
+              "keys read (Zones a comma list, a zone class in its spelling or a cluster id); bad values refused");
+        try { Directory.Delete(dir, true); } catch (IOException) { }
+
+        // Thetford (City) with one human: the population as usual, none with World, City or Bots:Zones elsewhere.
+        foreach (var (options, want) in new[]
+        {
+            (new BotOptions { Enabled = true, PopulateSeconds = 0.5, SpawnPerPass = 12 }, true),
+            (new BotOptions { Enabled = true, PopulateSeconds = 0.5, SpawnPerPass = 12, WorldEnabled = false }, false),
+            (new BotOptions { Enabled = true, PopulateSeconds = 0.5, SpawnPerPass = 12, CityEnabled = false }, false),
+            (new BotOptions { Enabled = true, PopulateSeconds = 0.5, SpawnPerPass = 12, Zones = ["Red", "Black"] }, false),
+            (new BotOptions { Enabled = true, PopulateSeconds = 0.5, SpawnPerPass = 12, Zones = ["0000"] }, true),
+        })
+        {
+            using var f = new Field(options);
+            var nav = f.Nav();
+            f.Join("Wanda", Square(nav));
+            f.Run(2);
+            Check((f.Map.Bots.Count > 0) == want,
+                  $"World {options.WorldEnabled}, City {options.CityEnabled}, Zones [{string.Join(",", options.Zones)}]: {f.Map.Bots.Count} bot(s) in Thetford (want {(want ? "some" : "none")})");
+        }
+    }
+
     private static void Config()
     {
         var dir = NewDir();
         var file = Path.Combine(dir, "albionlocal.json");
         File.WriteAllText(file, """{ "Bots": { "StayMinutes": "1-2", "Nav": { "LatticeStep": 6 }, "City": { "PerPoi": 2 } } }""");
-        var c = ServerConfig.Load(file, []);
+        var c = LoadTestConfig(file, ["--Preset=pve"]);
         Check(c.Bots is { Enabled: true, StayMinutes: (1, 2), LatticeStep: 6, CityPerPoi: 2, MaxPerMap: 40, PvpRules: BotPvpRules.Consent } && c.Bots.SpawnCells(c.Visibility) == 5
-              && !ServerConfig.Load(file, ["--Preset=official"]).Bots.Enabled && ServerConfig.Load(file, ["--Bots:ThinkSeconds=3"]).Bots.ThinkSeconds == (3, 3),
+              && !LoadTestConfig(file, ["--Preset=official"]).Bots.Enabled && LoadTestConfig(file, ["--Bots:ThinkSeconds=3"]).Bots.ThinkSeconds == (3, 3),
               "pve: bots on, \"1-2\" a range, Nav: { LatticeStep } a group, MinSpawnCells = EnterCells + 1; official: off; one number a range of one");
         static bool Refused(string file, string arg)
         {
-            try { ServerConfig.Load(file, [arg]); return false; }
+            try { LoadTestConfig(file, [arg]); return false; }
             catch (InvalidDataException) { return true; }
         }
         Check(Refused(file, "--Bots:StayMinutes=x-2") && Refused(file, "--Bots:Look=Pretty") && Refused(file, "--Bots:Nav:Lattice=4"), "a bad range, look or an unknown key refused");
         Check(c.Bots is { CrimesAgainstBots: false, GathererFlag: BotGathererFlag.Zone, ConsumeNodes: false, DownDespawnSeconds: 10, GathererNodes: (6, 20) }
-              && ServerConfig.Load(file, ["--Preset=official"]).Bots.CrimesAgainstBots && ServerConfig.Load(file, ["--Bots:Gatherer:FleeHealth=0.4"]).Bots.FleeHealth == 0.4
+              && LoadTestConfig(file, ["--Preset=official"]).Bots.CrimesAgainstBots && LoadTestConfig(file, ["--Bots:Gatherer:FleeHealth=0.4"]).Bots.FleeHealth == 0.4
               && Refused(file, "--Bots:DownDespawnSeconds=90") && Refused(file, "--Bots:Gatherer:Flag=Green"),
               "phase 2 keys: pve no crimes against bots (official yes), Gatherer:* a group, DownDespawnSeconds below the 90 s get-up, a bad flag refused");
         var looks = Client.GameData!.Looks;
@@ -376,8 +429,8 @@ public static class BotTest
               "content/bots.json: the built-in tables (stageM: 24 city bots in a royal city, 12 gatherers + 8 patrols in red zones, 10 patrols in black ones; no holy staff; 60 % armed gatherers carrying 5-20 from the spawn)");
         var pve = ServerConfig.PveDefaults.Bots;
         Check(new BotOptions() is { MaxTotal: 400, SpawnPerPass: 4, SpellChance: 0.6, DeathGearDropChance: 1.0, MinItems: 0 } && pve is { DeathGearDropChance: 0.5, MinItems: 1 }
-              && c.Bots is { MaxTotal: 400, DeathGearDropChance: 0.5, MinItems: 1 } && ServerConfig.Load(file, ["--Preset=official"]).Bots is { DeathGearDropChance: 1.0, MinItems: 0 }
-              && ServerConfig.Load(file, ["--Bots:Rewards:MinItems=2"]).Bots.MinItems == 2 && Refused(file, "--Bots:Rewards:MinItems=7") && Refused(file, "--Bots:Rewards:DeathGearDropChance=1.5"),
+              && c.Bots is { MaxTotal: 400, DeathGearDropChance: 0.5, MinItems: 1 } && LoadTestConfig(file, ["--Preset=official"]).Bots is { DeathGearDropChance: 1.0, MinItems: 0 }
+              && LoadTestConfig(file, ["--Bots:Rewards:MinItems=2"]).Bots.MinItems == 2 && Refused(file, "--Bots:Rewards:MinItems=7") && Refused(file, "--Bots:Rewards:DeathGearDropChance=1.5"),
               "stageM keys: MaxTotal 400, SpawnPerPass 4, SpellChance 0.6; Rewards:DeathGearDropChance official 1.0 / pve 0.5, Rewards:MinItems official 0 / pve 1 (0-6)");
         Check(BotSettings.Parse("""{ "Gear": { "GathererWeaponShare": 0.25, "GathererStartCarry": "3-4" } }""", "test") is { GathererWeaponShare: 0.25, GathererStartCarry: (3, 4) }
               && BotSettings.Parse("""{ "Gear": { "GathererStartCarry": 0 } }""", "test").GathererStartCarry == (0, 0),

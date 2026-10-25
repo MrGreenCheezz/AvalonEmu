@@ -1,0 +1,18 @@
+// JSONC (JSON with comments), including trailing commas; not standard JSON.
+// Optional keys use preset defaults.
+// Relative paths use the parent of this configuration directory.
+// Command-line overrides: --Section:Key=value. Restart applies file edits.
+{
+  "Network": { "LoginPort": 5055 },
+  "Accounts": {
+    "LocalAccountLevel": "Admin", // Player, GameMaster, Admin: the level the local account (the characters of before the multiplayer upgrade) gets in a new database
+    // "DefaultLevel": "Player",  // level of every account made from now on (registration, AutoRegister, .account create); chat GM commands check the speaker's account (.account level <name> <level> on the console)
+    "LegacyName": "",             // claims existing legacy characters only; "" = first login from this PC. Empty local accounts cannot be claimed.
+    "JoinByCharacterId": false,   // true: a Join naming a character id plays it whatever the login (the self-test); false: own characters only
+    "AutoRegister": false,        // true: a login with a new name and a password makes the account; false: refused (register in the client or .account create)
+    "Registration": true          // the client's "Create account" dialog may make accounts (at DefaultLevel; false on a server others reach if you want no strangers)
+    // "MaxFailedLogins": 5,      // wrong passwords in a row that lock the account (0 = never)
+    // "LockMinutes": 15,         // how long that lock lasts
+    // "Maintenance": false,      // true: every login is refused with the client's maintenance message
+  }
+}

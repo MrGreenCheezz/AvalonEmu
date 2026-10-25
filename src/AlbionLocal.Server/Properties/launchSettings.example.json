@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "Albion Local Server": {
+      "commandName": "Project",
+      "workingDirectory": "$(MSBuildProjectDirectory)/../..",
+      "commandLineArgs": "--config-dir=config"
+    },
+    "Check configuration": {
+      "commandName": "Project",
+      "workingDirectory": "$(MSBuildProjectDirectory)/../..",
+      "commandLineArgs": "--config-dir=config --check-config"
+    }
+  }
+}

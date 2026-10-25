@@ -11,7 +11,7 @@
 .PARAMETER GameDir
     The Albion client folder (the one with Albion-Online.exe). The server reads
     <GameDir>\Albion-Online_Data\StreamingAssets\GameData. Optional when -GameData is given or when
-    config\albionlocal.json (Paths:ClientGameData) already points at it (default: ..\game-local next to the repository).
+    config\common.jsonc (Paths:ClientGameData) already points at it (default: ..\game-local next to the repository).
 
 .PARAMETER GameData
     The client's GameData folder itself (overrides -GameDir).

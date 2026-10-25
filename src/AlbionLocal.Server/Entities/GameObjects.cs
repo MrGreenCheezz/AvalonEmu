@@ -72,6 +72,13 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
         yield return NewBuilding();
+        // cpm starts with an empty state; SimpleBehaviourObjectView requires event 645 even
+        // for the authored default. Initialize each viewer on every announcement, without
+        // storing per-character state on the shared map's building. Journal transitions are separate.
+        if (Template.Kind == "simplebehaviourbuilding"
+            && (string?)Template.Element.Elements("triggerablestate")
+                .FirstOrDefault(s => (bool?)s.Attribute("default") == true)?.Attribute("name") is { Length: > 0 } state)
+            yield return new SimpleBehaviourBuildingStateUpdateEvent { ddn = Id, dyl = state };
         if (Spawn.QuestGiver is { } giver)
             // coz.ajv → cmh.r 0x180b641c0 reads keys 3 (a7m) and 4 (stamp) into the quest-giver bar and bools 5/6; it ignores
             // keys 1 and 2, which the official server sends anyway. 3, 5 and 6 are never sent.

@@ -26,6 +26,7 @@ public sealed class World : IDisposable
     public World(ServerConfig config, ICharacterRepository characters, ItemStore items, GameData? gameData = null, SpellData? spells = null,
         ScriptRegistry? scripts = null)
     {
+        config.Rates.Validate();
         Config = config;
         Characters = characters;
         Items = items;
@@ -38,7 +39,7 @@ public sealed class World : IDisposable
         Market = characters as IMarketStore;
         Mail = characters as IMailStore;
         ItemValues = new ItemValues(items);
-        Rates = config.Rates;
+        _rates = config.Rates;
         MobAi = config.MobAi;
         Parties = new Systems.Parties(this);
         Guilds = new Systems.Guilds(this, characters as IGuildStore);
@@ -330,11 +331,27 @@ public sealed class World : IDisposable
     public TimeSpan Delta { get; private set; }
 
     /// <summary>
-    /// The rate modifiers in force (<see cref="Game.Rates"/>): the config's Rates at the start, data/rates.json over them
-    /// (ServerHost), then what a GM sets (.rates). Read where each quantity is computed, so a change counts from the next one
-    /// (a respawn or regrowth already scheduled keeps its time). Under <see cref="Sync"/>.
+    /// The rate modifiers in force: the startup configuration followed by temporary administrative changes.
+    /// New calculations use these; already awarded rewards and scheduled timers keep their values.
     /// </summary>
-    public Game.Rates Rates { get; set; }
+    public Game.Rates Rates
+    {
+        get => _rates;
+        set => ApplyRates(value);
+    }
+
+    private Game.Rates _rates;
+
+    /// <summary>Validates the entire candidate before replacing the world's rates under its game-state lock.</summary>
+    public void ApplyRates(Game.Rates candidate)
+    {
+        ArgumentNullException.ThrowIfNull(candidate);
+        lock (Sync)
+        {
+            candidate.Validate();
+            _rates = candidate;
+        }
+    }
 
     /// <summary>
     /// The factor on every mob respawn time (stage 5 SPEC §5a.2), the old form of <see cref="Game.Rates.Respawn"/>: 1 / it

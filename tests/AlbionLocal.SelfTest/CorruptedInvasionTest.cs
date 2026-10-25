@@ -132,10 +132,10 @@ public static class CorruptedInvasionTest
     {
         var cfg = NewDir();
         var none = Path.Combine(cfg, "albionlocal.json");
-        Check(ServerConfig.Load(none, []).Corrupted is { Invasions: CorruptedInvasionMode.Consent, BotInvaders: true, PlayerInvasions: CorruptedInvasionMode.Consent, InfamyLossOnDefeat: 0,
+        Check(LoadTestConfig(none, ["--Preset=pve"]).Corrupted is { Invasions: CorruptedInvasionMode.Consent, BotInvaders: true, PlayerInvasions: CorruptedInvasionMode.Consent, InfamyLossOnDefeat: 0,
                   MaxInvasionsPerRun: 1, AntiReset: false, ChainBonus: 0.1, OpenWorldPortals: true, MapsOpenDungeons: false, Chain: true, BotInvaderDelaySeconds: (60, 180) }
-              && ServerConfig.Load(none, ["--Preset=official"]).Corrupted is { Invasions: CorruptedInvasionMode.Official, BotInvaders: false, InfamyLossOnDefeat: 0.1, MaxInvasionsPerRun: 3, AntiReset: true, ChainBonus: 0 }
-              && ServerConfig.Load(none, ["--Corrupted:Invader:DamageFactor=0.5,1,2", "--Corrupted:BotInvaderDelaySeconds=5-10"]).Corrupted is { InvaderDamageFactor: (0.5, 1, 2), BotInvaderDelaySeconds: (5, 10) },
+              && LoadTestConfig(none, ["--Preset=official"]).Corrupted is { Invasions: CorruptedInvasionMode.Official, BotInvaders: false, InfamyLossOnDefeat: 0.1, MaxInvasionsPerRun: 3, AntiReset: true, ChainBonus: 0 }
+              && LoadTestConfig(none, ["--Corrupted:Invader:DamageFactor=0.5,1,2", "--Corrupted:BotInvaderDelaySeconds=5-10"]).Corrupted is { InvaderDamageFactor: (0.5, 1, 2), BotInvaderDelaySeconds: (5, 10) },
               "Corrupted phase B keys: pve consent with a bot invader, nothing lost, one invasion, no imps, chain bonus 0.1; official rolls, real players, 0.1 loss, 3, imps; the factor list and the range parse");
         try { Directory.Delete(cfg, true); } catch (IOException) { }
         var file = CorruptedSettings.Parse(File.ReadAllText(Path.Combine(DataDir(), "..", "content", "corrupted.json")), "corrupted.json");

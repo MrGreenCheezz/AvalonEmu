@@ -38,10 +38,11 @@ public static class Premium
     public static long End(Player p, long now) => Is(p) ? now + FreeSpan.Ticks : 0;
 
     /// <summary>
-    /// The premium days (Join key 91, 286 key 2; ctp+0x3D0): Islands:PremiumDays (31 as captured; the island merchant sells from 7 on and
-    /// the season's boughtpremium rewards need more than 6), whether islands are on or not.
+    /// The premium days of <paramref name="p"/> (Join key 91, 286 key 2; ctp+0x3D0): Islands:PremiumDays (31 as captured; the island merchant
+    /// sells from 7 on and the season's boughtpremium rewards need more than 6) while premium or with Islands:BuyWithoutPremium (the temporary
+    /// rule of both presets: no premium can be had yet), else 0 (left out: the merchant offers no purchase); whether islands are on or not.
     /// </summary>
-    public static int Days(World world) => world.Config.IslandsPremiumDays;
+    public static int Days(Player p) => Is(p) || p.World.Config.IslandsBuyWithoutPremium ? p.World.Config.IslandsPremiumDays : 0;
 
     /// <summary>The destiny board's factor on a kill's or harvest's fame (UpdateFame key 5 sources; premiumdestinyboardprogressionfactor 1.5, Premium:FameFactor), 1 without premium.</summary>
     public static double FameFactor(Player p) => Is(p) ? p.World.Config.PremiumFameFactor ?? Defaults(p.World).PremiumFameFactor : 1;
@@ -68,7 +69,7 @@ public static class Premium
     {
         p.PremiumEnd = End(p, now);
         r.bas = p.PremiumEnd;   // [90] GameTimeStamp → ctp+0x3C8 (0 = left out: no premium)
-        r.bat = Days(p.World);  // [91] → ctp+0x3D0 (0 = left out)
+        r.bat = Days(p);  // [91] → ctp+0x3D0 (0 = left out)
     }
 
     /// <summary>
@@ -98,7 +99,7 @@ public static class Premium
         p.Session.Send(Focus.Bar(p, now));
         p.Session.Send(LearningPoints.Event(p, 0, LearningPoints.Silent));
         p.PremiumEnd = End(p, now);
-        p.Session.Send(new PremiumChangedEvent { ddn = p.Id, dru = p.PremiumEnd, drv = Days(p.World) });
+        p.Session.Send(new PremiumChangedEvent { ddn = p.Id, dru = p.PremiumEnd, drv = Days(p) });
     }
 
     /// <summary>A Free premium whose end the client knows comes closer than <see cref="RefreshBefore"/>: a PremiumChanged with the end pushed out (<see cref="LearningPoints.Update"/>).</summary>
@@ -106,6 +107,6 @@ public static class Premium
     {
         if (!Is(p) || p.PremiumEnd - now >= RefreshBefore.Ticks) return;
         p.PremiumEnd = End(p, now);
-        p.Session.Send(new PremiumChangedEvent { ddn = p.Id, dru = p.PremiumEnd, drv = Days(p.World) });
+        p.Session.Send(new PremiumChangedEvent { ddn = p.Id, dru = p.PremiumEnd, drv = Days(p) });
     }
 }

@@ -104,8 +104,9 @@ public static class OpeningTutorialTest
             && lab.Peer.Events.Any(e => EventCode(e) == EventCodes.FullQuestInfo), "real Join emits tutorial and quest events");
         Check(p.Inventory.Equipment.Items.All(i => i.Active.Any(s => s >= 0)), "starter abilities selected by existing spell system");
         var settings = Path.Combine(lab.Dir, "absent-settings.json");
-        var defaults = ServerConfig.Load(settings, []);
-        Check(!defaults.TutorialOpening && ServerConfig.Load(settings, ["--Tutorial:Opening=true"]).TutorialOpening, "opening is explicit opt-in");
+        var defaults = LoadTestConfig(settings, []);
+        Check(defaults.TutorialOpening && LoadTestConfig(settings, ["--Preset=pve"]).TutorialOpening && !LoadTestConfig(settings, ["--Tutorial:Opening=false"]).TutorialOpening
+              && !new ServerConfig().TutorialOpening, "opening: on without the key in both presets (as officially), off by key; a config built in code has none");
         var loginPeer = new FakePeer();
         var login = new LoginSession(loginPeer, lab.World.Config, lab.Repository, StarterKit.Default) { World = lab.World };
         login.OnRequest(Request(TestLogin(), 1), false);
@@ -643,13 +644,19 @@ public static class OpeningTutorialTest
         {
             using var host = new ServerHost(new ServerConfig
             {
-                TutorialOpening = true, ClientGameDataPath = ClientGameDataDir(), SavesPath = dir,
+                TutorialOpening = true, AutoRegister = true, ClientGameDataPath = ClientGameDataDir(), SavesPath = dir,
                 LoginEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
                 GameEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
                 ChatEndPoint = new IPEndPoint(IPAddress.Loopback, 0),
             }, Client);
             Check(host.Characters.List().Count == 0, "empty tutorial host stays empty rather than creating LocalHero");
             Check(host.Characters.Accounts().All(a => string.IsNullOrEmpty(a.Name)), "no registered user accounts on a fresh host");
+            var refusedPeer = new FakePeer();
+            new LoginSession(refusedPeer, host.Config with { AutoRegister = false }, host.Characters, host.Starter)
+                .OnRequest(Request(TestLogin(), 1), false);
+            Check(refusedPeer.Responses.Last().ReturnCode == LoginCodes.InvalidAccountNameOrPassword
+                && host.Characters.FindAccount("user") is null,
+                "fresh tutorial host refuses unknown login with auto-registration disabled");
             var peer = new FakePeer();
             var login = new LoginSession(peer, host.Config, host.Characters, host.Starter) { World = host.World };
             login.OnRequest(Request(TestLogin(), 1), false);

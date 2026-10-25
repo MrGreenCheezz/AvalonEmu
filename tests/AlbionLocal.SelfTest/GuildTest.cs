@@ -306,14 +306,14 @@ public static class GuildTest
     private static void Perks()
     {
         // The presets: the pve one turns the PvE guild on, the official one keeps it off; Guilds:Levels is checked.
-        var pve = ServerConfig.Load("no-such-config.json", []);
-        var official = ServerConfig.Load("no-such-config.json", ["--Preset=official"]);
+        var pve = LoadTestConfig("no-such-config.json", ["--Preset=pve"]);
+        var official = LoadTestConfig("no-such-config.json", ["--Preset=official"]);
         Check(pve is { GuildNoFriendlyFire: true, GuildXpShare: 0.1, GuildShareWithoutParty: true, GuildSilverTax: 0.05, GuildContracts: true, GuildClearXp: 2000 }
               && official is { GuildNoFriendlyFire: false, GuildXpShare: 0, GuildShareWithoutParty: false, GuildSilverTax: 0, GuildContracts: false, GuildClearXp: 0 }
-              && ServerConfig.Load("no-such-config.json", ["--Guilds:Levels=0,5,9"]).GuildLevels.SequenceEqual([0L, 5, 9]),
+              && LoadTestConfig("no-such-config.json", ["--Guilds:Levels=0,5,9"]).GuildLevels.SequenceEqual([0L, 5, 9]),
               "pve preset: the PvE guild on; official: off; Guilds:Levels as a comma list");
         var refused = false;
-        try { ServerConfig.Load("no-such-config.json", ["--Guilds:Levels=5,1"]); }
+        try { LoadTestConfig("no-such-config.json", ["--Guilds:Levels=5,1"]); }
         catch (InvalidDataException) { refused = true; }
         Check(refused, "Guilds:Levels 5,1 refused");
 

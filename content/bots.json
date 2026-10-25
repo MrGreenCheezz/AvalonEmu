@@ -1,5 +1,5 @@
-// Player bots (stage I, analysis/work/stageI/bots/SPEC.md §3.2): the tables. The switches and timings are config/albionlocal.json "Bots"
-// (on under Preset pve, off under official). Every key is optional; a key left out keeps the built-in value shown here.
+// Player bots (stage I, analysis/work/stageI/bots/SPEC.md §3.2): the tables. The switches and timings are config/world.jsonc "Bots"
+// (on under Preset pve, off under official; Bots:World:Enabled, the per-role Bots:<Role>:Enabled and Bots:Zones there narrow these counts). Every key is optional; a key left out keeps the built-in value shown here.
 {
   // Bots per role on a map with one human, by zone class: City = royal cities (PLAYERCITY_*), Start = start towns (STARTINGCITY), Roads =
   // the Roads of Avalon (TUNNEL_*), then the open world by its warning type. Roles: City (stand and walk in towns), Gatherer (gather the
@@ -28,7 +28,8 @@
   "Avatars": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
   // Emotes of a dwelling city bot with weights (emotes index: 12 sit, 6 dance, 14 wave, 4 cheer, 11 salute, 8 laugh; 6, 12 and 13 loop).
   "Emotes": { "12": 4, "6": 2, "14": 3, "4": 2, "11": 1, "8": 1 },
-  // Names: prefix + middle + suffix, letters only, 5-12 letters ("Aldric"); never a character's, a live one's or a reserved one.
+  // Names: prefix + middle + suffix, letters only, 5-12 letters ("Aldric"); never a character's, a live one's or a reserved one. The roster
+  // (config/world.jsonc Bots:Roster) draws its fixed names from these syllables too: changing them changes the roster's names.
   "Names": {
     "Prefixes": ["Al", "Bran", "Cael", "Dor", "El", "Fen", "Gar", "Hal", "Is", "Jor", "Kel", "Lor", "Mar", "Nor", "Os", "Per", "Quin", "Ros",
                  "Sel", "Tor", "Ul", "Val", "Wen", "Yor", "Zar", "Ar", "Ber", "Cor", "Dra", "Eld", "Gwen", "Mor", "Thal", "Vin", "Ash", "Bel"],
@@ -53,9 +54,29 @@
     "GathererBag": "T{t}_BAG",
     "GathererMounts": ["T{t}_MOUNT_OX", "T{t}_MOUNT_HORSE"],
     "GathererWeaponShare": 0.6,                          // gatherers with a weapon of Weapons in the bag: drawn when attacked (a tool has no spells)
-    "GathererStartCarry": "5-20"                         // raw resources of its kind a gatherer carries from its spawn (its bag's share at its defeat)
+    "GathererStartCarry": "5-20",                        // raw resources of its kind a gatherer carries from its spawn (its bag's share at its defeat)
+    // Artifacts of a population bot (config/world.jsonc Bots:Gear:ArtifactChance by zone, T4+): an armour piece T{t}_<slot>_<material>_<set>
+    // (a combination items.xml lacks stays the plain piece), a weapon one of its artifact versions (as many hands as the weapon).
+    "ArtifactSets": ["UNDEAD", "HELL", "KEEPER", "MORGANA", "AVALON", "FEY"],
+    "ArtifactWeapons": {
+      "MAIN_SWORD": ["MAIN_SCIMITAR_MORGANA"], "2H_BOW": ["2H_BOW_HELL", "2H_BOW_KEEPER", "2H_LONGBOW_UNDEAD"], "MAIN_FIRESTAFF": ["MAIN_FIRESTAFF_KEEPER"],
+      "MAIN_SPEAR": ["MAIN_SPEAR_KEEPER"], "2H_AXE": ["2H_AXE_AVALON"], "MAIN_CURSEDSTAFF": ["MAIN_CURSEDSTAFF_UNDEAD", "MAIN_CURSEDSTAFF_AVALON"],
+      "2H_QUARTERSTAFF": ["2H_QUARTERSTAFF_AVALON"], "MAIN_DAGGER": ["MAIN_DAGGER_HELL"]
+    }
   },
-  // What a defeated bot leaves (with its fame and a share of its gear, config/albionlocal.json Bots:Rewards): silver by its tier (× Rates:Silver),
+  // Lines of the bots' chat (config/world.jsonc Bots:Social and Bots:Chat; an empty list = never that kind of line; at most 200 characters):
+  // Whisper = the answer to a whisper, Say = a city bot's local chatter, Greet = with its emote back, Win / Loss = after a fight. EmoteReplies:
+  // a player's emote (emotes index: 0 applaud, 2 bow, 4 cheer, 6 dance, 8 laugh, 11 salute, 14 wave) → the emote a city bot answers with.
+  "Chat": {
+    "Whisper": ["busy farming, sorry", "afk", "brb", "not now, mid dungeon", "sry, solo today", "can't talk, gathering", "занят, фармлю", "афк"],
+    "Say": ["wts T5 bags, cheap", "lfg anything", "anyone for a T6 dungeon?", "selling hide, pm me", "bank is laggy today", "wtb T4 planks",
+            "lf healer for statics", "where is the mage tower again?", "gl everyone", "кто в данж?", "продам руду"],
+    "Greet": ["o/", "hi", "hey", "hello there", "привет"],
+    "Win": ["gg", "ez", "gg wp", "better luck next time", "should've run", "gg"],
+    "Loss": ["gg", "gg wp", "lag...", "ugh", "nice one", "gg"],
+    "EmoteReplies": { "14": 14, "2": 2, "11": 11, "4": 4, "0": 4, "6": 0, "8": 8 }
+  },
+  // What a defeated bot leaves (with its fame and a share of its gear, config/world.jsonc Bots:Rewards): silver by its tier (× Rates:Silver),
   // and items a patrol may add to its bag with their chance ({t} its tier, else the next lower tier that exists: potions are T2/T4/T6 only).
   "Rewards": {
     "Silver": { "1": 25, "2": 50, "3": 100, "4": 250, "5": 500, "6": 900, "7": 1500, "8": 2500 },

@@ -160,7 +160,7 @@ public sealed partial class CorruptedDungeons
         if (run.Shrine is { } shrine) SetShrine(run, shrine, CorruptedShrine.Inactive);
         var interval = TimeSpan.FromSeconds(Data?.Global("rollinterval", 30) ?? 30);
         if (run.NextRoll < world.Now + interval) run.NextRoll = world.Now + interval;
-        if (Options.BotInvaders && world.Bots.Enabled && Settings.Rolls == CorruptedRolls.Fixed)
+        if (Options.BotInvaders && world.Bots.InvaderBots && Settings.Rolls == CorruptedRolls.Fixed)
         {
             var (min, max) = Options.BotInvaderDelaySeconds;
             run.BotDue = world.Now + TimeSpan.FromSeconds(min + Rng.NextDouble() * (max - min));
@@ -210,9 +210,9 @@ public sealed partial class CorruptedDungeons
             if (!run.Consented) return;
             if (Options.BotInvaders && run.BotDue is { } due && now >= due)
             {
-                // Bots off since (Bots:Enabled): no bot any more; one that cannot be made now (the walk grid) is tried again. Either way
+                // Bots off since (Bots:Enabled, Bots:Invader:Enabled): no bot any more; one that cannot be made now (the walk grid) is tried again. Either way
                 // the player matching below goes on.
-                if (!world.Bots.Enabled) run.BotDue = null;
+                if (!world.Bots.InvaderBots) run.BotDue = null;
                 else if (StartBot(run) is not null) return;
             }
         }
@@ -245,11 +245,11 @@ public sealed partial class CorruptedDungeons
     /// <summary>
     /// A bot invader for <paramref name="run"/> (SPEC §4.4, §4.5): at the InvaderSpawnpoint farthest from the owner (at least
     /// minimuminvaderspawndistance when one is), gear of the rank's tier, health × Corrupted:Invader:HealthFactor and damage × the rank's
-    /// DamageFactor; nothing (a later tick) while the map's walk grid is being built, nothing at all without bots (Bots:Enabled off).
+    /// DamageFactor; nothing (a later tick) while the map's walk grid is being built, nothing at all without bots (Bots:Enabled or Bots:Invader:Enabled off).
     /// </summary>
     public CorruptedInvasion? StartBot(CorruptedRun run)
     {
-        if (!world.Bots.Enabled || world.Maps.Find(run.Id) is not { Template: { } template } map || OwnerIn(run) is not { } owner) return null;
+        if (!world.Bots.InvaderBots || world.Maps.Find(run.Id) is not { Template: { } template } map || OwnerIn(run) is not { } owner) return null;
         if (world.Bots.NavOf(map) is not { Usable: true } nav) return null; // the walk grid is being built: the next tick
         var d = run.Difficulty;
         var at = InvaderSpawn(template, owner.PositionAt(DateTime.UtcNow));
@@ -725,7 +725,7 @@ public sealed partial class CorruptedDungeons
         if (OwnerIn(run) is null) return "the owner is not inside";
         if (bot)
         {
-            if (!world.Bots.Enabled) return "bots are off (Bots:Enabled)";
+            if (!world.Bots.InvaderBots) return "bot invaders are off (Bots:Enabled, Bots:Invader:Enabled)";
             return StartBot(run) is null ? "no bot invader could be made now (the walk grid may still be built: try again)" : null;
         }
         if (Waiting(run) is not { } from) return "no consenting player of this rank is waiting";

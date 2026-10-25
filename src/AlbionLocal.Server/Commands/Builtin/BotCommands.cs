@@ -25,6 +25,7 @@ public static class BotCommands
         var lines = new List<string>
         {
             $"bots {(bots.Enabled ? "on" : "off")}: {bots.Count} in the world (cap {bots.Options.MaxTotal}), {bots.Nav.Count} walk grid(s) kept, {bots.Nav.Building} being built",
+            Switches(bots.Options),
         };
         foreach (var map in ctx.World.Maps.Maps.Where(m => m.HumanCount > 0 || m.Bots.Count > 0))
         {
@@ -114,21 +115,33 @@ public static class BotCommands
         ctx.Reply($"{n} bot(s) despawned");
     }
 
-    /// <summary>Bots on (Bots:Enabled for this run, not saved).</summary>
-    [Command("bot on", Level = AccountLevel.GameMaster, Help = "switches the bots on for this run (Bots:Enabled)")]
+    /// <summary>The switch matrix of world.jsonc (bot-switches): the kinds and behaviours on or off under the master.</summary>
+    private static string Switches(BotOptions o)
+    {
+        static string On(bool on) => on ? "on" : "off";
+        return $"switches: world {On(o.WorldEnabled)} (city {On(o.CityEnabled)}, gatherer {On(o.GathererEnabled)}, patrol {On(o.PatrolEnabled)}, drifter {On(o.DrifterEnabled)}; "
+            + $"zones {(o.Zones.Count == 0 ? "all" : string.Join("/", o.Zones))}), arena {On(o.ArenaEnabled)}, hellgate {On(o.HellgateEnabled)}, invader {On(o.InvaderEnabled)}, "
+            + $"pvp {On(o.PvpEnabled)}, rewards {On(o.RewardsEnabled)}";
+    }
+
+    /// <summary>
+    /// Bots on for this run only (the master, Bots:Enabled): not saved, the next start reads world.jsonc again. The other switches
+    /// (Bots:World:Enabled, the roles, Bots:Zones, ...) are not changed at run time: there is no .bot reload, edit world.jsonc and restart.
+    /// </summary>
+    [Command("bot on", Level = AccountLevel.GameMaster, Help = "switches the bots on for this run only (Bots:Enabled; not saved, world.jsonc decides at the next start)")]
     public static void On(CommandContext ctx)
     {
         ctx.World.Bots.Enabled = true;
-        ctx.Reply("bots on");
+        ctx.Reply("bots on for this run (not saved)");
     }
 
-    /// <summary>Bots off for this run: every bot goes, no population pass spawns, .bot spawn is refused.</summary>
-    [Command("bot off", Level = AccountLevel.GameMaster, Help = "switches the bots off for this run: every bot goes")]
+    /// <summary>Bots off for this run only (not saved): every bot goes, no population pass spawns, .bot spawn is refused.</summary>
+    [Command("bot off", Level = AccountLevel.GameMaster, Help = "switches the bots off for this run only: every bot goes (not saved, world.jsonc decides at the next start)")]
     public static void Off(CommandContext ctx)
     {
         var n = ctx.World.Bots.Count;
         ctx.World.Bots.Enabled = false;
-        ctx.Reply($"bots off ({n} despawned)");
+        ctx.Reply($"bots off for this run, not saved ({n} despawned)");
     }
 
     /// <summary>The bot nearest to the player on its map: role, tier, persona, flag, health, what it does, its path and stay; a patrol's group and route.</summary>

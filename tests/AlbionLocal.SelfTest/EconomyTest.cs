@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
+using AlbionLocal.Photon;
 using AlbionLocal.Photon.Serialization;
 using AlbionLocal.Server;
 using AlbionLocal.Server.Commands;
@@ -42,6 +43,7 @@ public static class EconomyTest
         ("economy: market: DTO fields, empty market, fees and tax, filters and pages, offer bought and collected, buy order sold into (quick-sell query first) and aborted, overbuy refused, an offline seller's silver at its next Join", Market),
         ("economy: market price history (op 95/96, econ SPEC §1): two buys of ore summed in the current hour, average 100; another city's and another quality's sales left out", PriceHistory),
         ("economy: gathering extras (econ SPEC §2): T4 wood's bonus loot rolls its gathering tome; T1 fishing bait used from the bag: fishingspeed 0.5, 10 charges, the bite 1.5x faster, the 10th strike takes the buff", GatheringExtras),
+        ("economy: market bulk collection returns client success 4, delivers once, preserves failed claims and persists across relog", MarketBulkCollection),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -1008,7 +1010,7 @@ public static class EconomyTest
         Check(again.Character.Silver == S(1157.5m + 27.6m) && world.Market!.TakeCredits(sellerId) == 0,
               "A's next Join brings the 30 less 2.4 tax (+27.6), taken from the database once");
         var mine = (string[])Call(againSession, againPeer, new AuctionGetFinishedAuctionsRequest { bqs = market.Id }).Parameters[0]!;
-        Check(Call(againSession, againPeer, new AuctionFetchFinishedAuctionsRequest { bqs = market.Id }) is { ReturnCode: 0 } && mine.Length == 1
+        Check(Call(againSession, againPeer, new AuctionFetchFinishedAuctionsRequest { bqs = market.Id }) is { ReturnCode: 0 } collected && collected.Parameters[0] is byte and 4 && mine.Length == 1
               && again.Inventory.Bag.Items.Single(i => i.Template == oreType).Count == 2 && world.Market!.FinishedOf(sellerId).Count == 0,
               "A collects all its finished entries: the 2 ore of its buy order");
     }
@@ -1078,5 +1080,69 @@ public static class EconomyTest
             Check(charges == 1 && speed == 0.5 && me.Effects.Sum("fishingspeed", world.GameNow) == 0 && me.Effects.Spells.All(a => !a.Spell.Category.StartsWith("fishingbait")),
                   "9 strikes leave 1 charge and the buff; the 10th takes both");
         }
+    }
+
+    private static void MarketBulkCollection()
+    {
+        using var town = new Town();
+        var world = town.World;
+        var (session, peer, player) = town.Join("Collector", 100);
+        var market = town.Station("MARKETPLACE");
+
+        // Finished entries are the durable output of purchases/expired orders; exercise collection through the handler.
+        void Pending(Player owner, params (string Item, int Amount)[] items)
+        {
+            lock (world.Sync) world.Market!.Batch(batch =>
+            {
+                foreach (var (item, amount) in items)
+                    batch.AddFinished(new MarketFinished(0, owner.Character.Id, 0, MarketOrder.Offer, "0000", item, 1, amount,
+                        Pricing.A7m, 0, DateTime.UtcNow, DateTime.UtcNow.AddDays(1), Guid.NewGuid(), new InventoryItem(item, amount)));
+            });
+        }
+
+        OperationResponse Collect(WorldSession target, FakePeer targetPeer)
+        {
+            var mark = targetPeer.Responses.Count;
+            lock (world.Sync) target.OnRequest(Request(new AuctionFetchFinishedAuctionsRequest { bqs = market.Id }, 3), encrypted: false);
+            var response = targetPeer.Responses.Skip(mark).Single();
+            var bytes = new ByteWriter();
+            Protocol18.WriteOperationResponse(bytes, response);
+            return Protocol18.ReadOperationResponse(new ByteReader(bytes.ToArray()));
+        }
+
+        static object? Status(OperationResponse response) => response.Parameters.GetValueOrDefault((byte)0);
+        static int Count(Player owner, string item) => owner.Inventory.Bag.Items.Where(i => i.Template.Name == item).Sum(i => i.Count);
+        Pending(player, ("T4_ORE", 2), ("T4_WOOD", 3), ("T4_ROCK", 4), ("T4_HIDE", 5));
+        var result = Collect(session, peer);
+        Check(result.ReturnCode == 0 && Status(result) is byte and 4,
+              $"bulk collection success is parameter 0 byte 4 after wire serialization, not transport ReturnCode alone (got {result.Parameters.GetValueOrDefault((byte)0)})");
+        Check(Count(player, "T4_ORE") == 2 && Count(player, "T4_WOOD") == 3 && Count(player, "T4_ROCK") == 4 && Count(player, "T4_HIDE") == 5
+              && world.Market!.FinishedOf(player.Character.Id).Count == 0, "all four pending item types delivered once and claims consumed");
+        Check(Status(Collect(session, peer)) is byte and 4 && player.Inventory.Bag.Count == 4 && Count(player, "T4_ORE") == 2,
+              "repeated/empty collection succeeds without duplicating inventory");
+        lock (world.Sync) peer.Disconnect();
+        world.Saves.Flush();
+        var (againSession, againPeer, again) = town.Rejoin(player.Character.Id);
+        Check(Count(again, "T4_ORE") == 2 && Count(again, "T4_WOOD") == 3 && Count(again, "T4_ROCK") == 4 && Count(again, "T4_HIDE") == 5
+              && Status(Collect(againSession, againPeer)) is byte and 4, "collected inventory and empty finished list survive relog without duplicates");
+
+        // One free slot: ore fits, wood cannot. Successful claims remain collected and failed ones remain retryable.
+        var (tightSession, tightPeer, tight) = town.Join("TightBag", 0,
+            Enumerable.Range(0, Inventory.BagSlots - 1).Select(_ => new InventoryItem("T4_MAIN_SWORD")).ToArray());
+        Pending(tight, ("T4_ORE", 2), ("T4_WOOD", 3), ("T4_ORE", 1));
+        Check(Status(Collect(tightSession, tightPeer)) is null or (byte and 0) && Count(tight, "T4_ORE") == 3 && Count(tight, "T4_WOOD") == 0
+              && world.Market!.FinishedOf(tight.Character.Id) is [{ ItemName: "T4_WOOD", Amount: 3 }],
+              "partial collection reports failure, still attempts the later fitting ore and retains the wood claim");
+        Check(Status(Collect(tightSession, tightPeer)) is null or (byte and 0) && Count(tight, "T4_ORE") == 3
+              && world.Market!.FinishedOf(tight.Character.Id).Count == 1, "full inventory retry reports failure without consuming or duplicating claims");
+        var sword = tight.Inventory.Bag.Items.First(i => i.Template.Name == "T4_MAIN_SWORD");
+        lock (world.Sync) tightSession.OnRequest(Request(new InventoryDestroyItemRequest { ri = sword.Id, rj = 1 }, null), encrypted: false);
+        Check(Status(Collect(tightSession, tightPeer)) is byte and 4 && Count(tight, "T4_ORE") == 3 && Count(tight, "T4_WOOD") == 3
+              && world.Market!.FinishedOf(tight.Character.Id).Count == 0, "after freeing a slot only the remaining claim is delivered");
+        lock (world.Sync) tightPeer.Disconnect();
+        world.Saves.Flush();
+        var (lastSession, lastPeer, last) = town.Rejoin(tight.Character.Id);
+        Check(Count(last, "T4_ORE") == 3 && Count(last, "T4_WOOD") == 3 && Status(Collect(lastSession, lastPeer)) is byte and 4,
+              "partial collection, successful retry and consumed claims persist over relog");
     }
 }

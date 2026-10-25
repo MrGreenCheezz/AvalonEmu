@@ -39,3 +39,8 @@ tests/AlbionLocal.SelfTest/Fixtures/fishing_zones_*.json
 # Runtime folders
 data/backups/
 logs/
+
+# Private configuration and Visual Studio launch profiles
+/config.private/
+/src/AlbionLocal.Server/Properties/launchSettings.json
+/data/lab/

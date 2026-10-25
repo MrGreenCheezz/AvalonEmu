@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using AlbionLocal.Photon.Serialization;
 using AlbionLocal.Server;
 using AlbionLocal.Server.Commands;
@@ -26,6 +27,7 @@ public static class WorldObjectTest
         ("world objects: Thetford Join at (0, 0) as SPEC §7 (phases A/B/C, window edges, NewBuilding keys on the wire), walking out and back (1-cell hysteresis)", Thetford),
         ("world objects: every captured Join gets the captured phases A/B/C (Fixtures/stage2_joins*.json, 20 Joins), only the listed exceptions differ", CapturedJoins),
         ("world objects: SelectCharacter resolves the cluster, objects before the items (UDP); World:AnnounceAll, Visibility keys; .near", Wiring),
+        ("world objects: simple behaviour state initializes on arrival, visibility reentry and reconnect", SimpleBehaviourState),
     ];
 
     private static ClusterStore Store => Client.Clusters!;
@@ -460,12 +462,12 @@ public static class WorldObjectTest
         try { Directory.Delete(dir2, true); } catch (IOException) { }
 
         var none = Path.Combine(dir2, "none.json");
-        Check(ServerConfig.Load(none, ["--World:AnnounceAll=true", "--Visibility:EnterCells=2", "--Visibility:LeaveCells=4", "--Visibility:CellSize=20"]) is
+        Check(LoadTestConfig(none, ["--World:AnnounceAll=true", "--Visibility:EnterCells=2", "--Visibility:LeaveCells=4", "--Visibility:CellSize=20"]) is
               { AnnounceAll: true, Visibility: { EnterCells: 2, LeaveCells: 4, CellSize: 20 } }
               && new ServerConfig() is { AnnounceAll: false, Visibility: { CellSize: 10, EnterCells: 4, LeaveCells: 6 } }
-              && ServerConfig.Load(none, []).Visibility == new VisibilityOptions(),
+              && LoadTestConfig(none, []).Visibility == new VisibilityOptions(),
               "World:AnnounceAll and Visibility:CellSize/EnterCells/LeaveCells; defaults off, 10, 4, 6 (Load as the record)");
-        try { ServerConfig.Load(none, ["--Visibility:EnterCells=6"]); Check(false, "LeaveCells not above EnterCells was accepted"); }
+        try { LoadTestConfig(none, ["--Visibility:EnterCells=6"]); Check(false, "LeaveCells not above EnterCells was accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("LeaveCells"), $"the error names LeaveCells (got {e.Message})"); }
 
         var (world3, characters3, dir3) = NewWorld();
@@ -479,6 +481,80 @@ public static class WorldObjectTest
         world3.Dispose();
         characters3.Dispose();
         try { Directory.Delete(dir3, true); } catch (IOException) { }
+    }
+
+    private static void SimpleBehaviourState()
+    {
+        var (world, characters, dir) = NewWorld();
+        try
+        {
+            var arrival = new Vector2(66.5f, 111.5f);
+            _ = Store.Get("0004");
+            var (session, peer) = JoinAt(world, characters, "0004", arrival);
+            var player = session.Player!;
+            var building = player.Map!.Objects.Values.OfType<AlbionLocal.Server.Entities.Building>()
+                .Single(b => b.Template.Kind == "simplebehaviourbuilding");
+            Check(building.Template.Name == "T1_TUTORIAL_CAPTAIN_TIA_JOURNAL_01"
+                && building.Template.Element.Elements("triggerablestate").Any(s =>
+                    (string?)s.Attribute("name") == "HIDDEN" && (bool?)s.Attribute("default") == true),
+                "the arrival journal NPC declares HIDDEN as its default state");
+
+            void CheckAnnouncement(IEnumerable<EventData> events)
+            {
+                var sequence = events.ToList();
+                var created = sequence.FindIndex(e => Code(e) == (int)EventCodes.NewBuilding
+                    && Convert.ToInt64(e.Parameters[0]) == building.Id);
+                Check(created >= 0 && created + 1 < sequence.Count, "journal NPC is announced");
+                var state = sequence[created + 1];
+                Check(Code(state) == (int)EventCodes.SimpleBehaviourBuildingStateUpdate,
+                    "state update immediately follows the journal NPC's NewBuilding");
+                var writer = new ByteWriter();
+                Protocol18.WriteEventData(writer, state);
+                var wire = Protocol18.ReadEventData(new ByteReader(writer.ToArray())).Parameters;
+                Check(Convert.ToInt64(wire[0]) == building.Id && wire[1] is "HIDDEN",
+                    "event 645 carries the object ID and authored nonempty state on the wire");
+                Check(sequence.Count(e => Code(e) == (int)EventCodes.SimpleBehaviourBuildingStateUpdate) == 1,
+                    "ordinary buildings do not receive simple behaviour state updates");
+            }
+
+            CheckAnnouncement(peer.Events);
+            var (other, otherPeer) = JoinAt(world, characters, "0004", arrival);
+            Check(ReferenceEquals(other.Player!.Map, player.Map), "both viewers share the public map");
+            CheckAnnouncement(otherPeer.Events);
+            var otherCount = otherPeer.Events.Count(e => Code(e) == (int)EventCodes.SimpleBehaviourBuildingStateUpdate);
+
+            var before = peer.Events.Count;
+            player.Visibility.Refresh(new Vector2(220, 220));
+            Check(peer.Events.Skip(before).Any(e => Code(e) == (int)EventCodes.Leave
+                && Convert.ToInt64(e.Parameters[0]) == building.Id), "journal NPC leaves the visibility window");
+            before = peer.Events.Count;
+            player.Visibility.Refresh(arrival);
+            CheckAnnouncement(peer.Events.Skip(before));
+            Check(otherPeer.Events.Count(e => Code(e) == (int)EventCodes.SimpleBehaviourBuildingStateUpdate) == otherCount,
+                "one viewer's reentry does not update the other viewer's building state");
+
+            var characterId = player.Character.Id;
+            session.OnDisconnected("simple behaviour reconnect");
+            world.Saves.Flush();
+            var reconnectPeer = new FakePeer();
+            var reconnect = new WorldSession(reconnectPeer, world);
+            reconnect.OnRequest(Request(new JoinRequest { ss = characterId }, 1), false);
+            Check(reconnect.Player?.Map == other.Player.Map, "reconnect returns to the same public map");
+            CheckAnnouncement(reconnectPeer.Events);
+
+            // Read the authored default rather than hardcoding this NPC's HIDDEN state.
+            var alternate = building.Spawn with { Template = building.Template with {
+                Element = XElement.Parse("<simplebehaviourbuilding><triggerablestate name='READY' default='true'/></simplebehaviourbuilding>") } };
+            var alternateBuilding = new AlbionLocal.Server.Entities.Building(99999, alternate, 0, 0);
+            Check(alternateBuilding.BuildCreate(reconnect.Player!).OfType<SimpleBehaviourBuildingStateUpdateEvent>()
+                .Single().dyl == "READY", "another definition selects its own default state");
+        }
+        finally
+        {
+            world.Dispose();
+            characters.Dispose();
+            try { Directory.Delete(dir, true); } catch (IOException) { }
+        }
     }
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);

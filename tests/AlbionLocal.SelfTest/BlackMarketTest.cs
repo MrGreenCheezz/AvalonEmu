@@ -30,10 +30,10 @@ public static class BlackMarketTest
 
     private static void SharedBank()
     {
-        var pve = ServerConfig.Load(Path.Combine(NewDir(), "none.json"), []);
-        var official = ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Preset=official"]);
+        var pve = LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=pve"]);
+        var official = LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=official"]);
         Check(!pve.BankShared && !official.BankShared && pve is { BmBuyFactor: 5, BmDailyLimit: 1_000_000 } && official is { BmBuyFactor: 0, BmDailyLimit: 1_000_000 }
-              && ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Bank:Shared=true"]).BankShared,
+              && LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Bank:Shared=true"]).BankShared,
               "presets: Bank:Shared false in both; Bm:BuyFactor pve 5, official 0; Bm:DailyLimit 1000000; an explicit key wins");
 
         using var town = new EconomyTest.Town(config: new ServerConfig { JoinByCharacterId = true, BankShared = true });

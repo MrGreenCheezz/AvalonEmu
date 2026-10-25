@@ -28,6 +28,7 @@ public static class TutorialJourneyTest
         ("tutorial journey: travel UI cannot substitute a validated departure", Departure),
         ("tutorial journey: completed plain achievements unlock bridge and camp objectives after real fame", CompletedAchievements),
         ("tutorial journey: moving clears forest protection and permits a real basic attack on a fox", ForestProtection),
+        ("tutorial journey: marketplace registration counts at building range while riding a mule", MountedMarketplace),
         ("tutorial journey: complete island chain, camp A and bow slot", () => CompleteRoute(0)),
         ("tutorial journey: complete island chain, camp B and sword slot", () => CompleteRoute(1)),
         ("tutorial journey: complete island chain, camp C and firestaff slot", () => CompleteRoute(2)),
@@ -115,6 +116,76 @@ public static class TutorialJourneyTest
         }
         public void Dispose() { World.Dispose(); Repository.Dispose(); Directory.Delete(Dir, true); }
     }
+    private static void MountedMarketplace()
+    {
+        var journey = OpeningTutorialData.Load(ClientGameDataDir(), Client.Clusters!).Journey!;
+        foreach (var suffix in new[] { "H", "OA", "OB" })
+        foreach (var mounted in new[] { true, false })
+        {
+            var quest = journey.Find(TutorialJourneyData.Prefix + suffix)!;
+            var task = quest.Tasks.First(t => t.Definition.Descendants().Any(m =>
+                m.Name == "interactwithbuilding" && ((string?)m.Attribute("buildingid"))?.Contains("MARKETPLACE", StringComparison.Ordinal) == true
+                || m.Name == "usefunction" && (string?)m.Attribute("function") == "InteractWithMarketplace"));
+            using var lab = new Lab("1011", suffix, task.Index);
+            var market = lab.Player.Map!.Objects.Values.OfType<Building>().Single(b => b.Template.Kind == "marketplacebuilding");
+            var position = market.Position + new Vector2(10, 0);
+            lab.Player.Teleport(position, 0, DateTime.UtcNow);
+            Check(lab.Player.Visibility.Knows(market) && Vector2.Distance(position, market.Position) > OpeningTutorial.TalkRange
+                && Vector2.Distance(position, market.Position) <= WorldSession.StationRange, "market test uses a visible building beyond NPC talk range");
+            if (mounted)
+            {
+                var mule = lab.Give("T2_MOUNT_MULE");
+                lab.Player.Inventory.Bag.Put(lab.Player.Inventory.Bag.IndexOf(mule), null);
+                lab.Player.Inventory.Equipment.Put(Mounts.MountSlot, mule); lab.Player.SaveItems();
+                lab.Session.OnRequest(Request(new MountRequest { wf = lab.World.GameNow, v3 = mule.Id, v4 = true }, 80), false);
+                lab.Clock.Advance(TimeSpan.FromSeconds(4)); lab.World.Update();
+                Check(lab.Player.IsMounted, "real mount request completes with the tutorial mule");
+            }
+            void Open(long id)
+            {
+                lab.Session.OnRequest(Request(new RegisterToObjectRequest { zg = id }, 81), false);
+                lab.Session.OnRequest(Request(new AuctionGetOffersRequest { bqs = id }, 82), false);
+            }
+            TutorialJourney.Update(lab.Player); // Initialize the current task's zero counters before comparing snapshots.
+            var before = lab.State;
+            Check(before.JourneyTask == task.Index, "market task remains pending before opening any building");
+            Open(long.MaxValue);
+            Check(lab.State == before, "unknown object cannot count as visiting the market");
+            var otherBuilding = lab.Player.Map.Objects.Values.OfType<Building>().First(b => b.Template.Kind != "marketplacebuilding");
+            lab.Player.Teleport(otherBuilding.Position, 0, DateTime.UtcNow); Open(otherBuilding.Id);
+            Check(lab.State == before, "another building cannot count as visiting the market");
+            lab.Player.Teleport(market.Position + new Vector2(WorldSession.StationRange + 1, 0), 0, DateTime.UtcNow);
+            Open(market.Id);
+            Check(lab.State == before, "market registration outside building range does not advance the mission");
+            lab.Player.Teleport(position, 0, DateTime.UtcNow);
+            lab.Player.Visibility.Join(lab.Player.Map!, market.Position + new Vector2(1000, 1000));
+            Check(!lab.Player.Visibility.Knows(market), "market is deliberately absent from the client's known objects");
+            Open(market.Id);
+            Check(lab.State == before, "unannounced market does not advance the mission");
+            lab.Player.Visibility.Refresh(position);
+            using (var foreign = new Lab("1011", suffix, task.Index))
+            {
+                var foreignMarket = foreign.Player.Map!.Objects.Values.OfType<Building>().Single(b => b.Template.Kind == "marketplacebuilding");
+                TutorialJourney.BuildingInteracted(lab.Player, foreignMarket);
+                Check(lab.State == before, "market in another tutorial instance does not advance the mission");
+            }
+            Open(market.Id);
+            Check(lab.State.JourneyQuest == before.JourneyQuest && lab.State.JourneyTask == before.JourneyTask + 1,
+                $"{suffix}: native marketplace opening advances the task at 10 m (mounted={mounted})");
+            Check(lab.Player.IsMounted == mounted, "opening the market preserves the player's mount state");
+            var after = lab.State; Open(market.Id);
+            Check(lab.State.JourneyQuest == after.JourneyQuest && lab.State.JourneyTask == after.JourneyTask
+                && lab.State.JourneyPhase == after.JourneyPhase, "repeated market opening does not advance the following task");
+            after = lab.State; // The normal update initializes zero counters for the following task.
+            lab.Rejoin();
+            market = lab.Player.Map!.Objects.Values.OfType<Building>().Single(b => b.Template.Kind == "marketplacebuilding");
+            lab.Player.Teleport(position, 0, DateTime.UtcNow); Open(market.Id);
+            Check(lab.State.JourneyQuest == after.JourneyQuest && lab.State.JourneyTask == after.JourneyTask
+                && lab.State.JourneyCounters == after.JourneyCounters, "market checkpoint persists without counting again after reconnect");
+            Check(lab.Player.IsMounted == mounted, "reconnect preserves mount state after market interaction");
+        }
+    }
+
     private static void ForestProtection()
     {
         using var lab = new Lab("1009", "K", 2);

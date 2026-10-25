@@ -1,5 +1,5 @@
 // Corrupted dungeons (analysis/work/stageL/corrupted/SPEC.md; README "Corrupted dungeons"). The switches and the factors that differ
-// between the presets are config keys (config/albionlocal.json "Corrupted"); here the tables. Every key is optional; a missing key keeps
+// between the presets are config keys (config/world.jsonc "Corrupted"); here the tables. Every key is optional; a missing key keeps
 // the value shown here. Read at the start.
 {
   // The completion reward per difficulty (beginner = Hunter T5, intermediate = Stalker T6, pro = Slayer T8): whole silver and fame,

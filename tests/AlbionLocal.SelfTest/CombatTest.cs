@@ -264,12 +264,12 @@ public static class CombatTest
               $"every useblackmarket item dropping (the old roll): {before.Bags:0.#} bags per 18 kills, ghoul {before.Ghoul:P0}, miniboss {before.BossItems:0.#} items");
 
         var path = Path.Combine(NewDir(), "none.json");
-        var defaults = ServerConfig.Load(path, ["--Preset=official"]); // the pve preset's 0.35: PveTest
-        var official = ServerConfig.Load(path, ["--Preset=official", "--Economy:SilverPickupFactor=1.5", "--Economy:SilverPickupTax=0.15", "--Loot:BlackMarketChance=1"]);
+        var defaults = LoadTestConfig(path, ["--Preset=official"]); // the pve preset's 0.35: PveTest
+        var official = LoadTestConfig(path, ["--Preset=official", "--Economy:SilverPickupFactor=1.5", "--Economy:SilverPickupTax=0.15", "--Loot:BlackMarketChance=1"]);
         Check(defaults is { SilverPickupFactor: 1, SilverPickupTax: 0, LootBlackMarketChance: 0.1 }
               && official is { SilverPickupFactor: 1.5, SilverPickupTax: 0.15, LootBlackMarketChance: 1 },
               "Economy:SilverPickupFactor 1 and SilverPickupTax 0 by default (no premium, no guild), Loot:BlackMarketChance 0.1; the captured 1.5 / 0.15 can be set");
-        try { ServerConfig.Load(path, ["--Economy:SilverPickupTax=2"]); Check(false, "a tax of 200 % accepted"); }
+        try { LoadTestConfig(path, ["--Economy:SilverPickupTax=2"]); Check(false, "a tax of 200 % accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("SilverPickupTax"), "Economy:SilverPickupTax is 0..1"); }
     }
 
@@ -281,7 +281,7 @@ public static class CombatTest
     /// </summary>
     private static void LootBalance()
     {
-        var pve = ServerConfig.Load(Path.Combine(NewDir(), "none.json"), []);
+        var pve = LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=pve"]);
         Check(pve is { LootBlackMarketChance: 0.15, LootBlackMarketSoftCap: 4 } && pve.Rates.Loot == 1, "pve preset: Loot:BlackMarketChance 0.15, soft cap 4, Rates:Loot 1");
         var chest = Store.LootChests!.Chests["CORRUPTED_HERETIC_CHEST_RARE"].States[0].LootFor(5)!;
         (double Items, double Gear, double High, int Max) Roll(int rounds, double factor, double bm, int tier, int cap)

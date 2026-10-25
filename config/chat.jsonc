@@ -1,0 +1,18 @@
+// JSONC (JSON with comments), including trailing commas; not standard JSON.
+// Optional keys use preset defaults.
+// Relative paths use the parent of this configuration directory.
+// Command-line overrides: --Section:Key=value. Restart applies file edits.
+{
+  "Network": { "ChatPort": 5057 },
+  // The chat server (README Chat). Enabled false = no chat server (Say, party lines and .g only).
+  "Chat": {
+    "Enabled": true,
+    "WorldChannel": false,          // true = the GENERAL tab holds one world channel (Preset pve true)
+    "MergeLanguageChannels": false, // true = one channel for every client language (Preset pve true)
+    "Announcements": true,          // server-wide announcements on the Announcement channel
+    "GlobalCooldownMs": 2000,
+    "WhisperCooldownMs": 100,
+    "MaxLineLength": 1000,
+    "StaffTags": true
+  }
+}

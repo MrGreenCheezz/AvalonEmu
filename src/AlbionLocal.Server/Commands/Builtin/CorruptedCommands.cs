@@ -30,11 +30,15 @@ public static class CorruptedCommands
             $"corrupted dungeons: infamy {current:N0} (peak {CorruptedDungeons.Peak(c):N0}), {c.Infamy?.Runs ?? 0} run(s), completed {done}; bonus {ranks}{inside}"));
     }
 
-    /// <summary>.cd leave: out of the player's corrupted dungeon to its way back (an early leave forfeits the boss chest); not knocked down or in combat.</summary>
+    /// <summary>
+    /// .cd leave: out of the player's corrupted dungeon to its way back (an early leave forfeits the boss chest); not knocked down or in combat.
+    /// Corrupted:LeaveCommand (false, official: only the exit portal and the escape spell; the pve preset true).
+    /// </summary>
     [Command("cd leave", Level = AccountLevel.Player, Help = "takes you out of your corrupted dungeon to where you came from")]
     public static void Leave(CommandContext ctx)
     {
         var player = ctx.RequirePlayer();
+        if (!ctx.World.Config.Corrupted.LeaveCommand) throw new CommandError("no .cd leave on this server (Corrupted:LeaveCommand): use the exit portal or the escape spell");
         if (ctx.World.Corrupted.Find(player.Map?.Cluster) is not { } run) throw new CommandError("you are in no corrupted dungeon");
         // As the exit portal and the escape (CorruptedChange): never past a knockdown or a death's respawn, nor an instant escape from a fight.
         if (player.Combat.Down is { } down) throw new CommandError($"not while knocked down ({down.Kind})");

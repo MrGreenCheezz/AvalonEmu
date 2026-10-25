@@ -59,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File tools\install-client-mods.ps1 -GameDir 
 **Первое лицо v2 (F8):**
 - Туман: `FirstPersonView.FirstPersonFog` = `Off` / `Reduced` (по умолчанию, дальность тумана × `FogDistanceMultiplier` = 4) /
   `Default`; `FirstPersonFarClip` (1500), `LodBias` (2, 0 = не трогать). При выходе всё возвращается. Мобы и игроки дальше
-  ~40 м не приходят с сервера — это `Visibility` в `config\albionlocal.json` (EnterCells/LeaveCells).
+  ~40 м не приходят с сервера — это `Visibility` в `config\world.jsonc` (EnterCells/LeaveCells).
 - Своё тело: `FirstPerson.ShowBody` = `None` (скрыть всё) / `BodyOnly` (скрыть только голову/волосы/шлем) / `All`;
   `HideMode` = `ShadowsOnly` (тень остаётся) / `Disable`; `DeepScan`; `HeadForwardOffset` (0.15), `HeadUpOffset` (0.25).
   Скрытие обновляется постоянно, поэтому смена экипировки подхватывается. Список мешей персонажа пишется в журнал при первом входе.
@@ -257,7 +257,7 @@ LOD, анизотропия, сглаживание, источники свет
 
 **Ограничения:** тени дальше ~150–300 м стоят кадров (4 каскада × 4096 на большом расстоянии); разрешение карты теней выше
 VeryHigh недоступно (`shadowCustomResolution` вырезан из сборки); `maximumLODLevel`, `shadowmaskMode`, `antiAliasing`
-(MSAA) в сборке вырезаны. Мобы/игроки дальше ~40 м не приходят с сервера (см. `Visibility` в `config/albionlocal.json`),
+(MSAA) в сборке вырезаны. Мобы/игроки дальше ~40 м не приходят с сервера (см. `Visibility` в `config/world.jsonc`),
 так что их тени тоже не видны. Туман на дальности — дело CameraMod (только в первом лице).
 
 ## ActionBarsMod (две дополнительные панели способностей от экипировки)

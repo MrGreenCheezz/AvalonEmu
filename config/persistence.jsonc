@@ -1,0 +1,8 @@
+// JSONC (JSON with comments), including trailing commas; not standard JSON.
+// Optional keys use preset defaults.
+// Relative paths use the parent of this configuration directory.
+// Command-line overrides: --Section:Key=value. Restart applies file edits.
+{
+  "Persistence": { "Provider": "SQLite" }, // Only SQLite is currently supported.
+  "Paths": { "Saves": "data" } // Existing albionlocal.db and legacy character imports remain here.
+}

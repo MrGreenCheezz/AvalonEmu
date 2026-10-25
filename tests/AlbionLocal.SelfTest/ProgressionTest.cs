@@ -109,9 +109,10 @@ public static class ProgressionTest
     private static void FairStart()
     {
         var board = Board;
-        Check(ServerConfig.Load(Path.Combine(NewDir(), "none.json"), []).NewCharacters == NewCharacterProgression.UnlockAll
-              && ServerConfig.Load(Path.Combine(NewDir(), "none.json"), ["--Progression:NewCharacters=fairstart"]).NewCharacters == NewCharacterProgression.FairStart,
-              "Progression:NewCharacters: UnlockAll by default, FairStart when set");
+        Check(LoadTestConfig(Path.Combine(NewDir(), "none.json"), []).NewCharacters == NewCharacterProgression.FairStart
+              && LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=pve"]).NewCharacters == NewCharacterProgression.UnlockAll
+              && LoadTestConfig(Path.Combine(NewDir(), "none.json"), ["--Preset=pve", "--Progression:NewCharacters=fairstart"]).NewCharacters == NewCharacterProgression.FairStart,
+              "Progression:NewCharacters: FairStart (official) by default, UnlockAll under pve, FairStart when set");
         var kit = StarterKit.Load(Path.Combine(DataDir(), "..", "content", "starter-fair.json"), Client.Items, StarterKit.FairDefault);
         Check(System.Text.Json.JsonSerializer.Serialize(kit) == System.Text.Json.JsonSerializer.Serialize(StarterKit.FairDefault),
               "content/starter-fair.json is the built-in fair kit");

@@ -968,7 +968,7 @@ public sealed class RandomDungeons(World world)
         IReadOnlyList<(string Item, int Amount)> drops = loot is not null && world.Clusters?.LootIfLoaded is { } tables
             ? tables.RollMob(loot, map.Random, factor * world.Rates.Loot, world.Config.LootBlackMarketChance,
                 name => Combat.LogOnce("loot:" + name, $"loot list {name} of chest {chest.Template.Name} is not in loot.xml"),
-                tier, world.Config.LootBlackMarketSoftCap)
+                world.Config.LootTierCap ? tier : 0, world.Config.LootBlackMarketSoftCap)
             : [];
         // Stage I: a player invasion's chest moves its items to its ItemTier and adds its Enchant, and a won ticket is one item more.
         if (chest.ItemTier is not null || chest.Enchant > 0) drops = [.. drops.Select(d => (Shift(world.Items, d.Item, chest.ItemTier, chest.Enchant), d.Amount))];

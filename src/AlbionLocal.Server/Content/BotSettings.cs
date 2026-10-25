@@ -8,7 +8,7 @@ namespace AlbionLocal.Server.Content;
 /// <summary>
 /// Stage I bots, the tables (analysis/work/stageI/bots/SPEC.md §3.2): content/bots.json, as content/events.json. How many bots of each
 /// role a map gets by its zone class (<see cref="Counts"/>, scaled by the humans on it), the clusters left out or overridden, the tiers of
-/// city bots, their avatars and emotes, the name syllables, the gear patterns and a defeat's silver and extras. The switches, timings and rules are albionlocal.json's
+/// city bots, their avatars and emotes, the name syllables, the gear patterns and a defeat's silver and extras. The switches, timings and rules are world.jsonc's
 /// Bots section (<see cref="BotOptions"/>). Every key is optional: a key the file leaves out keeps the built-in value (<see cref="Default"/>),
 /// a missing file or one that does not parse gives the built-in values with a log line. Immutable.
 /// </summary>
@@ -92,6 +92,19 @@ public sealed record BotSettings
     /// <summary>The offhands of a one-handed weapon.</summary>
     public IReadOnlyList<string> Offhands { get; init; } = ["OFF_SHIELD", "OFF_BOOK", "OFF_TORCH"];
 
+    /// <summary>
+    /// Bot-roster gear realism (Bots:Gear:ArtifactChance): the artifact sets of an armour piece (T{t}_{slot}_{material}_{set}; a combination
+    /// items.xml lacks keeps the plain piece) and the artifact versions of each weapon of <see cref="Weapons"/> (one or two hands as the weapon).
+    /// </summary>
+    public IReadOnlyList<string> ArtifactSets { get; init; } = ["UNDEAD", "HELL", "KEEPER", "MORGANA", "AVALON", "FEY"];
+
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> ArtifactWeapons { get; init; } = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["MAIN_SWORD"] = ["MAIN_SCIMITAR_MORGANA"], ["2H_BOW"] = ["2H_BOW_HELL", "2H_BOW_KEEPER", "2H_LONGBOW_UNDEAD"], ["MAIN_FIRESTAFF"] = ["MAIN_FIRESTAFF_KEEPER"],
+        ["MAIN_SPEAR"] = ["MAIN_SPEAR_KEEPER"], ["2H_AXE"] = ["2H_AXE_AVALON"], ["MAIN_CURSEDSTAFF"] = ["MAIN_CURSEDSTAFF_UNDEAD", "MAIN_CURSEDSTAFF_AVALON"],
+        ["2H_QUARTERSTAFF"] = ["2H_QUARTERSTAFF_AVALON"], ["MAIN_DAGGER"] = ["MAIN_DAGGER_HELL"],
+    };
+
     /// <summary>The cape pattern ({t} the tier).</summary>
     public string Cape { get; init; } = "T{t}_CAPE";
 
@@ -143,6 +156,37 @@ public sealed record BotSettings
     /// </summary>
     public IReadOnlyList<(string Item, double Chance)> PatrolExtra { get; init; } = [("T{t}_POTION_HEAL", 0.25), ("T{t}_MEAL_STEW", 0.15)];
 
+    // ---- bot-social: the lines of a bot's whispers and local chat (Bots:Social:*, Bots:Chat:*) ----
+
+    /// <summary>Chat.Whisper: a bot's answer to a whisper (one at random).</summary>
+    public IReadOnlyList<string> WhisperLines { get; init; } =
+        ["busy farming, sorry", "afk", "brb", "not now, mid dungeon", "sry, solo today", "can't talk, gathering", "занят, фармлю", "афк"];
+
+    /// <summary>Chat.Say: a city bot's chatter on the local channel.</summary>
+    public IReadOnlyList<string> SayLines { get; init; } =
+    [
+        "wts T5 bags, cheap", "lfg anything", "anyone for a T6 dungeon?", "selling hide, pm me", "bank is laggy today", "wtb T4 planks",
+        "lf healer for statics", "where is the mage tower again?", "gl everyone", "кто в данж?", "продам руду",
+    ];
+
+    /// <summary>Chat.Greet: a line a city bot may add to its emote back (a third of the time).</summary>
+    public IReadOnlyList<string> GreetLines { get; init; } = ["o/", "hi", "hey", "hello there", "привет"];
+
+    /// <summary>Chat.Win: a bot's line after it knocked a player down.</summary>
+    public IReadOnlyList<string> WinLines { get; init; } = ["gg", "ez", "gg wp", "better luck next time", "should've run", "gg"];
+
+    /// <summary>Chat.Loss: a beaten bot's line.</summary>
+    public IReadOnlyList<string> LossLines { get; init; } = ["gg", "gg wp", "lag...", "ugh", "nice one", "gg"];
+
+    /// <summary>Chat.Join: a world bot's line when it joins a party it was invited to (Bots:Party).</summary>
+    public IReadOnlyList<string> JoinLines { get; init; } = ["hi all", "o/ let's go", "sure, I'm in", "ty for the invite", "ready", "го"];
+
+    /// <summary>Chat.Leave: a party bot's line when it leaves its party.</summary>
+    public IReadOnlyList<string> LeaveLines { get; init; } = ["gotta go, ty", "cya", "thx for the group", "o/", "bb", "пока"];
+
+    /// <summary>Chat.EmoteReplies: the emote a city bot answers a player's emote with (emotes index: 14 wave, 2 bow, 11 salute, 4 cheer, 0 applaud, 8 laugh); an emote left out gets none.</summary>
+    public IReadOnlyDictionary<int, int> EmoteReplies { get; init; } = new Dictionary<int, int> { [14] = 14, [2] = 2, [11] = 11, [4] = 4, [0] = 4, [6] = 0, [8] = 8 };
+
     /// <summary>The counts of zone class <paramref name="zone"/> with the override of <paramref name="cluster"/> or <paramref name="type"/> over them.</summary>
     public IReadOnlyDictionary<BotRole, int> CountsOf(string zone, string cluster, string type)
     {
@@ -181,7 +225,8 @@ public sealed record BotSettings
     /// The file: Counts { zone: { role: n } }, Scale { humans: factor }, Clusters { Include [], Exclude [], Override { id or type: { role: n } } },
     /// CityTiers { tier: weight }, Avatars [], Emotes { index: weight }, Names { Prefixes, Middles, Suffixes, ReservedNames }, Gear { Materials,
     /// Weapons, Offhands, Cape, PatrolMount, ArmoredMount, ArmoredShare, Tools { kind: pattern }, GathererSet, GathererBag, GathererMounts,
-    /// CityWeaponShare, GathererWeaponShare, GathererStartCarry "min-max" }, Rewards { Silver { tier: silver }, PatrolExtra [{ Item, Chance }] }.
+    /// CityWeaponShare, GathererWeaponShare, GathererStartCarry "min-max", ArtifactSets [], ArtifactWeapons { weapon: [] } }, Rewards { Silver { tier: silver }, PatrolExtra [{ Item, Chance }] },
+    /// Chat { Whisper [], Say [], Greet [], Win [], Loss [], EmoteReplies { emote: emote } }.
     /// </summary>
     public static BotSettings Parse(string text, string path)
     {
@@ -281,6 +326,24 @@ public sealed record BotSettings
                             _ => Warn(s, $"Rewards.{r.Name}"),
                         };
                     break;
+                case "Chat":
+                    foreach (var c in Obj(p.Value, p.Name).EnumerateObject())
+                    {
+                        var key = $"Chat.{c.Name}";
+                        s = c.Name switch
+                        {
+                            "Whisper" => s with { WhisperLines = Lines(Strings(c.Value, key), key) },
+                            "Say" => s with { SayLines = Lines(Strings(c.Value, key), key) },
+                            "Greet" => s with { GreetLines = Lines(Strings(c.Value, key), key) },
+                            "Win" => s with { WinLines = Lines(Strings(c.Value, key), key) },
+                            "Loss" => s with { LossLines = Lines(Strings(c.Value, key), key) },
+                            "Join" => s with { JoinLines = Lines(Strings(c.Value, key), key) },
+                            "Leave" => s with { LeaveLines = Lines(Strings(c.Value, key), key) },
+                            "EmoteReplies" => s with { EmoteReplies = Obj(c.Value, key).EnumerateObject().ToDictionary(x => IntKey(x.Name, $"{key}.{x.Name}", 0, 15), x => Int(x.Value, $"{key}.{x.Name}", 0, 15)) },
+                            _ => Warn(s, key),
+                        };
+                    }
+                    break;
                 case "Gear":
                     foreach (var g in Obj(p.Value, p.Name).EnumerateObject())
                     {
@@ -301,6 +364,12 @@ public sealed record BotSettings
                             "CityWeaponShare" => s with { CityWeaponShare = Num(g.Value, key, 0, 1) },
                             "GathererWeaponShare" => s with { GathererWeaponShare = Num(g.Value, key, 0, 1) },
                             "GathererStartCarry" => s with { GathererStartCarry = IntRange(g.Value, key, 0, 999) },
+                            "ArtifactSets" => s with { ArtifactSets = Strings(g.Value, key) },
+                            "ArtifactWeapons" => s with
+                            {
+                                ArtifactWeapons = Obj(g.Value, key).EnumerateObject()
+                                    .ToDictionary(w => w.Name, w => (IReadOnlyList<string>)Strings(w.Value, $"{key}.{w.Name}"), StringComparer.OrdinalIgnoreCase),
+                            },
                             _ => Warn(s, key),
                         };
                     }
@@ -317,6 +386,14 @@ public sealed record BotSettings
             Log.Warn("content", $"{path}: unknown key {key}, skipped");
             return same;
         }
+    }
+
+    /// <summary>Chat lines: trimmed, the empty ones dropped (an empty list = the bots never say that kind), at most 200 characters each.</summary>
+    private static List<string> Lines(List<string> list, string key)
+    {
+        var lines = list.Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+        if (lines.FirstOrDefault(x => x.Length > 200) is { } longLine) throw new InvalidDataException($"{key}: '{longLine[..20]}...' is longer than 200 characters");
+        return lines;
     }
 
     private static List<string> NonEmpty(List<string> list, string key) => list.Count > 0 ? list : throw new InvalidDataException($"{key}: empty");

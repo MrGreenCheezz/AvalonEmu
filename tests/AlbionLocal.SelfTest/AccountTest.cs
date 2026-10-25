@@ -20,6 +20,7 @@ public static class AccountTest
         ("accounts: login ok, wrong password and unknown name 201, lock after 5 (210), ban 205 with key 64, second login closes the first", Logins),
         ("accounts: CreateAccount then login; name taken 161, bad password 163, bad email 167", Register),
         ("accounts: an account of before has no password: its first login sets the one typed", LegacyFirstLogin),
+        ("accounts: empty database cannot claim the legacy account or bypass disabled auto-registration", EmptyDatabaseLogin),
         ("accounts: passwords redacted in MessageDump and in logged command lines, account commands console-only", Redaction),
     ];
 
@@ -147,6 +148,47 @@ public static class AccountTest
               && LoginAs(config, repo, "old", "nope-pass").ReturnCode == LoginCodes.InvalidAccountNameOrPassword, "a name's account without a password: the first login sets it");
         Check(LoginAs(config, repo, "stranger", "x-pass").ReturnCode == LoginCodes.InvalidAccountNameOrPassword,
               "the local account is taken: an unknown name is refused (Accounts:AutoRegister off)");
+    }
+
+    private static void EmptyDatabaseLogin()
+    {
+        var dir = NewDir();
+        var path = Path.Combine(dir, "accounts.db");
+        var config = new ServerConfig { AutoRegister = false };
+        using (var repo = new SqliteCharacterRepository(path))
+        {
+            foreach (var legacyName in new[] { "", "fresh@example.com" })
+            foreach (var registration in new[] { true, false })
+            {
+                var response = LoginAs(config with { LegacyAccountName = legacyName, Registration = registration },
+                    repo, "fresh@example.com", "s3cret-pass");
+                Check(response.ReturnCode == LoginCodes.InvalidAccountNameOrPassword && !response.Parameters.ContainsKey(51),
+                    "an empty database refuses unknown logins regardless of registration or explicit legacy name");
+                Check(repo.Accounts().Count == 1 && repo.FindAccount("fresh@example.com") is null
+                    && repo.FindAccount(SqliteCharacterRepository.LocalAccountId) is { Name: null, PasswordHash: null },
+                    "refused login leaves the unnamed local account and its password untouched");
+            }
+            var peer = new FakePeer();
+            new LoginSession(peer, config, repo, StarterKit.Default).OnRequest(Request(new CreateAccountRequest
+                { aiu = 1, aiv = 32, aiw = 455, aiy = 345319, hp = "registered@example.com", hq = "s3cret-pass" }, 3), encrypted: true);
+            Check(peer.Responses[^1].ReturnCode == 0 && repo.FindAccount("registered@example.com") is { Level: AccountLevel.Player } registered
+                && registered.Id != SqliteCharacterRepository.LocalAccountId,
+                "explicit registration still creates a normal player account with auto-registration disabled");
+            Check(LoginAs(config, repo, "registered@example.com", "s3cret-pass").ReturnCode == 0,
+                "explicitly registered account can log in");
+        }
+        using (var repo = new SqliteCharacterRepository(path))
+        {
+            Check(LoginAs(config, repo, "fresh@example.com", "s3cret-pass").ReturnCode == LoginCodes.InvalidAccountNameOrPassword,
+                "reopening the database does not restore the first-login bypass");
+            Check(LoginAs(config with { AutoRegister = true }, repo, "fresh@example.com", "s3cret-pass").ReturnCode == 0
+                && repo.FindAccount("fresh@example.com") is { Level: AccountLevel.Player } made
+                && made.Id != SqliteCharacterRepository.LocalAccountId,
+                "enabled auto-registration creates an ordinary player account instead of claiming the local admin");
+            Check(repo.FindAccount(SqliteCharacterRepository.LocalAccountId) is { Name: null, PasswordHash: null },
+                "the empty legacy account remains unclaimed");
+        }
+        Directory.Delete(dir, true);
     }
 
     private static void Redaction()

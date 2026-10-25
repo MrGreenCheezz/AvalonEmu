@@ -22,7 +22,7 @@ public static class GeneralCommands
         ctx.Reply(string.Join("\n", shown));
     }
 
-    [Command("save", Level = AccountLevel.Player, Help = "saves every player in game now")]
+    [Command("save", Level = AccountLevel.GameMaster, Help = "saves every player in game now")]
     public static void Save(CommandContext ctx)
     {
         var players = CommandRegistry.Players(ctx.World);
@@ -30,8 +30,11 @@ public static class GeneralCommands
         ctx.Reply(players.Count == 0 ? "nobody in game, nothing to save" : $"saving {players.Count} character(s)");
     }
 
-    /// <summary>The players in game with object id, cluster and position (where their walks have got to), one per line after the count.</summary>
-    [Command("who", Level = AccountLevel.Player, Help = "the players in game: cluster and position")]
+    /// <summary>
+    /// The players in game with object id, cluster and position (where their walks have got to), one per line after the count. GameMaster:
+    /// every player's exact position is nothing a player may see (the official game has no such command); .save likewise.
+    /// </summary>
+    [Command("who", Level = AccountLevel.GameMaster, Help = "the players in game: cluster and position")]
     public static void Who(CommandContext ctx)
     {
         var players = CommandRegistry.Players(ctx.World);

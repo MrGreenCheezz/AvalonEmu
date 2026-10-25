@@ -26,7 +26,7 @@ Options: `--server <dir>` (the server folder, found automatically), `--game-loca
 
 Example: `dotnet run --project tools/AlbionLocal.ModKit -- build example-blade`, then start the
 server with `--Mods:Packs=example-blade` (or `"Mods": { "Packs": ["example-blade"] }` in
-`config/albionlocal.json`) for the pack's drops. Undo with `restore`.
+`config/world.jsonc`) for the pack's drops. Undo with `restore`.
 
 ## Safety
 

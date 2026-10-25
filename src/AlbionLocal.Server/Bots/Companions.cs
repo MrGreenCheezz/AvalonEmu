@@ -17,7 +17,8 @@ namespace AlbionLocal.Server.Bots;
 /// Companions:TeleportDistance away or not nearer for Companions:StuckSeconds. Mobs fight it as a player (<see cref="Map.Fighters"/>); its
 /// kills are its owner's (fame, silver, the loot bag), so it takes no loot and no fame share, and the owner's fame is not split with it.
 /// Nothing is saved: companions go when their owner is out of the game for Companions:OwnerGraceSeconds, leaves the party or is dismissed,
-/// and at a restart. Touched only under <see cref="World.Sync"/>.
+/// and at a restart. Bot-party: a world bot that accepted a party invite (<see cref="Recruit"/>) is one too, its inviter its owner; it goes
+/// the same ways and after Bots:Party:MaxMinutes. Touched only under <see cref="World.Sync"/>.
 /// </summary>
 public sealed class Companions(World world)
 {
@@ -33,6 +34,12 @@ public sealed class Companions(World world)
 
     /// <summary>Whether character <paramref name="owner"/> has a companion.</summary>
     public bool HasAny(Guid owner) => _hired.Values.Any(b => b.Bot!.Companion!.Owner == owner);
+
+    /// <summary>The recruited world bot of character <paramref name="id"/> (bot-party); null when none.</summary>
+    public Player? RecruitOf(Guid id) => _hired.TryGetValue(id, out var bot) && bot.Bot!.Companion!.Recruited ? bot : null;
+
+    /// <summary>How many recruited world bots <paramref name="party"/> has (Bots:Party:MaxPerParty; hired companions not counted).</summary>
+    public int RecruitsIn(Party party) => party.Members.Count(m => RecruitOf(m.Id) is not null);
 
     /// <summary>The joined player who hired <paramref name="bot"/>; null when it is no companion or its owner is not in game.</summary>
     public Player? OwnerOf(Player bot) => bot.Bot?.Companion is { } c ? world.Parties.Online(c.Owner) : null;
@@ -58,6 +65,48 @@ public sealed class Companions(World world)
     {
         var ip = Expeditions.AverageItemPower(owner);
         return Math.Clamp((int)Math.Round((ip - 300) / 100), Options.MinTier, Math.Max(Options.MinTier, Options.MaxTier));
+    }
+
+    /// <summary>The tier of <paramref name="p"/>'s average item power (T4 700, T5 800 … T8 1100) within 1..8 (Bots:Party:TierRange).</summary>
+    public static int TierOf(Player p) => Math.Clamp((int)Math.Round((Expeditions.AverageItemPower(p) - 300) / 100), 1, 8);
+
+    /// <summary>
+    /// Bot-party: the companion kind of a world bot's own gear: Healer with a holy or nature staff, Tank with a shield, mace or hammer,
+    /// Ranged with a weapon of 6 m reach or more (bows, crossbows, the magic staffs), else Melee (a tool or bare hands too).
+    /// </summary>
+    public static CompanionKind KindOf(Player bot)
+    {
+        var main = bot.Inventory.Equipment[0]?.Template.Name ?? "";
+        var off = bot.Inventory.Equipment[1]?.Template.Name ?? "";
+        if (main.Contains("HOLYSTAFF", StringComparison.Ordinal) || main.Contains("NATURESTAFF", StringComparison.Ordinal)) return CompanionKind.Healer;
+        if (off.Contains("SHIELD", StringComparison.Ordinal) || main.Contains("MACE", StringComparison.Ordinal) || main.Contains("HAMMER", StringComparison.Ordinal))
+            return CompanionKind.Tank;
+        return main.Length > 0 && Combat.WeaponOf(bot).Range >= 6 ? CompanionKind.Ranged : CompanionKind.Melee;
+    }
+
+    /// <summary>
+    /// Bot-party: world bot <paramref name="bot"/> joined <paramref name="owner"/>'s party (<see cref="Parties.AnswerInvitation"/>, as a member
+    /// of his): it leaves its world role (<see cref="BotManager.Recruit"/>) and plays as his companion of <see cref="KindOf"/> its gear in the
+    /// first free place around him, until Bots:Party:MaxMinutes; a Chat.Join line.
+    /// </summary>
+    public void Recruit(Player bot, Player owner)
+    {
+        var now = world.Clock.Now;
+        var mine = Of(owner.Character.Id);
+        var index = Enumerable.Range(0, 4).First(i => mine.All(b => b.Bot!.Companion!.Index != i) || i == 3);
+        world.Bots.Recruit(bot, new CompanionBrain(world.Bots, this), b => new CompanionInfo
+        {
+            Owner = owner.Character.Id, OwnerName = owner.Character.Name, Kind = KindOf(b), Index = index, OwnerSeen = now, BestAt = now,
+            Recruited = true, Until = now + TimeSpan.FromMinutes(world.Config.Bots.PartyMaxMinutes),
+        });
+        _hired[bot.Character.Id] = bot;
+        Say(bot, world.BotSettings.JoinLines);
+    }
+
+    /// <summary>A recruited bot's line of <paramref name="lines"/> on the local channel (Bots:Chat, <see cref="BotSocial.TrySay"/>).</summary>
+    private void Say(Player bot, IReadOnlyList<string> lines)
+    {
+        if (bot.Bot?.Companion is { Recruited: true } && lines.Count > 0) world.Bots.Social.TrySay(bot, lines[world.Bots.Random.Next(lines.Count)]);
     }
 
     /// <summary>The item patterns of a kind's kit, slot by slot, the first that resolves at the tier (or lower) taken.</summary>
@@ -156,6 +205,7 @@ public sealed class Companions(World world)
     private void Remove(Player bot, string why)
     {
         if (!_hired.Remove(bot.Character.Id)) return;
+        Say(bot, world.BotSettings.LeaveLines);
         world.Parties.RemoveCompanion(bot.Character.Id);
         world.Bots.Despawn(bot, why, BotRefill.Now);
     }
@@ -163,7 +213,9 @@ public sealed class Companions(World world)
     /// <summary>The party took companion <paramref name="id"/> out (kicked from the party frame, its owner left, the party broke up): it goes.</summary>
     public void LeftParty(Guid id)
     {
-        if (_hired.Remove(id, out var bot)) world.Bots.Despawn(bot, "out of its party", BotRefill.Now);
+        if (!_hired.Remove(id, out var bot)) return;
+        Say(bot, world.BotSettings.LeaveLines);
+        world.Bots.Despawn(bot, "out of its party", BotRefill.Now);
     }
 
     /// <summary><see cref="BotManager.Despawn"/> took <paramref name="bot"/> away (its map unloaded): out of the list and the party.</summary>
@@ -205,6 +257,11 @@ public sealed class Companions(World world)
         foreach (var bot in _hired.Values.ToList())
         {
             var info = bot.Bot!.Companion!;
+            if (now >= info.Until)
+            {
+                Remove(bot, $"its {world.Config.Bots.PartyMaxMinutes:0.#} min in the party are over"); // bot-party: Bots:Party:MaxMinutes
+                continue;
+            }
             if (OwnerOf(bot) is not { Map: { } map } owner)
             {
                 if ((now - info.OwnerSeen).TotalSeconds >= Options.OwnerGraceSeconds) Remove(bot, "its owner has not come back");

@@ -57,6 +57,15 @@ public sealed class CompanionInfo
 
     /// <summary>When a tank may next pull a mob off another member by threat (<see cref="World.GameNow"/> ticks).</summary>
     public long NextTaunt { get; set; }
+
+    /// <summary>
+    /// Bot-party: a world bot that accepted its owner's party invite (<see cref="Bots.BotSocial.WantsParty"/>), not a hired one: a party member
+    /// that counts in the fame split, says a Chat.Join / Chat.Leave line, and goes at <see cref="Until"/> (Bots:Party:MaxMinutes).
+    /// </summary>
+    public bool Recruited { get; init; }
+
+    /// <summary>Bot-party: when a recruited bot leaves its party (<see cref="World.Clock"/>); never for a hired companion.</summary>
+    public TimeSpan Until { get; init; } = TimeSpan.MaxValue;
 }
 
 /// <summary>A bot's emote under way: emotes.bin <see cref="Emote"/> since GameTimeStamp <see cref="Start"/>; a looping one is shown to every new observer.</summary>
@@ -69,14 +78,14 @@ public sealed record BotEmote(int Emote, long Start, bool Loops);
 /// </summary>
 public sealed class BotInfo
 {
-    public required BotRole Role { get; init; }
+    public required BotRole Role { get; set; }
 
     /// <summary>The tier of its gear (1-8).</summary>
     public required int Tier { get; init; }
 
     public required string PersonaId { get; init; }
 
-    public required IBotBrain Brain { get; init; }
+    public required IBotBrain Brain { get; set; }
 
     /// <summary>NewCharacter key 2: the avatars.xml index of its portrait (0 = AVATAR_01, left out).</summary>
     public byte Avatar { get; init; }
@@ -85,12 +94,12 @@ public sealed class BotInfo
     public Vector2 Home { get; init; }
 
     /// <summary>The population slot it fills; null for a GM's bot (.bot spawn), which never respawns.</summary>
-    public BotSlot? Slot { get; init; }
+    public BotSlot? Slot { get; set; }
 
     /// <summary><see cref="World.Clock"/> time of its spawn, and when it leaves (turnover: Bots:StayMinutes; never for a GM's bot).</summary>
     public TimeSpan SpawnedAt { get; init; }
 
-    public TimeSpan StayUntil { get; init; } = TimeSpan.MaxValue;
+    public TimeSpan StayUntil { get; set; } = TimeSpan.MaxValue;
 
     /// <summary><see cref="World.Clock"/> time of its next decision (Bots:ThinkSeconds).</summary>
     public TimeSpan NextThink { get; set; }
@@ -114,7 +123,7 @@ public sealed class BotInfo
     public BotCombatState Fight { get; } = new();
 
     /// <summary>The patrol group it walks and fights with (phase 3); null for the other roles.</summary>
-    public BotGroup? Group { get; init; }
+    public BotGroup? Group { get; set; }
 
     /// <summary>StageL corrupted: × its maximum health and its hits over Bots:Combat's (Corrupted:Invader:HealthFactor / DamageFactor); 1 for the other roles.</summary>
     public double HealthFactor { get; init; } = 1;
@@ -124,8 +133,11 @@ public sealed class BotInfo
     /// <summary>StageN botpower: an elite (Bots:Gear:EliteChance): enchanted gear of a better quality, a richer bag (Bots:Rewards:Elite*).</summary>
     public bool Elite { get; init; }
 
-    /// <summary>StageN companions: the owner and kind of a <see cref="BotRole.Companion"/>; null for the other roles.</summary>
-    public CompanionInfo? Companion { get; init; }
+    /// <summary>
+    /// StageN companions: the owner and kind of a <see cref="BotRole.Companion"/>; null for the other roles. Role, brain, slot, stay, group and
+    /// this change only when a world bot accepts a party invite (bot-party, <see cref="BotManager.Recruit"/>): it becomes a companion.
+    /// </summary>
+    public CompanionInfo? Companion { get; set; }
 }
 
 /// <summary>

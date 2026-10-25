@@ -117,7 +117,7 @@ public sealed partial class LoginSession
     /// <item>More than <see cref="LoginThrottle.Limit"/> password checks a minute from the address → 206 without one (each
     /// hash runs under the world's lock).</item>
     /// <item>An empty name or password → 201.</item>
-    /// <item>A name without an account: the local account of before stage 7 when it has no name yet and Accounts:LegacyName
+    /// <item>A name without an account: the local account of before stage 7 when it has characters, no name yet and Accounts:LegacyName
     /// is this name, or is empty and the Login comes from this PC (loopback: a stranger on the network never takes it); else with Accounts:AutoRegister a new account with this password; else 201 after a dummy
     /// hash (the same answer and about the same time as a wrong password: the client has no "no such account" message).</item>
     /// <item>Locked (too many wrong passwords) → 210 with key 56 = the lock's remaining TimeSpan ticks and key 64.</item>
@@ -149,6 +149,7 @@ public sealed partial class LoginSession
             if (characters.Account.Name is null
                 && (config.LegacyAccountName.Length == 0 ? IPAddress.IsLoopback(Peer.EndPoint.Address)
                     : Persistence.Account.KeyOf(config.LegacyAccountName) == Persistence.Account.KeyOf(name))
+                && characters.List(characters.Account.Id).Count > 0
                 && characters.ClaimLocalAccount(name) is { } claimed)
             {
                 Log.Info(Name, $"{claimed} takes over the local account with its {characters.List(claimed.Id).Count} character(s) of before the upgrade ("

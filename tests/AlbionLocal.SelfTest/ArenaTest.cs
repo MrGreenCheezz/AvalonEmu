@@ -1,4 +1,5 @@
 using System.Numerics;
+using AlbionLocal.Server.Bots;
 using AlbionLocal.Photon.Serialization;
 using AlbionLocal.Server;
 using AlbionLocal.Server.Commands;
@@ -25,6 +26,8 @@ public static class ArenaTest
     [
         ("arena: 1v1 queue (267 status 3, 5), ready check (7, 8), @ARENA@ on ARENA-1v1-01 at its warcamps, Hostile only in the fight, 2 defeats win, ratings 1210/1190 saved, back in 0000", OneVsOne),
         ("arena: a duel won moves the duel ladder (saved), .ladder and .rating, a 3-player tournament (a bye, a duel decides, the final)", Ladder),
+        ("arena: without bots (official, or Arena:Bots on but Bots:Enabled off) a lone registration never gets a match against empty slots", NoBots),
+        ("arena: Bots:World:Enabled false with Bots:Arena:Enabled: no city bots, but a lone 1v1 gets a bot opponent; Bots:Arena:Enabled false: none", BotsWithoutWorld),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -38,13 +41,13 @@ public static class ArenaTest
     private static List<int> Statuses(FakePeer on, int from = 0) =>
         [.. on.Events.Skip(from).Where(e => Code(e) == (int)EventCodes.ArenaRegistrationInfo).Select(e => Key(e, 2))];
 
-    private static (World World, ManualClock Clock, string Dir, SqliteCharacterRepository Characters) NewWorld()
+    private static (World World, ManualClock Clock, string Dir, SqliteCharacterRepository Characters) NewWorld(ServerConfig? config = null)
     {
         var dir = NewDir();
         var characters = Repository(dir);
         var clock = new ManualClock();
         var anchor = DateTime.UtcNow.Ticks;
-        var world = new World(ServerConfig.PveDefaults with { JoinByCharacterId = true }, characters, Client.Items, Client.GameData, Client.Spells)
+        var world = new World((config ?? ServerConfig.PveDefaults) with { JoinByCharacterId = true }, characters, Client.Items, Client.GameData, Client.Spells)
         {
             Sync = new object(), Clock = clock, Clusters = Store, MapSeed = 3, GameTicks = () => anchor + clock.Now.Ticks,
         };
@@ -83,6 +86,69 @@ public static class ArenaTest
         world.Dispose();
         characters.Dispose();
         try { Directory.Delete(dir, true); } catch (IOException) { }
+    }
+
+    private static void NoBots()
+    {
+        foreach (var config in new[] { new ServerConfig(), new ServerConfig { Arena = new ArenaOptions { Bots = true, BotWaitSeconds = 1 } } })
+        {
+            var (world, clock, dir, characters) = NewWorld(config);
+            var hero = Hero(characters, "Solo", 5);
+            var (session, peer, _) = Join(world, hero.Id);
+            var r = Call(world, session, peer, new ArenaRegisterRequest { bo = 1, bp = 2, bq = false, br = [], bs = -1, bt = -1 });
+            for (var i = 0; i < 60; i++)
+            {
+                clock.Advance(TimeSpan.FromSeconds(1));
+                lock (world.Sync) world.Update();
+            }
+            Check(r.ReturnCode == 0 && !world.Bots.Enabled && world.Arenas.Matches.Count == 0 && session.Player?.Character.DungeonReturn is null,
+                  $"Arena:Bots {config.Arena.Bots}, Bots:Enabled false: still queued after 60 s, no match ({world.Arenas.Matches.Count}), no free win");
+            Cleanup(world, characters, dir);
+        }
+    }
+
+    private static void BotsWithoutWorld()
+    {
+        foreach (var arenaBots in new[] { true, false })
+        {
+            var config = ServerConfig.PveDefaults with
+            {
+                Arena = ServerConfig.PveDefaults.Arena with { Bots = true, BotWaitSeconds = 1 },
+                Bots = ServerConfig.PveDefaults.Bots with { WorldEnabled = false, ArenaEnabled = arenaBots, PopulateSeconds = 0.5 },
+            };
+            var (world, clock, dir, characters) = NewWorld(config);
+            world.Bots.Nav.Preload(Store.Get("ARENA-1v1-01"));
+            world.Bots.Nav.Preload(Store.Get("0000"));
+            void Tick(int seconds)
+            {
+                for (var i = 0; i < seconds; i++)
+                {
+                    clock.Advance(TimeSpan.FromSeconds(1));
+                    lock (world.Sync) world.Update();
+                }
+            }
+            var hero = Hero(characters, "Lone", 5);
+            var (session, peer, _) = Join(world, hero.Id);
+            var r = Call(world, session, peer, new ArenaRegisterRequest { bo = 1, bp = 2, bq = false, br = [], bs = -1, bt = -1 });
+            Tick(5);
+            var noCity = world.Maps.Get("0000").Bots.Count == 0;
+            var m = world.Arenas.Matches.SingleOrDefault();
+            if (!arenaBots)
+            {
+                Tick(30);
+                Check(r.ReturnCode == 0 && noCity && world.Bots.Enabled && world.Arenas.Matches.Count == 0,
+                      $"Bots:Arena:Enabled false: no city bots, still queued after 35 s, no match ({world.Arenas.Matches.Count})");
+                Cleanup(world, characters, dir);
+                continue;
+            }
+            Check(r.ReturnCode == 0 && noCity && m is { State: ArenaState.ReadyCheck }, $"World off: no city bots in Thetford, a 1v1 match found for the lone player ({m?.State})");
+            Call(world, session, peer, new JoinArenaMatchRequest { sv = [], sw = 0 });
+            Join(world, hero.Id);
+            Tick(2);
+            Check(m!.Bots.Count == 1 && m.Bots.Keys.All(b => b.Bot is { Role: BotRole.Arena } && b.Map?.Cluster == m.Id) && m.HadBots,
+                  $"in the arena: one arena bot on the other team ({m.Bots.Count}), with Bots:World:Enabled false");
+            Cleanup(world, characters, dir);
+        }
     }
 
     private static void OneVsOne()

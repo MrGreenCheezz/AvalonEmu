@@ -50,6 +50,8 @@ public static class BotPatrolTest
         ("bots patrol: a riding Red player hit by it: its hits on the mount bar, the hostile dismount at 0 (Mounted key 13)", RiderDismounted),
         ("bots botpower: a pve patrol has a full-spec player's health and board, potions; at low health it drinks one", PvePower),
         ("bots botpower: a ranged patrol steps back from a Red player 2 m away along the walk grid", Kites),
+        ("bots switches: Bots:Pvp:Enabled false: a patrol never attacks a Red player on sight, but answers his hit", PvpOff),
+        ("bots switches: Bots:Rewards:Enabled false: a beaten patrol gives no fame, goal credit, bag or silver", RewardsOff),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -161,6 +163,43 @@ public static class BotPatrolTest
               && Of(peer, EventCodes.HealthUpdate, mark).Any(p => L(p, 0) == red.Id && L(p, 6) == bot.Id && Convert.ToInt32(p[7]) == -1),
               $"a Red player 8 m away: its Attack 13 {{0 bot, 2 him}} and his HealthUpdate {{6 bot, 7 -1}} (target {bot.Bot.Fight.TargetId})");
         Check(!Of(bluePeer, EventCodes.HealthUpdate, 0).Any(p => L(p, 0) == blue.Id), "the Blue player was never hit");
+    }
+
+    private static void PvpOff()
+    {
+        using var f = new Field(Quick with { PvpEnabled = false }, BotTest.NoPopulation, Yellow);
+        var nav = f.Nav();
+        var bot = Patrol(f, nav);
+        var (_, peer, red) = f.Join("Rolf", Near(f, nav, bot, 8), Pvp.Red);
+        var mark = peer.Events.Count;
+        f.Run(5);
+        Check(!Of(peer, EventCodes.Attack, mark).Any(p => L(p, 0) == bot.Id) && bot.Bot!.Fight.TargetId == 0 && Pvp.Of(bot, red) == Relation.Neutral && Pvp.Of(red, bot) == Relation.Hostile,
+              $"Pvp off: a Red player 8 m away is not attacked in 5 s, the patrol Neutral to him, he may attack it ({bot.Bot!.Brain.State})");
+        Hit(f, red, bot, 1);
+        mark = peer.Events.Count;
+        var interval = SpellCasts.SwingInterval(bot) / (double)TimeSpan.TicksPerSecond;
+        Until(f, f.World.Config.Bots.ReactionMs / 1000.0 + interval + 4, () => Of(peer, EventCodes.Attack, mark).Any(p => L(p, 0) == bot.Id && L(p, 2) == red.Id));
+        Check(Pvp.Of(bot, red) == Relation.Hostile && Of(peer, EventCodes.Attack, mark).Any(p => L(p, 0) == bot.Id && L(p, 2) == red.Id),
+              "after his hit it answers him (Hostile, its Attack on him)");
+    }
+
+    private static void RewardsOff()
+    {
+        using var f = new Field(Quick with { GearDropChance = 1, RewardsEnabled = false }, BotTest.NoPopulation, Yellow);
+        var nav = f.Nav();
+        var bot = Patrol(f, nav);
+        var (_, peer, blue) = f.Join("Nora", Near(f, nav, bot, 3));
+        var persona = bot.Bot!.PersonaId;
+        var silver = blue.Character.Silver;
+        var mark = peer.Events.Count;
+        Hit(f, blue, bot, 1e7);
+        var fame = Of(peer, EventCodes.UpdateFame, mark).Where(p => L(p, 0) == blue.Id).Sum(p => L(p, 2));
+        Check(Of(peer, EventCodes.KnockedDown, mark).Any(p => L(p, 0) == bot.Id) && fame == 0 && blue.Character.Goals?.PvpVictims.ContainsKey("b:" + persona) != true,
+              $"Rewards off: knocked down, no fame ({fame}), no PvP goal credit");
+        f.Run(11);
+        Check(!f.Map.Objects.Values.OfType<PlayerLootBag>().Any(b => b.VictimId == bot.Id) && !f.Map.Objects.Values.OfType<SilverPile>().Any(p => p.SourceId == bot.Id)
+              && Of(peer, EventCodes.NewLoot, mark).Count == 0 && blue.Character.Silver == silver && bot.Map is null,
+              "at its despawn no bag and no silver pile");
     }
 
     private static void JoinGrace()
@@ -441,19 +480,19 @@ public static class BotPatrolTest
         var dir = NewDir();
         var file = Path.Combine(dir, "albionlocal.json");
         File.WriteAllText(file, """{ "Bots": { "Patrol": { "AggroRadius": 12, "GroupSize": "2-3" }, "Rewards": { "LootProtectionSeconds": null }, "PvpRulesByZone": { "Red": "Official" } } }""");
-        var c = ServerConfig.Load(file, []).Bots;
+        var c = LoadTestConfig(file, ["--Preset=pve"]).Bots;
         Check(c is { AggroRadius: 12, GroupSize: (2, 3), LootProtectionSeconds: null, SpareMinutes: 5, JoinGraceSeconds: 10, AttackMounted: true, LethalToPlayers: false,
                   DamageFactor: 1, HealthFactor: 1 /* the pve preset since stageN botpower (0.7 before) */, FameFactor: 0.5, GearDropChance: 0.2, ResourceDropShare: 0.5, BagsPerHour: 30, SameBotMinutes: 10 }
-              && ServerConfig.Load(file, ["--Bots:Rewards:LootProtectionSeconds=60"]).Bots.LootProtectionSeconds == 60
+              && LoadTestConfig(file, ["--Bots:Rewards:LootProtectionSeconds=60"]).Bots.LootProtectionSeconds == 60
               && c.PvpRulesIn("red") == BotPvpRules.Official && c.PvpRulesIn("black") == BotPvpRules.Consent && new BotOptions().PvpRulesByZone.Count == 0,
               "Patrol:* and Rewards:* keys with their defaults; LootProtectionSeconds null (gamedata) or seconds; PvpRulesByZone red Official, the rest PvpRules");
-        var pve = ServerConfig.Load(Path.Combine(dir, "none.json"), []).Bots;
+        var pve = LoadTestConfig(Path.Combine(dir, "none.json"), ["--Preset=pve"]).Bots;
         Check(pve.PvpRulesIn("red") == BotPvpRules.Official && pve.PvpRulesIn("black") == BotPvpRules.Official && pve.PvpRulesIn("yellow") == BotPvpRules.Consent
-              && ServerConfig.Load(Path.Combine(dir, "none.json"), ["--Preset=official"]).Bots.PvpRulesByZone.Count == 0,
+              && LoadTestConfig(Path.Combine(dir, "none.json"), ["--Preset=official"]).Bots.PvpRulesByZone.Count == 0,
               "pve preset: patrols use the official rules in red and black zones, consent elsewhere; official preset: no zone rules");
         static bool Refused(string file, string arg)
         {
-            try { ServerConfig.Load(file, [arg]); return false; }
+            try { LoadTestConfig(file, [arg]); return false; }
             catch (InvalidDataException) { return true; }
         }
         Check(Refused(file, "--Bots:Rewards:GearDropChance=2") && Refused(file, "--Bots:Patrol:GroupSize=0-3") && Refused(file, "--Bots:Rewards:LootProtectionSeconds=soon")

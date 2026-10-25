@@ -29,9 +29,11 @@ public sealed class BotFactory(World world)
     /// <paramref name="flag"/> (null: Red for a patrol, Blue for the others).
     /// </summary>
     public (Character Character, byte Avatar, List<ItemTemplate> Gear) Make(BotRole role, int tier, string cluster, string name, Vector2 at, float facing,
-        Random random, string? resource = null, byte? flag = null)
+        Random random, string? resource = null, byte? flag = null, BotIdentity? identity = null, GearStyle? style = null)
     {
         var looks = world.GameData?.Looks ?? CharacterLooks.None;
+        var population = random;
+        random = identity?.LookRandom() ?? random; // bot-roster: an identity's look is the same every time
         var template = random.NextDouble() < Options.FemaleShare ? 1 : 0;
         int[] custom = [], clothes = [];
         byte avatar = 0;
@@ -52,39 +54,53 @@ public sealed class BotFactory(World world)
             Cluster = cluster, PositionX = at.X, PositionY = at.Y, Direction = facing,
             Flag = flag ?? (BotManager.Patrols(role) ? Pvp.Red : Pvp.Blue), // a gatherer's by its zone (BotManager, SPEC D4)
         };
-        return (c, avatar, Gear(role, tier, random, resource));
+        if (identity is not null) c.Id = identity.Id; // bot-roster: the same Guid every time (whispers, invites and friend requests by Guid)
+        return (c, avatar, Gear(role, tier, style?.Random ?? population, resource, style));
     }
 
-    /// <summary>The gear of <paramref name="role"/> at <paramref name="tier"/>, each item resolved and existing.</summary>
-    public List<ItemTemplate> Gear(BotRole role, int tier, Random random, string? resource = null)
+    /// <summary>
+    /// The gear of <paramref name="role"/> at <paramref name="tier"/>, each item resolved and existing. With <paramref name="style"/> (a
+    /// population bot, bot-roster gear realism) each armour piece, weapon, offhand and cape may be off its tier (MixedShare, Spread), an
+    /// enchanted one (EnchantChance, EnchantLevels) or an artifact (ArtifactChance: weapons and armour, not a gatherer's set); every piece
+    /// draws the same numbers whatever comes of them, so one random seed gives one set in every zone.
+    /// </summary>
+    public List<ItemTemplate> Gear(BotRole role, int tier, Random random, string? resource = null, GearStyle? style = null)
     {
         var s = Settings;
         var names = new List<string>();
+        var pieces = new Dictionary<int, string?>(); // by index of names: a piece of the realism rules and its artifact pattern
         string Pick(IReadOnlyList<string> list) => list[random.Next(list.Count)];
+        void Piece(string pattern, string? artifact)
+        {
+            pieces[names.Count] = artifact;
+            names.Add(pattern);
+        }
         void ArmourSet()
         {
             var material = tier < 2 ? "LEATHER" : Pick(s.Materials);
             var set = tier < 4 ? 1 : 1 + random.Next(3);
-            foreach (var slot in new[] { "HEAD", "ARMOR", "SHOES" }) names.Add($"T{{t}}_{slot}_{material}_SET{set}");
+            var artifact = style is not null && s.ArtifactSets.Count > 0 ? s.ArtifactSets[random.Next(s.ArtifactSets.Count)] : null;
+            foreach (var slot in new[] { "HEAD", "ARMOR", "SHOES" })
+                Piece($"T{{t}}_{slot}_{material}_SET{set}", artifact is null ? null : $"T{{t}}_{slot}_{material}_{artifact}");
         }
         void Weapon()
         {
             var weapon = Pick(s.Weapons);
-            names.Add($"T{{t}}_{weapon}");
-            if (weapon.StartsWith("MAIN_", StringComparison.Ordinal)) names.Add($"T{{t}}_{Pick(s.Offhands)}");
+            Piece($"T{{t}}_{weapon}", style is not null && s.ArtifactWeapons.GetValueOrDefault(weapon) is { Count: > 0 } arts ? $"T{{t}}_{arts[random.Next(arts.Count)]}" : null);
+            if (weapon.StartsWith("MAIN_", StringComparison.Ordinal)) Piece($"T{{t}}_{Pick(s.Offhands)}", null);
         }
         switch (role)
         {
             case BotRole.City:
                 ArmourSet();
                 if (random.NextDouble() < s.CityWeaponShare) Weapon();
-                names.Add(s.Cape);
+                Piece(s.Cape, null);
                 break;
             case BotRole.Patrol:
             case BotRole.Drifter: // stageL mists: a patrol's gear
                 ArmourSet();
                 Weapon();
-                names.Add(s.Cape);
+                Piece(s.Cape, null);
                 names.Add(tier >= 5 && random.NextDouble() < s.ArmoredShare ? s.ArmoredMount : s.PatrolMount);
                 break;
             case BotRole.Invader:
@@ -92,7 +108,7 @@ public sealed class BotFactory(World world)
                 // StageL corrupted (SPEC §4.5): a patrol's gear at the difficulty's tier, no mount (allowmounts false inside); a hellgate's at its map's.
                 ArmourSet();
                 Weapon();
-                names.Add(s.Cape);
+                Piece(s.Cape, null);
                 break;
             case BotRole.Gatherer:
                 var kind = (resource ?? "ORE").ToUpperInvariant();
@@ -104,9 +120,36 @@ public sealed class BotFactory(World world)
                 break;
         }
         var gear = new List<ItemTemplate>();
-        foreach (var pattern in names)
-            if (Resolve(pattern, tier) is { } item && gear.All(g => g.Slot != item.Slot)) gear.Add(item);
+        for (var i = 0; i < names.Count; i++)
+        {
+            var item = style is not null && pieces.TryGetValue(i, out var artifact) ? Styled(names[i], artifact, tier, style) : Resolve(names[i], tier);
+            if (item is not null && gear.All(g => g.Slot != item.Slot)) gear.Add(item);
+        }
         return gear;
+    }
+
+    /// <summary>
+    /// One piece of a population bot's gear by <paramref name="style"/>: six numbers drawn always (mixed, up or down, how far, enchanted,
+    /// its level, artifact), then the piece at its tier (or 1..Spread off with MixedShare, within 1-8; where items.xml lacks that tier the
+    /// bot's own), an artifact of <paramref name="artifact"/> with ArtifactChance where items.xml has one (else the plain piece), enchanted
+    /// with EnchantChance (a weapon, offhand or armour piece; <see cref="Enchanted"/>).
+    /// </summary>
+    private ItemTemplate? Styled(string pattern, string? artifact, int tier, GearStyle style)
+    {
+        var r = style.Random;
+        var (mixed, up, far, enchant, level, art) = (r.NextDouble(), r.NextDouble(), r.NextDouble(), r.NextDouble(), r.NextDouble(), r.NextDouble());
+        var t = tier;
+        if (style.Spread > 0 && mixed < style.MixedShare)
+            t = Math.Clamp(tier + (up < 0.5 ? -1 : 1) * (1 + (int)(far * style.Spread)), 1, 8);
+        ItemTemplate? item = null;
+        if (artifact is not null && art < style.ArtifactChance && t >= 4) item = Resolve(artifact, t);
+        item ??= Resolve(pattern, t) ?? Resolve(pattern, tier);
+        if (item is not null && enchant < style.EnchantChance)
+        {
+            var (min, max) = ((int)style.EnchantLevels.Min, (int)style.EnchantLevels.Max);
+            item = Enchanted(item, Math.Clamp(min + (int)(level * (max - min + 1)), min, max));
+        }
+        return item;
     }
 
     /// <summary>
@@ -199,3 +242,9 @@ public sealed class BotFactory(World world)
         return Math.Clamp((mapTier == 0 ? 4 : mapTier) + random.Next(-1, 2), 1, 8);
     }
 }
+
+/// <summary>
+/// Bot-roster gear realism of a population bot (Bots:Gear:MixedShare, TierSpread, EnchantChance, Enchant, ArtifactChance of its zone class):
+/// the random numbers of its pieces (an identity's own: the same set every time) and the chances.
+/// </summary>
+public sealed record GearStyle(Random Random, int Spread, double MixedShare, double EnchantChance, (double Min, double Max) EnchantLevels, double ArtifactChance);

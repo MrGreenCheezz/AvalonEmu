@@ -83,9 +83,9 @@ public static class MistsTest
         var none = Path.Combine(cfg, "albionlocal.json");
         var file = MistsSettings.Parse(File.ReadAllText(Path.Combine(DataDir(), "..", "content", "mists.json")), "mists.json");
         var stations = StationSpawns.Load(Path.Combine(DataDir(), "..", "content", "spawns"));
-        Check(ServerConfig.Load(none, []).Mists is { Matchmaking: MistsMatchmaking.Private, LifetimeFactor: 2, BlockFactor: 0.5, DuoSoloScaling: 0.6, OpenWorldExit: MistsExitTarget.Entrance, BossChest: true, RarityWeights.Count: 5 }
-              && ServerConfig.Load(none, ["--Preset=official"]).Mists == new MistsOptions()
-              && ServerConfig.Load(none, ["--Preset=official", "--Mists:LifetimeFactor=3"]).Mists is { LifetimeFactor: 3, Matchmaking: MistsMatchmaking.Shared }
+        Check(LoadTestConfig(none, ["--Preset=pve"]).Mists is { Matchmaking: MistsMatchmaking.Private, LifetimeFactor: 2, BlockFactor: 0.5, DuoSoloScaling: 0.6, OpenWorldExit: MistsExitTarget.Entrance, BossChest: true, RarityWeights.Count: 5 }
+              && LoadTestConfig(none, ["--Preset=official"]).Mists == new MistsOptions()
+              && LoadTestConfig(none, ["--Preset=official", "--Mists:LifetimeFactor=3"]).Mists is { LifetimeFactor: 3, Matchmaking: MistsMatchmaking.Shared }
               && file.Texts.OrderBy(t => t.Key).SequenceEqual(MistsSettings.DefaultTexts.OrderBy(t => t.Key)) && file.Treasures.Count == MistsSettings.DefaultTreasures.Count
               && stations.For("5000").Count == 13 && Character.VaultKey(Islands.VaultLocation(new Map("5002")), Guid.Empty) != Character.VaultKey(Islands.VaultLocation(new Map("0000")), Guid.Empty),
               "Mists:* under pve (Private, x2, x0.5, 0.6, Entrance, boss chest, rarity weights), official (the record's), a key wins; content/mists.json; 12 Brecilien stations and a stable; 5002's vault is its own");

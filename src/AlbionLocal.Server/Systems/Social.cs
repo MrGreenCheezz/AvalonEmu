@@ -307,6 +307,7 @@ public sealed class Social
     {
         var me = p.Character.Id;
         var name = (rawName ?? "").Trim();
+        if (name.Length > 0 && world.Characters.Find(name) is null && world.Bots.Social.Find(Guid.Empty, name) is { } bot) return InviteBot(p, bot);
         if (name.Length == 0 || world.Characters.Find(name) is not { } found) return new FriendInviteResponse { ReturnCode = PlayerNotFound };
         var to = found.Id;
         if (to == me) return new FriendInviteResponse { ReturnCode = CantInviteYourself };
@@ -333,6 +334,22 @@ public sealed class Social
         Send(to, RequestEvent(me, ProfileOf(p.Character)));
         Log.Info("social", $"'{p.Character.Name}' asks '{target.Name}' to be friends");
         return Entry(to, target, 0);
+    }
+
+    /// <summary>
+    /// Bot-social (Bots:Social:Enabled): a friend request to world bot <paramref name="bot"/>: RC 0 with its entry (online, no guild), its
+    /// decline later (<see cref="Bots.BotSocial.FriendInvited"/>); asked already 10642. Nothing is stored: no request row, no profile.
+    /// </summary>
+    private FriendInviteResponse InviteBot(Player p, Player bot)
+    {
+        var id = bot.Character.Id;
+        if (world.Bots.Social.FriendAsked(p.Character.Id, id)) return new FriendInviteResponse { ReturnCode = AlreadyInvited };
+        world.Bots.Social.FriendInvited(p, bot);
+        Log.Info("social", $"'{p.Character.Name}' asks bot '{bot.Character.Name}' to be friends");
+        return new FriendInviteResponse
+        {
+            arn = id, aro = bot.Character.Name, arr = bot.Character.Faction, ars = (byte)bot.Character.Template, art = true, aru = "", arv = "", arw = world.GameNow,
+        };
     }
 
     /// <summary>FriendInvite's answer with <paramref name="id"/>'s entry: 0 Guid, 1 name, 2/3 avatar 0, 4 faction, 5 type, 6 online, 7 "", 8 guild, 9 last seen.</summary>

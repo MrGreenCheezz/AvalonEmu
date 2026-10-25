@@ -1,0 +1,323 @@
+// JSONC (JSON with comments), including trailing commas; not standard JSON.
+// Optional keys use preset defaults.
+// Relative paths use the parent of this configuration directory.
+// Command-line overrides: --Section:Key=value. Restart applies file edits.
+{
+  "Network": { "GamePort": 5056 },
+  "Tutorial": { "Opening": true },  // new characters start in the tutorial, as officially (also without the key, both presets); false = content/starter.json
+  "World": {
+    "LogoutSeconds": 10,      // logout countdown (cities and safe areas: 10)
+    "TickMs": 50              // world loop period; a tick that holds the lock over 20 ms is logged
+    // "EventLayers": [],     // seasonal cluster layers to switch on: halloween, christmas, easter, anniversary, anniversary_prelude
+    // "AnnounceAll": false,  // debug: every world object of the cluster at Join, never a Leave (rendering vs visibility problems)
+    // "MapIdleUnloadMinutes": 5, // a cluster without players is unloaded after this (0 = never); the next Join builds it anew
+    // (MobRespawnScale moved: Rates:Respawn below is its speed, 1 / the old factor; the old key is still read that way)
+    // "OpenWorldChests": true, // POI chests, boss reward chests and camp chests with their local quests (README "Open-world chests and camps")
+    // "RareResources": true, // enchanted (rare) resource node states; false = every node plain
+    // "MobAi": true,         // mobs aggro, chase, hit back, leash home and roam (stage 5d); false = they stand and only take damage (.mob ai on|off)
+  },
+  // Rate modifiers multiply existing game rewards. .rates <name> <value> changes one temporarily
+  // while running (Admin); restarting restores configuration values. No command saves changes.
+  "Rates": {
+    "Fame": 1,            // every fame gain (kills, harvests, crafts, tomes); the three below multiply with it
+    "CombatFame": 1,      // fame of mob kills (3 = three times the UpdateFame of a kill)
+    "GatheringFame": 1,   // fame of harvests
+    "CraftingFame": 1,    // fame of crafts
+    "Harvest": 1,         // resources a harvest yields, nodes and corpses (1.5 of 3 = 4 or 5, the fraction at random)
+    "Silver": 1,          // a killed mob's silver pile and silver-giving items (awardsilver)
+    "Loot": 1,            // item drop chances of mob kills and opened chests; not applied again to Loot:BlackMarketChance
+    "Respawn": 1,         // mob respawn speed: 2 = back in half the time, 100 = seconds (the old World:MobRespawnScale 0.01)
+    "Regrowth": 1,        // resource node regrowth speed: 2 = a charge back in half the time
+    "CraftingReturn": 1,  // factor on the share of resources a craft gives back (Crafting:Returns; at most all)
+    "ChampionWeight": 1,  // weight of champion, miniboss and boss mobs in a RANDOM spawn point's pick (Preset pve: 2)
+    "ChestRespawn": 1     // open-world chest respawn and reroll speed: 2 = back in half the time
+  }
+  // The commented examples below show the OFFICIAL values (what Preset official gives without the key); the Preset pve value, where it
+  // differs, is in the note ("pve: ...").
+  // "Visibility": { "CellSize": 10, "EnterCells": 4, "LeaveCells": 6 }, // world objects: 10 m cells on the cluster origin, sent within 4 cells, left from 6 (5 = no hysteresis)
+  // "Transfer": { "PositionTolerance": 2, "CheckExitCooldown": true }, // exits: metres allowed outside the exit square; refuse an exit used within 1 s (city) / 10 s of the Join
+  // "Progression": { "NewCharacters": "FairStart" }, // new characters: FairStart = an empty destiny board that fame fills, with content/starter-fair.json, as officially; UnlockAll = everything unlocked (pve: UnlockAll)
+  // "Crafting": { "Returns": true },  // a craft at a station gives back part of the resources by the city's bonus (craftingmodifiers.xml); false = none
+  // "Combat": { "EquipCooldownSeconds": 0, "GearArmor": true }, // seconds of the potion/food slot cooldown after an item goes into it (gamedata onequipmentchange is 10; whether it applies is open); 0 = none.
+  //   GearArmor: armour, magic and crowd control resistance from the worn items with their item power, as the client shows them (both presets); false = the raw items.xml sum of before (A-B checks only)
+  //   "GearDamageBonus": true: a player's spells add the worn items' physical/magic spell damage bonus (cloth chests 0.4-0.5, leather 0.2-0.3, plate 0-0.1; off hands × 1.16^(IP/100)), as official (both presets); false = buffs and passives only, as before
+  // "Consumables": { "BatchInterval": 0.5 }, // seconds between two uses of a "use all" from the inventory (captured 0.5)
+  // "Party": { "MaxSize": 20, "ResendAfterClusterChange": false }, // members per party (with open invitations); true = PartyJoined again after every cluster change (if the client loses the party frame there)
+  // "Guilds": { "Enabled": true, "CreateCost": 1000000, "MaxMembers": 300, "InviteSeconds": 70, "JoinRole": "Recruit", "RejoinCooldownMinutes": 4320, "CreateCooldownMinutes": 0, // guilds (pve: CreateCost 100000, JoinRole "Member", RejoinCooldownMinutes 0)
+  //   the PvE guild (README Guilds), off officially (pve: NoFriendlyFire true, XpShare 0.1, ClearXp 2000, ShareWithoutParty true, SilverTax 0.05, Contracts true):
+  //   "NoFriendlyFire": false, "XpShare": 0, "ClearXp": 0, "Levels": [0, 50000, 250000, 1000000, 5000000], "FamePerLevel": 0.02, "SilverPerLevel": 0.02, "GatheringPerLevel": 0.01, "RepairPerLevel": 0.05,
+  //   "ShareWithoutParty": false, "SilverTax": 0, "Contracts": false, "ContractCount": 3, "ContractPeriod": "Weekly", "ContractXp": 20000, "ContractSilver": 100000,
+  //   "BossSeasonPoints": false, // content/goals.json Guild BossSeasonPoints: guild season points for boss kills (pve: true)
+  //   "SeasonRewards": "Official" }, // Official = no bracket silver or items of content/goals.json at a season's end, .guild payout only with SilverTax or Contracts; Content = the file's (pve: Content)
+  // "Islands": { "Enabled": true, "StarterIsland": false, "StarterLevel": 0, "PremiumDays": 31, "BuyWithoutPremium": true, "FreeIslands": false, "GrowthSpeed": 1, "FocusSeedReturn": true, "WaterFocusFactor": 1, "StarterBuildings": false },
+  //   personal islands (README Personal islands): StarterIsland = a free island at the first island merchant (at level 0-5), StarterBuildings = with a farm and a herb garden,
+  //   GrowthSpeed 4 = crops grow 4 x as fast, WaterFocusFactor 0 = watering takes no focus (pve: StarterIsland true, StarterBuildings true, GrowthSpeed 4, WaterFocusFactor 0).
+  //   PremiumDays = Join key 91 (the merchant sells and upgrades from 7; 0 = none), sent to premium characters, and with BuyWithoutPremium to everyone:
+  //   BuyWithoutPremium true in both presets FOR NOW (no gold shop, no premium to buy yet); the strict official rule is false. FreeIslands = buying and upgrading for 0 silver
+  // "Premium": { "Mode": "None" }, // None = nobody is premium (no premium shop); Free = everyone, always (pve: Free). FameFactor, SilverFactor, GatherBonusChance, CropYieldFactor: "data" = characters.xml
+  // "Focus": { "Start": 0, "Max": "data", "RegenPerDay": "data", "Crafting": true }, // a new character's focus (pve: 30000, the premium lifetime reward); the cap and the premium regeneration of characters.xml
+  // "LearningPoints": { "Start": 0, "SecondsPerPoint": "data", "Max": "data" }, // a new character's learning points (pve: 500)
+  // "Social": { "FriendLimit": 200, "FriendRequestLimit": 50, "MuteLimit": 100 }, // friends per character, open friend requests sent (or received), muted players (the official limits are unknown)
+  // "Mail": { "Enabled": true, "Postage": 50, "DailyLimit": 30, "MarketExpiryDays": 30, "KeepDays": 0, "MaxPerBox": 500, "MarketNotices": true, "RewardOverflow": false, "SubjectMax": 50, "TextMax": 1000 },
+  //   the mailbox (README Mail): RewardOverflow true = reward items that do not fit the inventory come by mail (pve: true; official false = the waiting lists).
+  //   Postage silver and DailyLimit per UTC day are charged and counted, the client always shows gamedata's 50 / 30; KeepDays 0 = player and system mails stay
+  // "Trade": { "Enabled": true, "InviteRange": 7, "KeepRange": 9, "InviteSeconds": 15, "AcceptDelaySeconds": 1.5, "Slots": 11, "ClusterRules": true, "AllowGold": false, "AllowInCombat": false }, // player trade (both presets)
+  // "Economy": { "SilverPickupFactor": 1, "SilverPickupTax": 0 }, // a taken silver pile pays amount × cluster factor × this, less this share (the captured official pickups: 1.5 premium, 0.15 guild tax)
+  // "Chests": { "PoiLimit": -1 }, // POI chests at once per cluster: -1 = the data's (1), 0 = every spot (pve: 0), n = at most n
+  // "Bank": { "Shared": false }, // false = one bank vault per city (both presets); true = one for every city, the other vaults' items move in when a bank opens
+  // "Bm": { "BuyFactor": 0, "DailyLimit": 1000000 }, // the Black Market's NPC buy orders in Caerleon: T4-T8 equipment at item value × BuyFactor (0 = none, as officially: its orders come from players; pve: 5), at most DailyLimit silver per character per day (from 10:00 UTC; 0 = no limit)
+  // "Loot": { "BlackMarketChance": 0.1, "BlackMarketSoftCap": 0, "TierCap": false }, // chance that a rolled useblackmarket item (the loot lists' equipment) drops (pve: 0.15; the official server takes them from its Black Market, 1 = every roll);
+  //   past BlackMarketSoftCap such items in one roll each further one only with cap / its number (0 = no cap; pve: 4); TierCap true = a common entry gives at most the content's tier + 1 (pve: true)
+  // The server's own content of content/*.json: off officially; the pve values let the file decide (README "Official and pve presets").
+  // "Events": { "PlayerInvasions": false },  // .invasion, the invasion tickets, their NPC sell orders and drops (content/events.json Player, Merchant, Drops; pve: true)
+  // "Bounties": { "Enabled": false },        // the server bounties of content/goals.json, .bounty (pve: true)
+  // "PvpGoals": { "Enabled": false },        // content/goals.json Pvp: challenge points for PvP kills and duels (pve: true); false = the official rules (no points)
+  // "Season": { "Rules": "Official" },       // the Adventurer's Challenge: Official = the client data's factors, no boss bonus, premium rewards only for premium, no daily extra; Content = content/goals.json Season (pve: Content)
+  // "Dungeons": { "DailyBonus": 1, "GroupScaling": false }, // the dungeon of the day's factor (1 = none; "content" = content/dungeons.json's, pve); the file's group scaling allowed (pve: true)
+  // "Expeditions": { "Rules": "Official" },  // Official = the client's rules (no solo group runs, the invitation window, no hardcore carry, no scaling, no extra items, the leave penalty); Content = content/expeditions.json (pve: Content)
+  // "WorldBosses": { "ExtraSpawns": false, "Loot": "Killer" }, // content/bosses.json's own bosses in 0204 and 1207 (pve: true); the loot to the killer and its party, or Shared / Personal / "content" (pve: "content", the file's shared)
+  // "Arena": {               // the arena queues (README "Arena"); official MATCH_ARENA figures, pve in the notes
+  //   "Enabled": true, "ReadyCheck": true, "AcceptSeconds": 60, "ArrivalSeconds": 60, "RespawnSeconds": 10, "EndSeconds": 15,
+  //   "CountdownSeconds": 15,  // pve: 10
+  //   "Tickets2v2": 150, "Tickets5v5": 150, "TicketsPerDeath": 2, // pve: 6, 15, 1; the orbs' ticket loss is not modelled, so a match mostly runs to its time limit
+  //   "MatchMinutes": 25,      // pve: 15 (the 1v1 always 10 min, best of three)
+  //   "Bots": false,           // pve: true; bots fill empty slots after BotWaitSeconds (needs Bots:Enabled and Bots:Arena:Enabled; without bots a match starts only with both teams of players)
+  //   "BotWaitSeconds": 20, "BotFill": "Balanced", "BotTier": 0, "BotDamageFactor": 1, "BotHealthFactor": 1,
+  //   "Rated": true, "RateWithBots": false, "StartRating": 1200, "K": 20, // the arena ladders (arena.bin startingelo, elok)
+  //   "DuelsRated": false,     // pve: true; a duel won moves the duel ladder
+  //   "WinSilver": 0, "LossSilver": 0, "WinFame": 0, "LossFame": 0, // pve: 5000, 1500, 30000, 10000 (officially season points, not modelled)
+  //   "RewardItems": true, "DailyWins": 3, "RewardsWithBots": true, "FallbackCluster": "0000" // arena.bin's unranked items; the daily Royal Sigils
+  // },
+  // "Vanity": { "Enabled": true }, // cosmetics drop from content (README "Cosmetics"), both presets; the chances are Vanity:*Chance
+  // "Pvp": {                  // the official values; pve in the notes
+  //   "Mode": "Official",     // Official = by the zone (client table); Consensual = only Red vs Red and duels, a black zone counts as red (pve); Off = duels only
+  //   "LethalDeath": true,    // false (pve): the killing hit in orange/red/black zones knocks down (gets up by itself, loses nothing), no execute, no die button
+  //   "FullLoot": true,       // with LethalDeath true: a death drops everything into a loot bag; false (pve) = it keeps the items (only the wear)
+  //   "KnockdownWear": "gamedata", // share of max durability a PvP knockdown takes (0..1); "gamedata" = the official 5 % (pve: 0)
+  //   "RedLockMinutes": "spell", // minutes a Red flag cannot be removed; "spell" = FLAG_RED's official 15 min (CANNOTDISABLEPVP) (pve: 0)
+  //   "RespawnCluster": "",   // after a death in a lethal zone: respawn in this cluster ("" = the last city, else 0000)
+  //   "DeathSilverDrop": false, // true = 75 % of the silver drops for the killer (a guess)
+  //   "FriendlySpells": "All", // both presets: heals, shields and buffs reach every Friend (not Hostile by Pvp:Mode nor by the client's table); Group = party and guild only; Self = none
+  //   "DuelIsolation": true,   // both presets: no friendly spell reaches a duelist or comes from one (but its own)
+  //   "Spells": true,          // both presets: enemy spells (damage, DoTs, debuffs, stuns, knockbacks) reach the players and bots a sword may hit; false = mobs only
+  // },
+  // "Bots": {                // player bots (stage I; README "Player bots"): not official, so Enabled false; the rest matters only with them on (pve: Enabled true)
+  //   "Enabled": false,        // the master switch over every kind below (pve: true); .bot on|off for this run only (not saved, no .bot reload); the tables (counts per zone, names, gear) are content/bots.json
+  //   // The kind switches (true in both presets: official is all off through Enabled false alone, pve runs every kind); each needs Enabled:
+  //   "World": { "Enabled": true }, // the open-world population (City, Gatherer, Patrol, Drifter bots); false = none, the content bots below stay
+  //   "Zones": [],             // zone classes (City, Start, Roads, Mists, Safe, Yellow, Orange, Red, Black) or cluster ids where world bots may spawn; [] = everywhere content/bots.json gives bots
+  //   "Arena": { "Enabled": true },    // bots fill arena teams (also needs Arena:Bots); works with World:Enabled false
+  //   "Hellgate": { "Enabled": true }, // a hellgate versus run's bot enemy team (else the guardian); works with World:Enabled false
+  //   "Invader": { "Enabled": true },  // corrupted dungeon bot invaders (also needs Corrupted:BotInvaders); works with World:Enabled false
+  //   "Drifter": { "Enabled": true },  // the mists' lone Red Drifters
+  //   "MaxTotal": 400, "MaxPerMap": 40,     // caps of the population
+  //   "PopulateSeconds": 5, "SpawnPerPass": 4, // a map with a human gets at most 4 new bots every 5 s, each out of every human's view
+  //   // "MinSpawnCells": 5,   // a spawn is more than this many visibility cells from every human (default Visibility:EnterCells + 1)
+  //   "LingerSeconds": 30,     // the bots of a map leave this long after its last human
+  //   "RespawnSeconds": "60-180", // a slot emptied by a defeat or .bot clear refills after this (the same name)
+  //   "StayMinutes": "10-30",  // a bot stays this long, then walks out through an exit or logs out ...
+  //   "ArrivalSeconds": "20-90", // ... and the next one of its slot arrives through an exit this much later
+  //   "ActiveRange": 120,      // a bot thinks only while a human is within this many metres (or sees it)
+  //   "ThinkSeconds": "0.5-2", // time between two decisions of a bot
+  //   "MoveResendSeconds": 0.5, // a walk under way is sent again this often while a human sees the bot
+  //   "Move": { "PauseChance": 0.15 }, // a short pause at a corner of a path
+  //   "Look": "Presets",       // Presets = characters.xml's 22 avatar looks; Random = a free face, hair, beard and colours
+  //   "FemaleShare": 0.4,
+  //   "Nav": { "LatticeStep": 4, "MaxExpansions": 20000, "SlowPathMs": 2, "CacheClusters": 32 }, // the walk grid's path lattice (m), path search cap, slow-path log, grids kept
+  //   "City": { "Enabled": true, // both presets: city bots in royal cities and start towns
+  //             "PerPoi": 3, "EmoteChance": 0.35, "Gatherers": 0, // city bots at one bank door / station at most; chance of an emote at a stop; gatherers on the T1 trees
+  //             "PoiShare": 0.6, "WanderMeters": "15-40", // both presets: the next goal a point of interest with this chance, else a spot this far away
+  //             "ExitShare": 0.5 }, // both presets: a city bot whose stay is over walks out through an exit with this chance, else logs out in place
+  //   "PvpRules": "Consent",   // Consent: you may attack a bot as the zone allows, a bot starts a fight only where Pvp:Mode allows; Server; Official
+  //   // "PvpRulesByZone": { "red": "Official", "black": "Official" }, // none officially; pve: these two, PvpRules per zone type (there patrols attack Blue players too)
+  //   //                       ("Roads" = the Roads of Avalon alone, before their warning type black)
+  //   "MountDistance": 40,     // a bot with a mount rides paths at least this long (m), out of combat
+  //   "Gatherer": { "Enabled": true, // both presets: gatherer bots
+  //                 "Flag": "Zone", "RedShare": 1.0, // Zone: Blue in safe/yellow/orange zones, Red in red/black ones (RedShare of them); or Blue / Red
+  //                 "Radius": 150, "Nodes": "6-20", // its nodes lie within this many m of its spawn; nodes before it walks out through an exit
+  //                 "AvoidPlayerRadius": 6, "AvoidMobRadius": 12, // no node with a player this near, nor one by a hostile mob's home
+  //                 "FleeHealth": 0.25, "FleeChance": 0.5, // below this health share it runs off once per fight, with this chance ...
+  //                 "FleeSeconds": 20, "FleeDistance": 25 }, // ... for this long and this far (m; both presets; a fighter's fall-back runs half of it)
+  //   "ConsumeNodes": false,   // true: gatherer bots take the nodes' charges as players do (false: their harvest is a show)
+  //   "Pvp": { "Enabled": true, // both presets; false = world bots never start a fight with a player (they still answer an attack; arena/hellgate/invader bots unaffected)
+  //            "EngageSeconds": 20, "EngageParty": true, "CrimesAgainstBots": true, // a bot answers its attacker (and party) this long; attacking a bot is a crime (pve: false)
+  //            "LethalToPlayers": false }, // true: a bot's lethal hit kills a player in a lethal zone (with Pvp:LethalDeath); false: a knockdown
+  //   "Combat": { "TickMs": 200, "ReactionMs": 600, // a fighting bot decides this often; its first swing this long after the first hit
+  //               "DamageFactor": 1.0, "HealthFactor": 1.0, // on their hits on players, on their maximum health (both presets 1.0 since botpower; pve was 0.7)
+  //               "Spells": "Full", "SpellChance": 0.6, // both presets: a fighting bot casts its gear's spells (this chance per second, attacks first); Off = swings only
+  //               "Tactics": true,  // spells by situation at once (dash when far, heal/shield when low, cc on a caster, burst a low target), potion/fall-back, kiting
+  //               "KiteDistance": 5, "RetreatHealth": 0.3, // a ranged bot steps back from a target this near (m, 0 = never); potion or fall-back below this health share
+  //               "Potions": "1-2", "Food": true, "FocusWeakest": true, // healing potions it carries; patrols eat a stew at spawn; patrols go for the weakest player
+  //               "RetargetSeconds": 5, "RetargetShare": 1.5, // both presets: an attacker that dealt 1.5 x the target's damage within 5 s becomes the target
+  //               "KiteSeconds": 1.2, "KiteEverySeconds": 2.5 }, // both presets: a ranged bot's step back, at most this often
+  //   "Difficulty": 1.0,       // x health and x hits on players of every bot but the companions (0.7 ~ the old soft pve bots, 1.5 hard)
+  //   "Gear": { "Mastery": 1.0, // the share of a full destiny board's item power on a bot's gear (both presets 1.0 = full spec, T7 gear at IP 1288; 0 = the items' own)
+  //             "DamageBonus": true, // a bot's spells add its worn spell damage bonus like a player's (cloth × 1.4-1.5, leather × 1.2-1.3)
+  //             "RedZoneTierBonus": 1, "Quality": "1-2", // patrols of red/black zones and roads this many tiers higher; the quality of world bots' gear
+  //             "EliteChance": 0.06, "EliteEnchant": "1-3", "EliteQuality": "3-4" }, // a rare elite patrol: enchanted weapon and armour of a better quality
+  //   "Patrol": { "Enabled": true, // both presets: patrol bots
+  //               "LeashRadius": 40, // a bot gives a target up this far from where the fight began
+  //               "AggroRadius": 15, "AttackMounted": true, // a patrol attacks a player it may fight (pve: a Red one) this near, with a way to him
+  //               "SpareMinutes": 5, "JoinGraceSeconds": 10, // not one it knocked down for 5 min, nor one who arrived on the map 10 s ago
+  //               "GroupSize": "1-3", "RedGroupSize": "2-3", // groups on a road or a loop (in red and black zones RedGroupSize) ...
+  //               "RouteDwellSeconds": "2-8", "RouteEndDwellSeconds": "5-20", // ... stops at its points
+  //               "FollowSpacing": 2.5 }, // both presets: a group member walks this far (m) x its place behind the leader
+  //   "Roads": { "PatrolGroupSize": "2-3", // the patrol groups of the Roads of Avalon (zone class Roads): the road gankers
+  //              "Portals": true,      // on a road bots come and go through its portals (a charge each, never the last) and patrols beat between them
+  //              "PortalWaitSeconds": "20-60" }, // how long a road patrol waits at a portal for a Red player
+  //   "Defeat": { "DieInLethalZones": true }, "DownDespawnSeconds": 10, // a defeated bot dies in lethal zones (else a knockdown), gone after 10 s (< 90)
+  //   "Rewards": { "Enabled": true, // both presets; false = a beaten bot gives no fame, PvP goal credit, silver or bag
+  //                "FameFactor": 0.5, "GearDropChance": 0.2, "ResourceDropShare": 0.5, // a defeat's fame share; each worn combat item in its bag; a gatherer's share
+  //                "DeathGearDropChance": 1.0, "MinItems": 0, // a death (red/black zones): each worn item with this chance, at least this many in the bag (pve: 0.5, 1)
+  //                "LootProtectionSeconds": null, // the bag the killer's party's this long (null = gamedata 120 s, 90 s in black zones)
+  //                "BagsPerHour": 30, "SameBotMinutes": 10, // farming caps: bags and silver per killer and hour; the same bot's full reward once in 10 min
+  //                "EliteSilverFactor": 2, "EliteExtraItems": 1 }, // an elite's silver x this, this many more of its worn items in its bag
+  //   "Social": { "Enabled": true, // both presets (needs Enabled): world bots are online players by name for party invites, friend requests and whispers; false = "not found" as before
+  //               "ReplyDelaySeconds": "2-6", // a bot answers after this long: an invite and a friend request are declined, a whisper gets a line of content/bots.json Chat.Whisper
+  //               "WhisperReplyChance": 0.8 }, // the chance a bot answers a whisper at all (once per sender in 30 s); nothing of it is stored (no friend, request or mute row)
+  //   "Party": { "Enabled": true, // both presets (needs Enabled and Social): a world bot may accept a party invite and play as the inviter's companion; false = always declined
+  //              "AcceptChance": 0.7, // an eligible bot (out of a fight, in no party, on the inviter's map) accepts with this chance
+  //              "TierRange": 1,      // its gear tier at most this far from the inviter's (average item power: T4 700 ... T8 1100)
+  //              "MaxPerParty": 2,    // world bots one party may have (hired companions not counted; 0 = none)
+  //              "MaxMinutes": 120,   // then it leaves; also when kicked, the party breaks up, the inviter leaves it or is away Companions:OwnerGraceSeconds
+  //              "City": true, "Gatherer": true, "Patrol": true, "Drifter": true }, // the kinds that may accept; a bot that leaves its party goes (its slot refills)
+  //   "Chat": { "Enabled": true, // both presets (needs Enabled): world bots speak on the local Say channel (the lines are content/bots.json "Chat")
+  //             "SayChancePerMinute": 0.05, // per city bot a player sees: the chance per minute of a line of Chat.Say (selling, LFG chatter)
+  //             "EmoteReplies": true, // a city bot you emote at (or the nearest within 8 m) answers with an emote of Chat.EmoteReplies, sometimes a Chat.Greet line
+  //             "FightLines": true,   // a bot that knocked a player down or was beaten says a Chat.Win / Chat.Loss line half the time ("gg")
+  //             "MaxLinesPerMinutePerCluster": 4 }, // all bot lines of one cluster in any minute (0 = silent); one line per bot in 30 s
+  //   "Roster": { "Enabled": true, // both presets: the population's bots are a fixed roster of identities (name, Guid, kind, home tier, look, gear) from Seed;
+  //               //                the same names come back with the same look and gear over respawns, turnovers and restarts (nothing stored);
+  //               //                a name a character takes is skipped; false = a fresh name per bot (the old behaviour)
+  //               "Seed": 1,       // another seed = another roster
+  //               "Size": 1500 },  // identities (1-8000; 40 % city, 35 % gatherer, 25 % patrol/Drifter); all of a kind online = fresh names as before
+  //   "Schedule": { // the population by the hour of the server's local time: a factor 0-3 on every map's counts, linear between two hours
+  //                 "Hours": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], // both presets: flat 1.0 (hour 0 first)
+  //                 // "Points": { "0": 0.5, "5": 0.25, "9": 0.5, "13": 0.8, "18": 1.2, "21": 1.3, "23": 0.8 }, // instead of Hours: a realistic evening peak
+  //                 "UtcOffsetHours": 0, // local time = UTC + this (-12..14), e.g. 3 for Moscow
+  //                 "LeavePerPass": 1 }, // when the curve falls: surplus bots per map and pass that go (unseen: log out at once; seen: end their stay); 0 = they stay their stay out
+  //   // Gear realism of the population (GM .bot, arena, hellgate, invader bots and companions as before; the tiers above stay):
+  //   // "Gear": { "MixedShare": 0.25, "TierSpread": 1, // each armour piece, weapon, offhand and cape with this chance 1..TierSpread tiers off (tools, bags, mounts, a gatherer's set not)
+  //   //           "EnchantChance": { "City": 0.03, "Start": 0, "Safe": 0.02, "Yellow": 0.04, "Orange": 0.06, "Red": 0.08, "Black": 0.12, "Roads": 0.12, "Mists": 0.08 },
+  //   //           "Enchant": "1-3",  // ... each weapon, offhand and armour piece enchanted .1-.3 with its zone's chance
+  //   //           "ArtifactChance": { "Red": 0.02, "Black": 0.06, "Roads": 0.06, "Mists": 0.03 } }, // each weapon and armour piece an artifact (T4+; content/bots.json Gear.ArtifactSets / ArtifactWeapons); a zone left out 0
+  //   //           (these sit in the "Gear" group above; one identity draws the same numbers each time: the same set in the same zone)
+  // },
+  // "Corrupted": {           // corrupted dungeons (README "Corrupted dungeons"); the official values, pve in brackets
+  //   "Enabled": true,         // the Hell Den entrances and the runs; the tables (completion rewards, chat lines, map weights) are content/corrupted.json
+  //   "ExitPortal": "AfterDemon", // ["Always"] the start room's exit portal: Always, AfterDemon (once the demon is slain) or Off (the escape spell only)
+  //   "InfamyFactor": 1,       // [2] x the infamy a run credits ((points + the demon bonus 300/1500/6000) at the completion)
+  //   "EarlyLeaveShare": 0,    // [0.5] leaving before the demon credits this share of points x InfamyFactor
+  //   "RewardFactor": 1,       // [1.5] x the completion's silver and fame
+  //   "EnterBuff": true,       // CORRUPTED_DUNGEON_ENTER (healing -40 %) on arrival, as the client data's spawnbuff
+  //   "ChestGuardRadius": 20,  // a standard chest unlocks once no demon lives within this many m
+  //   "ClearShare": 0.6,       // the demon comes after kills worth this share of the map's mob fame
+  //   "EmptyCloseSeconds": 30, "LingerSeconds": 300, "MaxMinutes": 120, "RelogMinutes": 10, // closing: after the owner left / after the demon / at the latest / a logout inside keeps the run
+  //   "CheckItemPower": false, // both presets: the server checks the plain average item power too (700/900/1100; the client always does, with its real figure)
+  //   "CheckInfamy": true,     // the server's copy of the client's infamy gate (Slayer 100 000 peak infamy)
+  //   "LeaveCommand": false,   // [true] .cd leave for players (officially only the exit portal and the escape spell)
+  //   // phase B: "Official" = the data's rolls; "Consent" = only an owner who used the Demonic Shrine of its run is invaded; "Off" = never
+  //   "Invasions": "Official", "PlayerInvasions": "Official", // ["Consent", "Consent"]
+  //   "BotInvaders": false,    // [true] the invader is a player bot when no consenting player of the rank waits (needs Bots:Enabled and Bots:Invader:Enabled)
+  //   "BotInvaderDelaySeconds": "60-180", // the bot invader comes this long after the shrine use (content/corrupted.json Rolls "Fixed")
+  //   "Invader": { "HealthFactor": 1, "DamageFactor": "0.8,1,1.2" }, // the bot invader's health, and its damage for Hunter, Stalker, Slayer
+  //   "InfamyLossOnDefeat": 0.1, // [0] the share of its infamy the beaten side of an invasion loses
+  //   "MaxInvasionsPerRun": 3, // [1]
+  //   "ShrineUseSeconds": 3, "InvadeCountdownSeconds": 10, // the shrine's use time; a matched player invader's countdown
+  //   "OpenWorldPortals": true, // the open world's corrupted portals on the SOLO markers (the randomdungeons distribution)
+  //   "MapsOpenDungeons": true, // [false] the corrupted dungeon maps open a portal as the client data says, the invasion tickets move to the Knight's Vows (false: the maps are invasion tickets)
+  //   "AntiReset": true, "AntiResetImps": 3, // [false] the anti-reset imps during an invasion
+  //   "Chain": true, "ChainBonus": 0, "ChainBonusMax": 0.5 // [ChainBonus 0.1] Next Dungeon after the demon; a streak's completion bonus
+  // },
+  // "Hellgates": {           // hellgates (README "Hellgates"); the official values, pve in brackets; chat lines and map weights: content/hellgates.json
+  //   "Enabled": true,         // the Hell Den shrines answer
+  //   "Modes": ["hellgate_2v2_non_lethal", "hellgate_5v5_non_lethal", "hellgate_2v2", "hellgate_5v5"], // the modes offered
+  //   "VersusModes": ["hellgate_2v2_non_lethal", "hellgate_5v5_non_lethal", "hellgate_2v2", "hellgate_5v5"], // [the two lethal ones] modes whose second objective is an enemy team (else a demon guardian)
+  //   "ShrineMode": "Gui",     // ["Fixed"] Gui: the client's mode window (a full party); Fixed: the shrine opens in your .hg mode (2-4 players for a 5v5 too)
+  //   "DefaultMode": "hellgate_2v2_non_lethal", // a character's mode before .hg mode (Fixed only)
+  //   "CheckItemPower": true,  // [false] the server checks the plain average item power too (700/900; the client always does)
+  //   "ChannelSeconds": 3, "LockSeconds": 3, "CancelDistance": 1, // a member's channel at the shrine, the party's lock, the move that cancels a channel
+  //   "BossMapFactor": 1,      // [3] x the weight of the boss maps (06, 10)
+  //   "GroupScaling": false, "ScalingBase": 0.4, "ScalingPerPlayer": 0.15, "ScalingMax": 1, "ScaleDamage": true, // [GroupScaling true] demons scaled for the players sent in
+  //   "FamePerPoint": 100,     // a demon's kill adds round(fame / this) points (100 / 500 needed)
+  //   "EnemyTeamSize": "Mode", // ["Party"] the enemy team: the mode's team size, or as many as the players sent in
+  //   "MatchStartSpell": true, "MobDespawnOnMatch": true, // full health at the second objective; a versus run's demons leave
+  //   "KnockdownSeconds": "archetype", // [30] a PvP knockdown inside ("archetype" = 600)
+  //   "WipeEndsRun": true, "ClaimSeconds": 120, // all members down loses the run; an unopened objective chest counts as claimed after this
+  //   "LeaveCommand": false,   // [true] .hg leave for players
+  //   "StartClearance": 25,    // the start points keep this far from every demon spawn point
+  //   "MaxMinutes": 30, "FinishedLingerSeconds": 120, "EmptyCloseSeconds": 60, "ArrivalGraceSeconds": 120, // [FinishedLingerSeconds 300] closing
+  //   "FallbackCluster": "0000", // where a player without a way back goes out
+  //   "Chain": true,           // phase B: after the claim the chain exit into the next hellgate of the mode (chests x the client's chain factor)
+  //   "InfamyWin": 100,        // phase B: hellgate infamy (2v2 / 5v5) per win for each winner inside (0 = none)
+  //   "Matchmaking": "Players", "MatchSeconds": 60, // ["Bots"] a second party of the same versus mode may join a hellgate this young (else bots / the guardian)
+  //   "RestrictedArea": true,  // [false] the ring of fire 90 s after the start of a fight against a team, its damage outside
+  //   "SpawnBuffs": true       // [false] the cluster type's spawn buffs on arrival (HELL_2V2_ENTER -35 % healing, spawn invulnerability)
+  // },
+  // "Roads": {               // the Roads of Avalon (README "Roads of Avalon"); the official values, pve in brackets
+  //   "Enabled": true,         // the portal network, its portals and the travel through them
+  //   "Layers": "all",         // or a list of ROYAL, BLACK, TUNNEL, DEEP, HIDEOUT or tunnel presets (["ROYAL"] = the royal zones and royal roads; an unknown name stops the start)
+  //   "LifetimeMinutes": "data", // a link's lifetime (tunnelsystem.xml 720-1440); "70-70" or [70, 70] overrides it
+  //   "Charges": "data",       // or { "GROUP": { "MaxCharges": 7, "ChargeSeconds": 600, "UsedSeconds": 600 }, "SOLO": {...}, "RAID": {...} }
+  //   "EnterRadius": "data",   // metres about the portal it is used from (gamedata defaultexitusagedistance, 5) + Transfer:PositionTolerance
+  //   "Rescue": false, "RescueMinutes": 60, // [true] a road with a player and no link gets one at once, this long (a server addition)
+  //   "UpdateSeconds": 1, "RetrySeconds": 60, // the network's tick; a searching exit's next try for a partner
+  //   "Seed": null,            // a fixed seed of the network's random numbers
+  //   "Command": "Gm",         // ["All"] who may use .roads and .roads route: All or Gm
+  //   "Chests": true,          // the road camps' chests with their guards at the chest's level
+  //   "FixedDungeons": true,   // the road camps' fixed dungeon exits (solo, veteran, Avalonian elite; levels 2-4), Dungeons:FixedExits or not
+  //   "LogoutSeconds": 900,    // ["world"] the logout time in a road: seconds (the client's own count), or "world" = World:LogoutSeconds
+  //   "ThrowOutAfterMinutes": 60, // [0] back in a road after this long offline: thrown out to the respawn city, gear worn, a third of each stack lost (0 = never)
+  //   "TempPortalSeconds": 5   // a zone portal that closes in view leaves its short-lived visual this long (0 = none)
+  // },
+  // "Mists": {               // the Mists (README "The Mists"); the official values, pve in brackets; treasures and chat lines: content/mists.json
+  //   "Enabled": true,         // the open world's mists portals and ENTER_MISTS
+  //   "Matchmaking": "Shared", // ["Private"] shared zones up to the map's soft player limit, or a zone per team and portal
+  //   "LifetimeFactor": 1, "BlockFactor": 1, // [2, 0.5] x the zone's close/shutdown times (600/1200 s), x the treasures' unlock times
+  //   "OpenWorldWeight": 1,    // x the MISTS_* weights of the random exit distribution (0 = no portals)
+  //   "DuoSoloScaling": 1,     // [0.6] mob health and damage in a duo zone entered alone
+  //   "OpenWorldExit": "Random", // ["Entrance"] the zone's open-world exit leads to a world zone of a drawn warning type, or back to the entrance
+  //   "UnrestrictedZones": true, // [false] the camps' free-for-all zones (phase B; only under Pvp:Mode Official)
+  //   "BossChest": false, "BossChestShare": 0.1, // [true] a reward chest for each player with this share of a mist boss's threat
+  //   "EmptySeconds": 120,     // an empty zone closes this long after
+  //   "FallbackCluster": "5001", "RespawnCluster": "5001", // out without a way back; a death's respawn
+  //   "RarityWeights": "data", // [6000, 1600, 1200, 800, 400] the portals' rarity 0-4 (data: 9590/195/110/65/40)
+  //   "StandingFactor": 1,     // [2] x the Brecilien standing of a mists kill's fame (phase B)
+  //   "StaticEntrance": true,  // Brecilien's static entrance into the mists (phase B)
+  //   "DrifterNeedsRed": true  // the Drifter bots come into a private zone only while a Red player is in it (phase B; bots are off under official)
+  // },
+  // "Companions": {          // companion bots players hire into their party (README "Companions"); not official: Enabled false (pve: true)
+  //   "Enabled": false,        // .companion hire <tank|healer|melee|ranged> [tier], .companion dismiss [name|role|n|all], .companion list
+  //   "MaxPerPlayer": 4, "MaxPartySize": 5, // companions per player (at most 4); a hire only while the party (players + companions) stays within 5
+  //   "MinTier": 3, "MaxTier": 8, // the gear tier from the owner's average item power (T4 = 700 ... T8 = 1100) is kept within these
+  //   "HealthFactor": 1, "DamageFactor": 1, // x a companion's maximum health (its gear's) and its damage on mobs
+  //   "GearMastery": 1.0, "GearDamageBonus": true, // [pve 0.5, false] its share of the full destiny board; its spells add its worn spell bonus
+  //   "TankThreatFactor": 3,   // a tank's damage counts this many times as threat (plus its TAUNT and a threat pull every 6 s)
+  //   "HealBelow": 0.85,       // a healer heals a party member under this share of its health (and revives bleeding-out members first)
+  //   "FollowDistance": 4, "AssistRange": 25, "LeashDistance": 35, // m: walk back beyond; fight the party's mobs within, of the owner; give up a fight beyond
+  //   "TeleportDistance": 60, "StuckSeconds": 6, // put next to the owner when this far, or not nearer for this long
+  //   "OwnerGraceSeconds": 120, // companions wait this long for an owner who is out of the game (a relog: they are gone after it)
+  //   "SpellChance": 0.5       // chance per second of a fight to cast one of its spells (heals and taunts go when needed)
+  // },
+  // "Pve": {
+  //   "KnockdownWear": 0,    // share of max durability a mob's knockdown takes (0..1; 0.01-0.03 for a little risk); 0 = none, as official
+  //   "PartyRevive": false   // [pve true] a knocked-down player with a party/guild mate on the map bleeds out and can be revived (6 s, 30 % health)
+  // },
+  // "ClientNumbering": { "BuildingIdOffset": 1, "ItemBuildingBase": 653 } // building type id = buildings.xml index + this (every captured building); a placed item's = base + its index
+  // Content packs (tools/AlbionLocal.ModKit/README.md): the client side (items, spells, names) goes into game-local with the modkit's
+  // build; here only the packs' server-only extras (mods/<pack>/server/drops.json: where their items drop) are switched on.
+  // "Mods": {
+  //   "Path": "mods",              // the pack folders
+  //   "Packs": ["example-blade"]   // the packs whose drops the server rolls (build them into game-local first); their plugins/ load too
+  // },
+  // C# plugins (plugins/README.md): plugins/<name>/ with plugin.json and sources (built with the local dotnet SDK into data/plugins-bin)
+  // or a prebuilt DLL; GM command .plugins list|reload|enable|disable.
+  // "Plugins": {
+  //   "Enabled": true,             // [pve true, official false] load plugins at all
+  //   "Path": "plugins",           // the plugin folders
+  //   "List": [],                  // names to load whatever plugin.json "enabled" says; empty = the plugins with "enabled": true
+  //   "Build": true,               // build plugins from sources when they changed (dotnet build); false = prebuilt DLLs only
+  //   "MaxErrors": 10,             // a plugin whose handlers threw this many times is disabled (the server goes on)
+  //   "SlowMs": 50                 // a handler that takes longer is logged as slow
+  // }
+}

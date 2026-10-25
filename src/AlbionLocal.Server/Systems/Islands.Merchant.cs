@@ -33,7 +33,7 @@ public sealed partial class Islands
     /// BuyMyIsland (§2.2): a personal island of the city of <paramref name="ap"/> (the merchant in view, "&lt;its id&gt;@&lt;city&gt;" its key 1),
     /// at level 0, for the client's price <paramref name="clientPrice"/> (a7m) when it fits the expected one (charged as it is; nothing with
     /// Islands:FreeIslands). Refused (null, the reason): islands off, no personal type here, one owned already, too few premium days
-    /// (Islands:PremiumDays below the type's premiumrequirement, the client's own check), the price, the silver.
+    /// (<see cref="Premium.Days"/> below the type's premiumrequirement, the client's own check), the price, the silver.
     /// </summary>
     public Island? Buy(Player p, IslandAccessPoint ap, string? apText, long clientPrice, out string why)
     {
@@ -43,7 +43,7 @@ public sealed partial class Islands
         else if (Data?.PersonalOf(map.Cluster) is not { } type) why = $"{map.Cluster} has no personal island type";
         else if (apText != $"{ap.Spawn.Guid:D}@{map.Cluster}") why = $"access point '{apText}' is not the merchant's {ap.Spawn.Guid:D}@{map.Cluster}";
         else if (Of(p.Character.Id).Any(i => i.Type == type.Id)) why = $"'{p.Character.Name}' owns a {type.Name} already";
-        else if (world.Config.IslandsPremiumDays < type.PremiumRequirement) why = $"Islands:PremiumDays {world.Config.IslandsPremiumDays} < {type.PremiumRequirement}";
+        else if (Premium.Days(p) < type.PremiumRequirement) why = $"premium days {Premium.Days(p)} < {type.PremiumRequirement} (Islands:PremiumDays, premium or Islands:BuyWithoutPremium)";
         else if (AccessPointOf(type) is null) why = $"no island access point of {type.City} known";
         else if (PriceOf(p.Character.Id, type, 0) is not { } price) why = $"{type.Name} has no level 0";
         else
@@ -76,7 +76,7 @@ public sealed partial class Islands
         else if (island.Upgrading(now)) why = $"{island} is being upgraded";
         else if (Data?.TypeAt(island.Type) is not { } type || PriceOf(p.Character.Id, type, island.Level + 1) is not { } price)
             why = $"{island} is at its top level";
-        else if (world.Config.IslandsPremiumDays < type.PremiumRequirement) why = $"Islands:PremiumDays {world.Config.IslandsPremiumDays} < {type.PremiumRequirement}";
+        else if (Premium.Days(p) < type.PremiumRequirement) why = $"premium days {Premium.Days(p)} < {type.PremiumRequirement} (Islands:PremiumDays, premium or Islands:BuyWithoutPremium)";
         else
         {
             var charge = world.Config.IslandsFreeIslands ? 0 : clientPrice;

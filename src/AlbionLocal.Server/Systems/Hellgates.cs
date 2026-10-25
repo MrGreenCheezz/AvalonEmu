@@ -696,11 +696,11 @@ public sealed partial class Hellgates(World world)
 
     /// <summary>
     /// A versus run's enemy team (SPEC §5.2): Hellgates:EnemyTeamSize bots (BotRole.Hellgate, one group, gear of the map's tier, × the instance's
-    /// scaling) at start B; how many came (0 without Bots:Enabled or the map's walk grid: the guardian instead).
+    /// scaling) at start B; how many came (0 without Bots:Enabled, Bots:Hellgate:Enabled or the map's walk grid: the guardian instead).
     /// </summary>
     private int SpawnEnemies(HellgateInstance i, Map map)
     {
-        if (!world.Bots.Enabled || world.Bots.NavOf(map) is not { Usable: true } nav || map.Template is not { } t) return 0;
+        if (!world.Bots.HellgateBots || world.Bots.NavOf(map) is not { Usable: true } nav || map.Template is not { } t) return 0;
         var chest = t.HellgateMarkers.FirstOrDefault(m => m.Name == HellgateData.ObjectiveChest)?.Position ?? i.Start.Position;
         var n = Options.EnemyTeamSize == HellgateEnemyTeam.Party ? i.Players : i.Mode.TeamSize;
         var group = new BotGroup(new PatrolRoute([i.StartB, chest], Loop: false));

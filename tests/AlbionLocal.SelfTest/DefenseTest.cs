@@ -142,7 +142,7 @@ public static class DefenseTest
         {
             var file = Path.Combine(dir, name + ".json");
             File.WriteAllText(file, $$"""{ "Preset": "{{name}}" }""");
-            return ServerConfig.Load(file, []).Bots;
+            return LoadTestConfig(file, []).Bots;
         }
         var (official, pve) = (Preset("official"), Preset("pve"));
         var companions = ServerConfig.PveDefaults.Companions;

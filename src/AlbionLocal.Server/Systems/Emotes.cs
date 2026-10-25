@@ -44,6 +44,7 @@ public static class Emotes
         p.Session.Send(ev);
         p.SendToObservers(ev);
         if (e.Loops) p.Emote = e;
+        world.Bots.Social.PlayerEmoted(p, index, target); // bot-social: a city bot near may answer it
         return null;
     }
 

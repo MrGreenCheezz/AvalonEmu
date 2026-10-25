@@ -14,7 +14,7 @@ using static AlbionLocal.SelfTest.CombatTest;
 namespace AlbionLocal.SelfTest;
 
 /// <summary>
-/// The rate modifiers (config section Rates, <see cref="Rates"/>): the config with the old World:MobRespawnScale, data/rates.json,
+/// The rate modifiers (config section Rates, <see cref="Rates"/>): the config with the old World:MobRespawnScale,
 /// .rates, and their effect where the quantities are computed: ×3 combat fame (UpdateFame), ×10 silver (the pile), ×2 harvest
 /// (HarvestFinished key 5 and the stack), ×4 regrowth.
 /// </summary>
@@ -22,7 +22,8 @@ public static class RatesTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
-        ("rates: config section, World:MobRespawnScale as Rates:Respawn, data/rates.json, .rates show/set/save/reset and its level", Config),
+        ("rates: config section, atomic temporary changes, reset, rejected save and command permissions", Config),
+        ("rates: legacy saved overrides ignored intact and temporary rates lost on server recreation", LegacyOverrides),
         ("rates: .rates combatfame 3 triples the kill fame (UpdateFame keys 2/3, total), silver 10 the pile", KillRates),
         ("rates: harvest 2 doubles a T1 tree's yield (HarvestFinished key 5, the stack), regrowth 4 a quarter of the time", HarvestRates),
     ];
@@ -31,22 +32,23 @@ public static class RatesTest
     {
         var dir = NewDir();
         var path = Path.Combine(dir, "albionlocal.json");
-        Check(ServerConfig.Load(path, ["--Preset=official"]).Rates == new Rates() && new Rates().Describe(changedOnly: true) == "all 1", "no file, Preset official: every rate 1 (pve: PveTest)");
+        Check(LoadTestConfig(path, ["--Preset=official"]).Rates == new Rates() && new Rates().Describe(changedOnly: true) == "all 1", "no file, Preset official: every rate 1 (pve: PveTest)");
         File.WriteAllText(path, """{ "Rates": { "Harvest": 2, "combatFame": 3 }, "World": { "MobRespawnScale": 0.01 } }""");
-        var c = ServerConfig.Load(path, ["--Preset=official", "--Rates:Silver=1.5"]);
+        var c = LoadTestConfig(path, ["--Preset=official", "--Rates:Silver=1.5"]);
         Check(c.Rates is { Harvest: 2, CombatFame: 3, Silver: 1.5, Fame: 1 } && Math.Abs(c.Rates.Respawn - 100) < 1e-9,
               $"Rates keys (any case, command line too); World:MobRespawnScale 0.01 is Rates:Respawn 100 (got {c.Rates.Describe()})");
         bool Fails(params string[] args)
         {
-            try { ServerConfig.Load(path, args); return false; }
+            try { LoadTestConfig(path, args); return false; }
             catch (InvalidDataException) { return true; }
         }
         Check(Fails("--Rates:Respawn=2") && Fails("--Rates:Loot=-1") && Fails("--Rates:Regrowth=0") && Fails("--Rates:Speed=2"),
               "refused: Rates:Respawn beside the old World:MobRespawnScale, a negative rate, regrowth 0, an unknown rate");
 
-        // .rates: shown at GameMaster, set only by Admin; save writes the rates that differ from the config's, reset removes them.
+        // .rates: shown at GameMaster, set only by Admin, with the files authoritative after restart.
         using var repo = Repository(dir);
-        var world = new World(new ServerConfig { SavesPath = dir }, repo, Client.Items) { Sync = new object(), Clock = new ManualClock() };
+        var initial = new Rates { Fame = 1.5 };
+        var world = new World(new ServerConfig { SavesPath = dir, Rates = initial }, repo, Client.Items) { Sync = new object(), Clock = new ManualClock() };
         var replies = new List<(string Text, bool Error)>();
         void Run(AccountLevel level, string line)
         {
@@ -59,15 +61,48 @@ public static class RatesTest
         Run(AccountLevel.GameMaster, ".rates harvest 2");
         Check(replies is [{ Error: true }] && world.Rates.Harvest == 1, "a GameMaster cannot change them");
         Run(AccountLevel.Admin, ".rates harvest 2.5 save");
-        Check(replies is [{ Error: false }] && world.Rates.Harvest == 2.5 && File.Exists(file) && Rates.Load(file, new Rates()) == new Rates { Harvest = 2.5 },
-              $"Admin: .rates harvest 2.5 save sets it and writes {file} (got {string.Join(" / ", replies)})");
+        Check(replies is [{ Error: true }] && world.Rates == initial && !File.Exists(file), "save is rejected before changing rates or writing files");
+        Run(AccountLevel.Admin, ".rates harvest 2.5");
+        Check(replies is [{ Error: false }] && world.Rates.Harvest == 2.5 && !File.Exists(file), "Admin can set a temporary rate without writing files");
+        var active = world.Rates;
+        foreach (var invalid in new[] { active with { Fame = 7, ChestRespawn = 0 }, active with { Fame = double.NaN }, active with { Silver = double.PositiveInfinity } })
+        {
+            var rejected = false;
+            try { world.ApplyRates(invalid); }
+            catch (ArgumentException) { rejected = true; }
+            Check(rejected && world.Rates == active, "an invalid complete candidate leaves every active rate unchanged");
+        }
         Run(AccountLevel.Admin, ".rates respawn 0");
         Check(replies is [{ Error: true }] && world.Rates.Respawn == 1, "respawn 0 is refused");
         world.MobRespawnScale = 0.5;
         Check(world.Rates.Respawn == 2 && world.MobRespawnScale == 0.5, ".mob respawnscale's factor is 1 / Rates:Respawn");
         Run(AccountLevel.Admin, ".rates reset save");
-        Check(replies is [{ Error: false }] && world.Rates == new Rates() && !File.Exists(file), ".rates reset save: the config's rates, the file removed");
+        Check(replies is [{ Error: true }] && world.Rates.Harvest == 2.5 && world.Rates.Respawn == 2 && !File.Exists(file), "reset save is rejected without resetting or writing files");
+        Run(AccountLevel.Admin, ".rates reset");
+        Check(replies is [{ Error: false }] && world.Rates == initial && !File.Exists(file), "reset restores the effective startup rates, including non-default values");
         world.Dispose();
+    }
+
+    private static void LegacyOverrides()
+    {
+        var dir = NewDir();
+        var file = Rates.FilePath(dir);
+        var bytes = System.Text.Encoding.UTF8.GetBytes("not valid JSON: must never be read as configuration");
+        File.WriteAllBytes(file, bytes);
+        using (var host = Host(dir))
+        {
+            Check(host.World.Rates == host.Config.Rates, "malformed legacy rates.json cannot override or prevent startup");
+            host.World.ApplyRates(host.Config.Rates.With("Fame", 7));
+            Check(host.World.Rates.Fame == 7, "temporary active world rate applied");
+        }
+        using (var host = Host(dir))
+            Check(host.World.Rates == host.Config.Rates && host.World.Rates.Fame == 1, "recreated server restores configured rates");
+        Check(File.ReadAllBytes(file).SequenceEqual(bytes), "legacy rates file remains byte-for-byte intact");
+
+        var rejected = false;
+        try { using var unsupported = new ServerHost(new ServerConfig { PersistenceProvider = "PostgreSQL", ClientGameDataPath = Path.Combine(dir, "absent") }); }
+        catch (InvalidDataException e) { rejected = e.Message.Contains("Persistence:Provider"); }
+        Check(rejected, "unsupported provider rejected before client-data loading or socket binding");
     }
 
     private static void KillRates()
@@ -125,6 +160,11 @@ public static class RatesTest
               $"harvest ×2: HarvestFinished key 5 = 4 (2 at rate 1), a stack of 4 T1_WOOD, the tree's 2 charges taken (got {Show(Since(peer, mark).Where(e => e.Code == EventCodes.HarvestFinished))}, stack {wood?.Count})");
         Check(node.RegrowAt is { } at && at - clock.Now <= TimeSpan.FromSeconds(45),
               $"regrowth ×4: the next charge within 180 / 4 = 45 s (at rate 1: 60-180 s; got {(node.RegrowAt - clock.Now)?.TotalSeconds:0.#} s)");
+        var scheduled = node.RegrowAt;
+        var awardedFame = player.Character.Fame;
+        world.ApplyRates(new Rates { Regrowth = 100, Fame = 100 });
+        Check(node.RegrowAt == scheduled && player.Character.Fame == awardedFame,
+              "applying rates leaves already scheduled regrowth and previously awarded fame unchanged");
         // A yield above the stack limit (a harvest at .rates harvest 1000) fits no free slot: the start is refused as inventory full.
         Check(Harvesting.Fit(player.Inventory.Bag, Client.Items.Find("T1_WOOD")!, 2000) is null && Harvesting.Fit(player.Inventory.Bag, Client.Items.Find("T1_WOOD")!, 2) is not null,
               "2000 wood fit no slot (stack limit), 2 do");

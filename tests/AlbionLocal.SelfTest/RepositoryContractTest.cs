@@ -2,7 +2,9 @@ using System.Net;
 using System.Text.Json;
 using AlbionLocal.Server;
 using AlbionLocal.Server.Content;
+using AlbionLocal.Server.Network;
 using AlbionLocal.Server.Persistence;
+using AlbionLocal.Server.Protocol;
 using static AlbionLocal.SelfTest.AlbionTests;
 
 namespace AlbionLocal.SelfTest;
@@ -124,11 +126,17 @@ public static class RepositoryContractTest
             {
                 Check(ReferenceEquals(host.Characters, factory.Opened) && ReferenceEquals(host.World.Market, factory.Opened)
                     && ReferenceEquals(host.World.Mail, factory.Opened), "host and services share the injected backend");
-                Check(host.Characters.Find("LocalHero") is not null, "bootstrap created the default character through the backend");
+                Check(host.Characters.List().Count == 0, "fresh host does not create claimable legacy characters");
+                var peer = new FakePeer();
+                new LoginSession(peer, host.Config, host.Characters, host.Starter).OnRequest(Request(TestLogin(), 1), false);
+                Check(peer.Responses.Last().ReturnCode == LoginCodes.InvalidAccountNameOrPassword
+                    && host.Characters.FindAccount("user") is null,
+                    "fresh non-tutorial host refuses unknown login with auto-registration disabled");
+                host.Characters.Create(StarterKit.Default.NewCharacter("BackendProbe"));
                 Check(!File.Exists(config.DatabasePath), "host did not open the default database");
             }
             using (var reopened = new SqliteRepositoryFactory().Open(config with { SavesPath = Path.Combine(dir, "backend") }))
-                Check(reopened.Find("LocalHero") is not null, "injected database survives host disposal");
+                Check(reopened.Find("BackendProbe") is not null, "injected database survives host disposal");
             using var exclusive = File.Open(Path.Combine(dir, "backend", "albionlocal.db"), FileMode.Open, FileAccess.Read, FileShare.None);
         }
         finally { Directory.Delete(dir, true); }
@@ -151,7 +159,8 @@ public static class RepositoryContractTest
             using (File.Open(Path.Combine(dir, "backend", "albionlocal.db"), FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
             File.Delete(config.JsonSavePath);
             using var retry = new ServerHost(config, Client with { Clusters = null }, factory);
-            Check(retry.Characters.Find("LocalHero") is not null, "startup can retry after a failed import");
+            Check(retry.Characters.List().Count == 0 && retry.Characters.Accounts().Count == 1,
+                "startup can retry after a failed import without creating a claimable character");
         }
         finally { Directory.Delete(dir, true); }
     }

@@ -1,5 +1,5 @@
 // Hellgates (analysis/work/stageL/hellgates/SPEC.md; README "Hellgates"). The switches and the factors that differ between the presets are
-// config keys (config/albionlocal.json "Hellgates"); here the tables. Every key is optional; a missing key keeps the value shown here.
+// config keys (config/world.jsonc "Hellgates"); here the tables. Every key is optional; a missing key keeps the value shown here.
 // Read at the start.
 {
   // The weight of a map instead of hellgate.xml's (32 plain, 10 with a miniboss, 5 with a boss; 0 = never picked), e.g.

@@ -53,7 +53,7 @@ data/plugins-bin/<name>/      the generated project (build/) and the build outpu
 A prebuilt plugin is a class library for `net10.0` that references `AlbionLocal.Plugin.Api.dll` with `Private=false`
 (do not ship that DLL: the server's own is used).
 
-## Configuration (`config/albionlocal.json`)
+## Configuration (`config/world.jsonc`)
 
 | Key | Default | Meaning |
 |---|---|---|

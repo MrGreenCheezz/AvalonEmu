@@ -4,17 +4,15 @@ using AlbionLocal.Server.Persistence;
 
 namespace AlbionLocal.Server.Commands.Builtin;
 
-/// <summary>The rate modifiers (<see cref="Rates"/>, config section Rates): .rates.</summary>
+/// <summary>The temporary world rate modifiers (config section Rates): .rates.</summary>
 public static class RatesCommands
 {
     /// <summary>
-    /// Without <paramref name="name"/>: the rates in force. With a name and <paramref name="value"/> (Admin): sets that rate
-    /// for the world (<see cref="World.Rates"/>), from the next quantity it computes on (a respawn or regrowth already
-    /// scheduled keeps its time); <paramref name="save"/> "save" also writes the rates that differ from the config's to
-    /// data/rates.json, which the next start reads over the config. ".rates reset [save]" goes back to the config's rates
-    /// (save: the file is deleted).
+    /// Shows the active rates, or (Admin) changes them for future calculations until restart.
+    /// Already scheduled respawns and regrowth keep their time. Reset restores the startup configuration.
+    /// The legacy save argument is accepted by the parser only to return a useful error without changing state.
     /// </summary>
-    [Command("rates", Level = AccountLevel.GameMaster, Help = "shows the rates (fame, harvest, silver, loot, respawn, …); Admin: .rates <name> <value> [save], .rates reset [save]")]
+    [Command("rates", Level = AccountLevel.GameMaster, Help = "shows the rates (fame, harvest, silver, loot, respawn, …); Admin: .rates <name> <value>, .rates reset; changes last until restart")]
     public static void Show(CommandContext ctx, string? name = null, string? value = null, string? save = null)
     {
         var world = ctx.World;
@@ -25,28 +23,23 @@ public static class RatesCommands
         }
         if (ctx.Level < AccountLevel.Admin) throw new CommandError("changing the rates needs Admin");
         var reset = name.Equals("reset", StringComparison.OrdinalIgnoreCase);
-        if (reset) (save, value) = (value, null);
-        if (save is not null && !save.Equals("save", StringComparison.OrdinalIgnoreCase))
-            throw new CommandError($"'{save}': expected save or nothing");
-        Rates rates;
-        if (reset) rates = world.Config.Rates;
-        else
+        if (save is not null || reset && value is not null)
+            throw new CommandError("rates cannot be saved by command; edit world.jsonc for permanent changes. Use .rates <name> <value> or .rates reset for temporary changes.");
+        lock (world.Sync)
         {
-            if (Rates.Canonical(name) is not { } key) throw new CommandError($"'{name}' is not a rate ({string.Join(", ", Rates.Names)})");
-            if (value is null) throw new CommandError($".rates {key} <value> [save]; now {world.Rates.Get(key)!.Value.ToString("0.####", CultureInfo.InvariantCulture)}");
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) throw new CommandError($"value: '{value}' is not a number");
-            try { rates = world.Rates.With(key, v); }
+            Rates rates;
+            if (reset) rates = world.Config.Rates;
+            else
+            {
+                if (Rates.Canonical(name) is not { } key) throw new CommandError($"'{name}' is not a rate ({string.Join(", ", Rates.Names)})");
+                if (value is null) throw new CommandError($".rates {key} <value>; now {world.Rates.Get(key)!.Value.ToString("0.####", CultureInfo.InvariantCulture)}");
+                if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var v)) throw new CommandError($"value: '{value}' is not a number");
+                try { rates = world.Rates.With(key, v); }
+                catch (ArgumentException e) { throw new CommandError(e.Message); }
+            }
+            try { world.ApplyRates(rates); }
             catch (ArgumentException e) { throw new CommandError(e.Message); }
+            ctx.Reply($"rates: {rates.Describe()}; temporary until server restart");
         }
-        world.Rates = rates;
-        var saved = "";
-        if (save is not null)
-        {
-            var path = Rates.FilePath(world.Config.SavesPath);
-            try { rates.Save(path, world.Config.Rates); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { throw new CommandError($"set, but not saved to {path}: {e.Message}"); }
-            saved = rates == world.Config.Rates ? $"; {path} removed" : $"; saved to {path}";
-        }
-        ctx.Reply($"rates: {rates.Describe()}{saved}");
     }
 }

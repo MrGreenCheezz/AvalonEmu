@@ -150,7 +150,8 @@ public static class TutorialJourney
     }
     public static void BuildingInteracted(Player p, Building building)
     {
-        if (building.Map != p.Map || Vector2.DistanceSquared(p.PositionAt(DateTime.UtcNow), building.Position) > OpeningTutorial.TalkRange * OpeningTutorial.TalkRange) return;
+        if (p.Map is null || building.Map != p.Map || !p.Visibility.Knows(building)
+            || Vector2.DistanceSquared(p.PositionAt(DateTime.UtcNow), building.Position) > WorldSession.StationRange * WorldSession.StationRange) return;
         Observe(p, m => m.Name == "interactwithbuilding" && Attr(m, "buildingid") == building.Template.Name
             || m.Name == "usefunction" && Attr(m, "function") == "InteractWithMarketplace" && building.Template.Name.Contains("MARKETPLACE", StringComparison.Ordinal));
     }

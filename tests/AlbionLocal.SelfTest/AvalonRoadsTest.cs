@@ -59,14 +59,14 @@ public static class AvalonRoadsTest
               "§6.2: the split TUNNEL_ROYAL 6 = [1, 1, 1, 3], TUNNEL_BLACK_MEDIUM 5 = [2, 1, 2]; the RO biome token is Roads");
         var cfg = NewDir();
         var none = Path.Combine(cfg, "albionlocal.json");
-        Check(ServerConfig.Load(none, []).Roads == new RoadsOptions { Command = RoadsCommandAccess.All, LogoutSeconds = null, ThrowOutAfterMinutes = 0 }
-              && ServerConfig.Load(none, ["--Preset=official"]).Roads == new RoadsOptions() && ServerConfig.Load(none, ["--Preset=official", "--Roads:LogoutSeconds=world"]).Roads.LogoutSeconds is null
-              && ServerConfig.Load(none, ["--Roads:LifetimeMinutes=70-70", "--Roads:Charges:GROUP:MaxCharges=3", "--Roads:Layers=ROYAL"]).Roads is
+        Check(LoadTestConfig(none, ["--Preset=pve"]).Roads == new RoadsOptions { Command = RoadsCommandAccess.All, Rescue = true, LogoutSeconds = null, ThrowOutAfterMinutes = 0 }
+              && LoadTestConfig(none, ["--Preset=official"]).Roads == new RoadsOptions() && LoadTestConfig(none, ["--Preset=official", "--Roads:LogoutSeconds=world"]).Roads.LogoutSeconds is null
+              && LoadTestConfig(none, ["--Roads:LifetimeMinutes=70-70", "--Roads:Charges:GROUP:MaxCharges=3", "--Roads:Layers=ROYAL"]).Roads is
                   { LifetimeMinutes: (70, 70), Layers: ["ROYAL"] } r && r.Charges["GROUP"].MaxCharges == 3 && r.LayerOn("SAFEZONE") && !r.LayerOn("TUNNEL_DEEP")
-              && ServerConfig.Load(none, []).Bots.RoadsPatrolGroupSize == (2, 3) && BotSettings.Default.Counts["Roads"][BotRole.Patrol] == 2,
+              && LoadTestConfig(none, []).Bots.RoadsPatrolGroupSize == (2, 3) && BotSettings.Default.Counts["Roads"][BotRole.Patrol] == 2,
               "Roads:* under pve (.roads for all, the world's logout, never thrown out), official (the record's: 900 s, 60 min), explicit keys win; Bots:Roads:PatrolGroupSize 2-3, Counts.Roads");
         var typo = false;
-        try { _ = ServerConfig.Load(none, ["--Roads:Layers=ROYALS"]); }
+        try { _ = LoadTestConfig(none, ["--Roads:Layers=ROYALS"]); }
         catch (InvalidDataException) { typo = true; }
         Check(typo, "Roads:Layers: an unknown layer (ROYALS) stops the start");
         try { Directory.Delete(cfg, true); } catch (IOException) { }
@@ -243,14 +243,14 @@ public static class AvalonRoadsTest
         characters.Dispose();
         var pve = ServerConfig.PveDefaults with
         {
-            JoinByCharacterId = true, Roads = new RoadsOptions { Seed = 11, Command = RoadsCommandAccess.All }, Bots = ServerConfig.PveDefaults.Bots with { Enabled = false },
+            JoinByCharacterId = true, Roads = new RoadsOptions { Seed = 11, Command = RoadsCommandAccess.All, Rescue = true }, Bots = ServerConfig.PveDefaults.Bots with { Enabled = false },
         };
         (world, _, characters) = NewWorld(pve, dir, clock);
         roads = world.Roads;
         var after = roads.Links.Select(l => (l.Id, l.Out.Cluster, l.Out.Path, l.In.Cluster, l.In.Path, l.Type, l.Opened, l.Closes, l.Charges)).ToHashSet();
         Check(before.IsSubsetOf(after) && after.Count == before.Count, $"§6.8: the restart takes up the same {before.Count} links (got {after.Count}, {before.Except(after).Count()} missing)");
 
-        // §6.10: a deep raid road with a player inside and no link gets one within a tick.
+        // §6.10 (Roads:Rescue, the pve preset's): a deep raid road with a player inside and no link gets one within a tick.
         var raid = roads.Nodes.Values.Where(n => n.Preset.Name == "TUNNEL_DEEP_RAID").OrderBy(n => n.Cluster, StringComparer.Ordinal).First();
         lock (world.Sync)
             foreach (var l in raid.Slots.Select(s => s.Link).OfType<RoadLink>().Distinct().ToList()) roads.Close(l);

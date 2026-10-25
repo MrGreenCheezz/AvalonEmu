@@ -3,17 +3,28 @@ using System.Globalization;
 namespace AlbionLocal.Server;
 
 /// <summary>
-/// The arena queues, matches and ratings (Arena:*, analysis/work/stageN/arena/SPEC.md §4). Every key optional; the same under both presets
-/// (registering is the consent to the fight). The modes' maps and team sizes are the client's (arena.bin, matchtypes.bin); the tickets, times
-/// and rewards here are the server's scaled-down figures for a few players.
+/// The arena queues, matches and ratings (Arena:*, analysis/work/stageN/arena/SPEC.md §4). Every key optional (registering is the consent to
+/// the fight). The modes' maps and team sizes are the client's (arena.bin, matchtypes.bin). The record's values are the official preset's
+/// (matchtypes MATCH_ARENA: 150 tickets, 2 per death, a 25 min limit, a 15 s countdown; no silver or fame, no bots, no duel rating);
+/// <see cref="PveDefaults"/> are the pve preset's scaled-down figures for a few players, with bots, silver and fame.
 /// </summary>
 public sealed record ArenaOptions
 {
+    /// <summary>The pve preset's arena (the figures of before the official audit, 2026-10-26).</summary>
+    public static ArenaOptions PveDefaults { get; } = new()
+    {
+        Bots = true, CountdownSeconds = 10, Tickets2v2 = 6, Tickets5v5 = 15, TicketsPerDeath = 1, MatchMinutes = 15, DuelsRated = true,
+        WinSilver = 5000, LossSilver = 1500, WinFame = 30000, LossFame = 10000,
+    };
+
     /// <summary>Arena:Enabled (true): ArenaRegister and .arena join take players into the queues.</summary>
     public bool Enabled { get; init; } = true;
 
-    /// <summary>Arena:Bots (true): with too few players a queue starts its match after <see cref="BotWaitSeconds"/> with player-bots in the missing slots.</summary>
-    public bool Bots { get; init; } = true;
+    /// <summary>
+    /// Arena:Bots (false, official; the pve preset true): with too few players a queue starts its match after <see cref="BotWaitSeconds"/> with
+    /// player-bots in the missing slots. It needs Bots:Enabled as well; without bots a match starts only with both teams of players.
+    /// </summary>
+    public bool Bots { get; init; }
 
     /// <summary>Arena:BotWaitSeconds (20): how long the oldest registration waits for other players before bots fill in.</summary>
     public double BotWaitSeconds { get; init; } = 20;
@@ -41,19 +52,25 @@ public sealed record ArenaOptions
     /// <summary>Arena:ArrivalSeconds (60): how long a match waits for its players to load the map before it starts without the missing ones.</summary>
     public double ArrivalSeconds { get; init; } = 60;
 
-    /// <summary>Arena:CountdownSeconds (10): the truce before each fight (and each 1v1 round); nobody can hurt the other team then.</summary>
-    public double CountdownSeconds { get; init; } = 10;
+    /// <summary>Arena:CountdownSeconds (15, matchtypes countdown; the pve preset 10): the truce before each fight (and each 1v1 round); nobody can hurt the other team then.</summary>
+    public double CountdownSeconds { get; init; } = 15;
 
     /// <summary>Arena:RespawnSeconds (10, matchtypes MATCH_ARENA respawndelay): a team mode's player down comes back at its camp this much later.</summary>
     public double RespawnSeconds { get; init; } = 10;
 
-    /// <summary>Arena:Tickets2v2 (6) and Arena:Tickets5v5 (15): the deaths a team can afford in the team modes (1v1: the official 2, best of three).</summary>
-    public int Tickets2v2 { get; init; } = 6;
+    /// <summary>
+    /// Arena:Tickets2v2 and Arena:Tickets5v5 (150, matchtypes MATCH_ARENA; the pve preset 6 and 15): a team's tickets in the team modes, each
+    /// death costing Arena:TicketsPerDeath (2, MATCH_ARENA; the pve preset 1). The official orbs' ticket loss is not modelled, so with the
+    /// official figures a match mostly runs to its time limit (1v1: the official 2 rounds, best of three, whatever these say).
+    /// </summary>
+    public int Tickets2v2 { get; init; } = 150;
 
-    public int Tickets5v5 { get; init; } = 15;
+    public int Tickets5v5 { get; init; } = 150;
 
-    /// <summary>Arena:MatchMinutes (15; 1v1 the official 10): the time limit, after which the team with more tickets wins (equal: a draw).</summary>
-    public double MatchMinutes { get; init; } = 15;
+    public int TicketsPerDeath { get; init; } = 2;
+
+    /// <summary>Arena:MatchMinutes (25, MATCH_ARENA; the pve preset 15; 1v1 the official 10): the time limit, after which the team with more tickets wins (equal: a draw).</summary>
+    public double MatchMinutes { get; init; } = 25;
 
     /// <summary>Arena:EndSeconds (15): the players stay in the arena this long after the result, then go back where they registered.</summary>
     public double EndSeconds { get; init; } = 15;
@@ -68,20 +85,21 @@ public sealed record ArenaOptions
 
     public double K { get; init; } = 20;
 
-    /// <summary>Arena:DuelsRated (true): a duel won by knockdown, the area or a disconnect moves both duelists' duel rating.</summary>
-    public bool DuelsRated { get; init; } = true;
+    /// <summary>Arena:DuelsRated (false, official: duels have no rating; the pve preset true): a duel won by knockdown, the area or a disconnect moves both duelists' duel rating.</summary>
+    public bool DuelsRated { get; init; }
 
     /// <summary>
-    /// Arena:WinSilver (5000), Arena:LossSilver (1500), Arena:WinFame (30000), Arena:LossFame (10000): a match's silver and fame (× Rates), in
-    /// place of the official season points (no seasons here); a draw pays the loss figures.
+    /// Arena:WinSilver, Arena:LossSilver, Arena:WinFame, Arena:LossFame (0, official: an arena pays season points and arena.bin's items, no silver
+    /// or fame; the pve preset 5000, 1500, 30000, 10000): a match's silver and fame (× Rates), in place of the official season points (not
+    /// modelled); a draw pays the loss figures.
     /// </summary>
-    public double WinSilver { get; init; } = 5000;
+    public double WinSilver { get; init; }
 
-    public double LossSilver { get; init; } = 1500;
+    public double LossSilver { get; init; }
 
-    public double WinFame { get; init; } = 30000;
+    public double WinFame { get; init; }
 
-    public double LossFame { get; init; } = 10000;
+    public double LossFame { get; init; }
 
     /// <summary>
     /// Arena:RewardItems (true): arena.bin's unranked items: a win T2_LOOTBAG_ARENA_WIN_BASIC_0 (premium T3_LOOTBAG_ARENA_WIN_PREMIUM_0), a loss
@@ -126,6 +144,7 @@ public sealed record ArenaOptions
             RespawnSeconds = Number("Arena:RespawnSeconds", d.RespawnSeconds, 0, 600),
             Tickets2v2 = Int("Arena:Tickets2v2", d.Tickets2v2, 1, 1000),
             Tickets5v5 = Int("Arena:Tickets5v5", d.Tickets5v5, 1, 1000),
+            TicketsPerDeath = Int("Arena:TicketsPerDeath", d.TicketsPerDeath, 1, 1000),
             MatchMinutes = Number("Arena:MatchMinutes", d.MatchMinutes, 1, 1440),
             EndSeconds = Number("Arena:EndSeconds", d.EndSeconds, 0, 3600),
             Rated = Flag("Arena:Rated", d.Rated),

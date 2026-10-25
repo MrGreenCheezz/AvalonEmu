@@ -29,6 +29,7 @@ var tests = new List<(string Name, Action Body)>
     ("udp handshake, encryption, fragmentation", () => EndToEnd(0)),
     ("udp with 20% packet loss", () => EndToEnd(0.2)),
 };
+tests.AddRange(ConfigurationTest.All);
 tests.AddRange(ClientDataTest.All);
 tests.AddRange(AlbionTests.All);
 tests.AddRange(WorldTest.All);
@@ -96,6 +97,9 @@ tests.AddRange(GuildGoalTest.All);
 tests.AddRange(BlackMarketTest.All);
 tests.AddRange(BotNavTest.All);
 tests.AddRange(BotTest.All);
+tests.AddRange(BotSocialTest.All);
+tests.AddRange(BotPartyTest.All);
+tests.AddRange(BotRosterTest.All);
 tests.AddRange(BotGatherTest.All);
 tests.AddRange(BotPatrolTest.All);
 tests.AddRange(BotStageMTest.All);

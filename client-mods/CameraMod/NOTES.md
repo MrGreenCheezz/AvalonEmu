@@ -91,7 +91,7 @@ about `target + up*PivotHeight`, or the first-person pose. The IMGUI status over
   visibility, no `SetBoundingDistances`) — no distance culling. `QualitySettings.lodBias` is only written by Unity
   AdaptivePerformance `AdaptiveLOD`; `layerCullDistances` only by `AdaptiveLayerCulling`. No client-side streaming radius
   found (static cluster geometry is loaded whole). Mobs/players/resources beyond ~40 m are not *sent* by our server:
-  `server/config/albionlocal.json` `Visibility: { CellSize 10, EnterCells 4, LeaveCells 6 }` — raise EnterCells/LeaveCells for more.
+  `server/config/world.jsonc` `Visibility: { CellSize 10, EnterCells 4, LeaveCells 6 }` — raise EnterCells/LeaveCells for more.
 - Mod: Harmony postfix on `Atmosphere.ApplyFog` remembers the base values and re-applies the override (Off: fog=false,
   start/end 1e5/2e5, density 0, keyword off, GlobalFog disabled; Reduced: start/end × m, density / m²); also re-applied per
   frame from the base values. Exit: restore values, re-run `ApplySeparateFogSettings` + `ApplyFog`, lodBias, GlobalFog.

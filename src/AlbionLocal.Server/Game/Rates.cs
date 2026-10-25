@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 
 namespace AlbionLocal.Server.Game;
 
@@ -13,8 +12,8 @@ namespace AlbionLocal.Server.Game;
 /// awardsilver effects; <see cref="Loot"/> on the total loot factor of a mob or an opened chest; <see cref="Respawn"/> and
 /// <see cref="Regrowth"/> divide the mob respawn and node regrowth times; <see cref="CraftingReturn"/> on a craft's resource
 /// return share (at most all of them); <see cref="ChampionWeight"/> on the elite picks of the RANDOM spawn points and
-/// <see cref="ChestRespawn"/> dividing the open-world chest respawn times. The world's are <see cref="World.Rates"/>: the config's, then data/rates.json (a GM's
-/// .rates … save), then what a GM sets while the server runs.
+/// <see cref="ChestRespawn"/> dividing the open-world chest respawn times. The world's are <see cref="World.Rates"/>: the configuration at startup, followed by
+/// temporary GM changes until the server restarts.
 /// </summary>
 public sealed record Rates
 {
@@ -60,7 +59,7 @@ public sealed record Rates
     /// <summary>Rates:ChestRespawn: the open-world chest respawn and reroll speed (stageH bosses SPEC §4.5; 2 = back in half the time).</summary>
     public double ChestRespawn { get; init; } = 1;
 
-    /// <summary>The rates' names in the config's order (the keys of the section and of data/rates.json, the .rates names).</summary>
+    /// <summary>The rates' names in the config's order (the keys of the section and the .rates names).</summary>
     public static readonly string[] Names = ["Fame", "CombatFame", "GatheringFame", "CraftingFame", "Harvest", "Silver", "Loot", "Respawn", "Regrowth", "CraftingReturn", "ChampionWeight", "ChestRespawn"];
 
     /// <summary>The largest rate; Respawn and Regrowth (divisors) are at least <see cref="MinSpeed"/>, the others at least 0.</summary>
@@ -95,6 +94,13 @@ public sealed record Rates
         };
     }
 
+    /// <summary>Checks every entry, including candidates constructed directly with record initializers.</summary>
+    public void Validate()
+    {
+        // With remains the single source of the allowed values.
+        foreach (var name in Names) _ = With(name, Get(name)!.Value);
+    }
+
     /// <summary>The name as <see cref="Names"/> spells it; null = none.</summary>
     public static string? Canonical(string name) => Names.FirstOrDefault(n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
 
@@ -120,44 +126,6 @@ public sealed record Rates
     /// <summary>A fame gain (a7m) × <paramref name="rate"/>, truncated as the fame itself; unchanged at 1.</summary>
     public static long ScaleFame(long gain, double rate) => rate == 1 ? gain : (long)Math.Floor(gain * (decimal)rate);
 
-    // ---- data/rates.json: the GM's saved rates ----
-
-    /// <summary>The override file in the saves folder (Paths:Saves).</summary>
+    /// <summary>The obsolete override file; detected only to warn, never loaded or written.</summary>
     public static string FilePath(string savesPath) => Path.Combine(savesPath, "rates.json");
-
-    /// <summary>
-    /// <paramref name="baseRates"/> (the config's) with the rates of <paramref name="path"/> over them ({"Harvest": 2, …}; a
-    /// missing file = none). A bad file throws <see cref="InvalidDataException"/>, so the start stops as on a bad config.
-    /// </summary>
-    public static Rates Load(string path, Rates baseRates)
-    {
-        if (!File.Exists(path)) return baseRates;
-        var rates = baseRates;
-        try
-        {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) throw new InvalidDataException($"{path}: expected an object of rates");
-            foreach (var p in doc.RootElement.EnumerateObject())
-                rates = p.Value.ValueKind == JsonValueKind.Number ? rates.With(p.Name, p.Value.GetDouble())
-                    : throw new InvalidDataException($"{path}: {p.Name} is not a number");
-        }
-        catch (Exception e) when (e is JsonException or ArgumentException)
-        {
-            throw new InvalidDataException($"{path}: {e.Message}");
-        }
-        return rates;
-    }
-
-    /// <summary>Writes the rates that differ from <paramref name="baseRates"/> to <paramref name="path"/>; none = the file is deleted.</summary>
-    public void Save(string path, Rates baseRates)
-    {
-        var changed = Names.Where(n => Get(n) != baseRates.Get(n)).ToDictionary(n => n, n => Get(n)!.Value);
-        if (changed.Count == 0)
-        {
-            File.Delete(path);
-            return;
-        }
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, JsonSerializer.Serialize(changed, new JsonSerializerOptions { WriteIndented = true }));
-    }
 }

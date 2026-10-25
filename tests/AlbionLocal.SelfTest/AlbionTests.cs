@@ -320,18 +320,22 @@ public static class AlbionTests
         Cleanup(host, dir);
     }
 
+    internal static ServerConfig LoadTestConfig(string path, IEnumerable<string> args) =>
+        AlbionLocal.Server.Configuration.EditableConfiguration.Parse(File.Exists(path) ? File.ReadAllText(path) : "{}")
+            .Validate(Environment.CurrentDirectory, args);
+
     private static void ConfigLoad()
     {
         var dir = NewDir();
         var path = Path.Combine(dir, "albionlocal.json");
-        var none = ServerConfig.Load(path, []);
+        var none = LoadTestConfig(path, []);
         Check(none.LoginEndPoint.Port == 5055 && none.GameEndPoint.Port == 5056 && none.LogoutTime == TimeSpan.FromSeconds(10)
               && none.SavesPath == new ServerConfig().SavesPath
               && !none.JoinByCharacterId
               && none.ClientGameDataPath == Path.GetFullPath(Path.Combine("..", "game-local", "Albion-Online_Data", "StreamingAssets", "GameData"))
               && none.StarterPath == Path.Combine(Environment.CurrentDirectory, "content", "starter.json"), "no file: today's defaults");
-        var shipped = ServerConfig.Load(Path.Combine(DataDir(), "..", "config", "albionlocal.json"), []);
-        Check(shipped == none with { }, "config/albionlocal.json holds exactly the defaults");
+        var shipped = ServerConfig.Load(Path.Combine(DataDir(), "..", "config"), []);
+        Check(shipped.Preset == ServerPreset.Official && shipped.TutorialOpening && shipped.Rates == new AlbionLocal.Server.Game.Rates(), "shipped area configuration: official, tutorial enabled, rates one");
         var realItems = Client.Items;
         var shippedKit = StarterKit.Load(Path.Combine(DataDir(), "..", "content", "starter.json"), realItems);
         Check(shippedKit is { Equipment: [null, null, null, null, null, { Name: "T2_BAG" }, { Name: "T2_CAPE" }, { Name: "T2_MOUNT_MULE" }, ..], Inventory.Count: 5 }
@@ -344,18 +348,18 @@ public static class AlbionTests
             // comment
             { "Network": { "GamePort": 6000 }, "Paths": { "Saves": "saves" }, "Log": { "Level": "warn" }, }
             """);
-        var c = ServerConfig.Load(path, ["-v", "--Network:GamePort=6001", "--World:LogoutSeconds=5", "--Log:File=", "--Accounts:LocalAccountLevel=gamemaster"]);
+        var c = LoadTestConfig(path, ["-v", "--Network:GamePort=6001", "--World:LogoutSeconds=5", "--Log:File=", "--Accounts:LocalAccountLevel=gamemaster"]);
         Check(c.GameEndPoint.Port == 6001 && c.LoginEndPoint.Port == 5055 && c.LogoutTime == TimeSpan.FromSeconds(5) && c.LogLevel == LogLevel.Warn
               && c.DatabasePath == Path.Combine(Environment.CurrentDirectory, "saves", "albionlocal.db"), "file values, command line wins");
         Check(none.LogFile == Path.Combine(Environment.CurrentDirectory, "data", "server.log") && none.LocalAccountLevel == AccountLevel.Admin
               && c.LogFile is null && c.LocalAccountLevel == AccountLevel.GameMaster, "Log:File (\"\" = none) and Accounts:LocalAccountLevel");
-        var lan = ServerConfig.Load(path, ["--Network:BindAddress=0.0.0.0", "--Network:PublicAddress=192.168.1.10"]);
+        var lan = LoadTestConfig(path, ["--Network:BindAddress=0.0.0.0", "--Network:PublicAddress=192.168.1.10"]);
         Check(none.GameServerAddress == "127.0.0.1:5056" && lan.LoginEndPoint.Address.Equals(IPAddress.Any) && lan.GameServerAddress == "192.168.1.10:6000",
               "Network:BindAddress for the listeners, Network:PublicAddress given to the clients (default: the bind address)");
-        try { ServerConfig.Load(path, ["--Network:BindAddress=0.0.0.0"]); Check(false, "0.0.0.0 without a public address accepted"); }
+        try { LoadTestConfig(path, ["--Network:BindAddress=0.0.0.0"]); Check(false, "0.0.0.0 without a public address accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("PublicAddress"), "binding every interface needs Network:PublicAddress"); }
         Check(none.ChatEndPoint.Port == 5057 && none.ChatEnabled && lan.ChatServerAddress == "192.168.1.10:5057", "Network:ChatPort 5057, the chat address as the game's");
-        try { ServerConfig.Load(path, ["--Network:ChatPort=6000"]); Check(false, "the chat port on the game port accepted"); }
+        try { LoadTestConfig(path, ["--Network:ChatPort=6000"]); Check(false, "the chat port on the game port accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("Network:ChatPort"), "two listeners on one port stop the start"); }
         var logFile = Path.Combine(dir, "logs", "server.log");
         var console = Console.Out;
@@ -372,7 +376,7 @@ public static class AlbionTests
         }
         Check(File.ReadAllText(logFile).Contains("Error [selftest] into the log file"), "log lines are appended to the log file");
         // World:StartCluster is gone: the start cluster is in content/starter.json now.
-        try { ServerConfig.Load(path, ["--Network:GamPort=1", "--World:StartCluster=1000"]); Check(false, "unknown key accepted"); }
+        try { LoadTestConfig(path, ["--Network:GamPort=1", "--World:StartCluster=1000"]); Check(false, "unknown key accepted"); }
         catch (InvalidDataException e) { Check(e.Message.Contains("GamPort") && e.Message.Contains("StartCluster"), "unknown keys named in the error"); }
         try { Directory.Delete(dir, true); } catch (IOException) { }
     }
@@ -525,7 +529,7 @@ public static class AlbionTests
         return dir;
     }
 
-    /// <summary>A repository in <paramref name="dir"/> holding the default character, as <see cref="ServerHost"/> starts an empty one.</summary>
+    /// <summary>A repository in <paramref name="dir"/> holding an explicit legacy character fixture.</summary>
     internal static SqliteCharacterRepository Repository(string dir)
     {
         var characters = new SqliteCharacterRepository(Path.Combine(dir, "albionlocal.db"));
@@ -563,6 +567,13 @@ public static class AlbionTests
             JoinByCharacterId = true, // the tests' Joins name the character
         }, items is not null ? new ClientData(items, null, null)
             : Client with { GameData = gameData ? Client.GameData : null, Spells = spells ? Client.Spells : null, Clusters = clusters ? Client.Clusters : null });
+        // Gameplay tests supply their own legacy fixture; production startup no longer creates characters.
+        if (host.Characters.List().Count == 0)
+        {
+            var hero = host.Starter.NewCharacter("LocalHero");
+            AlbionLocal.Server.Systems.Focus.NewCharacter(hero, host.Config);
+            host.Characters.Create(hero);
+        }
         host.Start();
         return host;
     }

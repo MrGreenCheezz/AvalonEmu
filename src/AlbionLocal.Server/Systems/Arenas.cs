@@ -308,7 +308,7 @@ public sealed class Arenas(World world)
             if (Count(0) == mode.TeamSize && Count(1) == mode.TeamSize) break;
         }
         var full = Count(0) == mode.TeamSize && Count(1) == mode.TeamSize;
-        var bots = !full && Options.Bots && world.Now - waiting[0].Since >= TimeSpan.FromSeconds(Options.BotWaitSeconds);
+        var bots = !full && BotsAvailable && world.Now - waiting[0].Since >= TimeSpan.FromSeconds(Options.BotWaitSeconds);
         if (!full && !bots) return;
         if (world.CachedCluster(mode.Cluster) is not { } template)
         {
@@ -348,6 +348,9 @@ public sealed class Arenas(World world)
             Tell(id, string.Create(CultureInfo.InvariantCulture, $"Arena {mode.Name}: a match is ready. Accept within {Options.AcceptSeconds:0} s (the popup, or .arena accept)."));
         }
     }
+
+    /// <summary>Whether bots can fill a match: Arena:Bots, Bots:Enabled and Bots:Arena:Enabled (not Bots:World:Enabled).</summary>
+    private bool BotsAvailable => Options.Bots && world.Bots.ArenaBots;
 
     private string Describe(ArenaMatch m, int team) => string.Join(", ", m.TeamOf(team).Select(id => m.Names[id])) is { Length: > 0 } names ? names : "bots";
 
@@ -405,6 +408,12 @@ public sealed class Arenas(World world)
             Info(id, StatusOut, category);
             Tell(id, $"Arena {m.Mode.Name}: you could not join the match.");
         }
+        // Without bots a team left with nobody would give the other a free win: the match does not start, the rest go back to the queue.
+        if (!BotsAvailable && m.Team.Count > 0 && template is not null && (!m.TeamOf(0).Any() || !m.TeamOf(1).Any()))
+        {
+            FailReadyCheck(m, [.. m.Entries.SelectMany(e => e.Players).Select(x => x.Id).Where(id => !m.Team.ContainsKey(id))], "an opponent could not join");
+            return;
+        }
         if (m.Team.Count == 0 || template is null)
         {
             _matches.Remove(m.Id);
@@ -415,7 +424,7 @@ public sealed class Arenas(World world)
         }
         var humans = new[] { m.TeamOf(0).Count(), m.TeamOf(1).Count() };
         var target = Options.BotFill == ArenaBotFill.Full ? m.Mode.TeamSize : Math.Max(humans[0], humans[1]);
-        for (var t = 0; t < 2; t++) m.BotSlots[t] = Options.Bots ? Math.Max(0, target - humans[t]) : 0;
+        for (var t = 0; t < 2; t++) m.BotSlots[t] = BotsAvailable ? Math.Max(0, target - humans[t]) : 0;
         m.HadBots = m.BotSlots.Sum() > 0;
         m.Spawns = SpawnsOf(template);
         var tickets = m.Mode.Rounds ? 2 : m.Mode.TeamSize >= 5 ? Options.Tickets5v5 : Options.Tickets2v2;
@@ -478,7 +487,7 @@ public sealed class Arenas(World world)
         }
         m.Arriving.Remove(p.Character.Id);
         Expeditions.Tell(p, string.Create(CultureInfo.InvariantCulture,
-            $"Arena {m.Mode.Name}: you are on team {(team == 0 ? "blue" : "red")}. {(m.Mode.Rounds ? "Best of three rounds" : $"{m.Tickets[team]} tickets: each defeat costs one")}; .arena leave forfeits."));
+            $"Arena {m.Mode.Name}: you are on team {(team == 0 ? "blue" : "red")}. {(m.Mode.Rounds ? "Best of three rounds" : $"{m.Tickets[team]} tickets: each defeat costs {Options.TicketsPerDeath}")}; .arena leave forfeits."));
         if (m.State == ArenaState.Arriving && m.Arriving.Count == 0) Begin(m);
     }
 
@@ -497,6 +506,14 @@ public sealed class Arenas(World world)
             return;
         }
         Countdown(m);
+        // A team with neither a player nor a bot (none could be made): no fight and no reward for the other side.
+        for (var t = 0; t < 2; t++)
+            if (!InMap(m).Any(p => m.Team.TryGetValue(p.Character.Id, out var team) && team == t) && !m.Bots.Any(b => b.Value == t))
+            {
+                TellAll(m, "Arena: the match is called off (an empty team).");
+                Close(m, $"team {t} is empty");
+                return;
+            }
     }
 
     /// <summary>
@@ -540,7 +557,7 @@ public sealed class Arenas(World world)
     /// <summary>A bot of team <paramref name="team"/> (BotRole.Arena) at its camp; false when none could be made (no walk grid, no free name).</summary>
     private bool SpawnBot(ArenaMatch m, Map map, int team, int index)
     {
-        if (!world.Bots.Enabled || world.Bots.NavOf(map) is not { Usable: true } nav) return false;
+        if (!world.Bots.ArenaBots || world.Bots.NavOf(map) is not { Usable: true } nav) return false;
         var (spot, facing) = Spot(m, team, index);
         var at = nav.Grid.Walkable(spot) ? spot : nav.Grid.Nearest(spot, 6) ?? spot;
         if (world.Bots.Spawn(map, BotRole.Arena, BotTier(m), at, facing, healthFactor: Options.BotHealthFactor, damageFactor: Options.BotDamageFactor) is not { } bot)
@@ -616,7 +633,7 @@ public sealed class Arenas(World world)
     private void Scored(ArenaMatch m, int team, string killer, string victim)
     {
         if (m.State != ArenaState.Fight) return;
-        m.Tickets[team] = Math.Max(0, m.Tickets[team] - 1);
+        m.Tickets[team] = Math.Max(0, m.Tickets[team] - (m.Mode.Rounds ? 1 : Options.TicketsPerDeath));
         m.Kills[1 - team]++;
         TellAll(m, $"Arena: {killer} defeats {victim} ({Score(m)}).");
         if (m.Tickets[team] == 0) End(m, 1 - team, $"{(team == 0 ? "blue" : "red")} has no tickets left");

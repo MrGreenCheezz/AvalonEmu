@@ -201,12 +201,14 @@ public sealed class Parties(World world)
     /// Flow 1, PartyInvitePlayer (225): the target by Guid, else by name; checked in the SPEC's order (missing or self 9000, in a
     /// party 9002, inviter in a party but not its leader 9007, the target's open invitation from this inviter 9009 or from
     /// another one 9004 [choice], party + its open invitations ≥ <see cref="MaxSize"/> 9012). On 0 the target gets
-    /// PartyInvitation and the invitation runs for <see cref="InviteTime"/>. <paramref name="targetName"/> = response key 0.
+    /// PartyInvitation and the invitation runs for <see cref="InviteTime"/>. <paramref name="targetName"/> = response key 0. With
+    /// Bots:Social:Enabled a world bot is a target too (<see cref="Bots.BotSocial"/>): the same checks, then its answer after a delay.
     /// </summary>
     public short Invite(Player inviter, Guid target, string? name, out string? targetName)
     {
         targetName = null;
-        var to = target != Guid.Empty ? Online(target) : OnlineByName(name);
+        // Bot-social (Bots:Social:Enabled): a world bot of that Guid or name is invited as a player; it answers later (BotSocial.PartyInvited).
+        var to = (target != Guid.Empty ? Online(target) : OnlineByName(name)) ?? world.Bots.Social.Find(target, name);
         if (to is null || to.Character.Id == inviter.Character.Id) return PlayerNotFound;
         targetName = to.Character.Name;
         var me = inviter.Character.Id;
@@ -217,7 +219,8 @@ public sealed class Parties(World world)
         var size = (party?.Members.Count ?? 1) + _invites.Values.Count(i => party is null ? i.Inviter == me : party.Find(i.Inviter) is not null);
         if (size >= MaxSize) return PartyFull;
         _invites[to.Character.Id] = new PendingInvite(me, inviter.Character.Name ?? "", to.Character.Id, to.Character.Name ?? "", world.Clock.Now + InviteTime);
-        to.Session.Send(Invitation(inviter, party));
+        to.Session.Send(Invitation(inviter, party)); // a bot's session sends nothing
+        if (to.Bot is not null) world.Bots.Social.PartyInvited(to, inviter);
         Log.Info("party", $"'{inviter.Character.Name}' invites '{to.Character.Name}'{(party is null ? "" : $" into party {party.Id}")}");
         return 0;
     }
@@ -254,7 +257,8 @@ public sealed class Parties(World world)
             return InvitationGone;
         }
         _droppedAway.Remove(me);
-        var joiner = MemberOf(invitee);
+        // Bot-party: a world bot joins as its inviter's companion member (no client, never offline, never the leader: Companions.Recruit).
+        var joiner = invitee.Bot is null ? MemberOf(invitee) : new PartyMember(me, invitee.Character.Name ?? "", (byte)invitee.Character.Template) { Owner = invite.Inviter };
         var created = party is null;
         if (party is null)
         {
@@ -525,11 +529,11 @@ public sealed class Parties(World world)
         if (mob.Map is not { } map) return group;
         var radius = world.GameData?.PveFameSharingRadius ?? 50;
         var now = DateTime.UtcNow;
-        bool Near(Player p) => p.Combat.Down is null && p.Map == map && Vector2.Distance(p.PositionAt(now), mob.Position) <= radius;
+        bool Near(Player p) => p.Combat.Down is null && p.Map == map && Vector2.Distance(p.PositionAt(p.IsBot ? world.Bots.Time : now), mob.Position) <= radius;
         if (Of(killer.Character.Id) is { } party)
             foreach (var m in party.Members)
-                if (m.Id != killer.Character.Id && Online(m.Id) is { } p && Near(p))
-                    group.Add(p);
+                if (m.Id != killer.Character.Id && (Online(m.Id) ?? world.Companions.RecruitOf(m.Id)) is { } p && Near(p))
+                    group.Add(p); // bot-party: a recruited world bot near the kill counts in the split as a member (its share is not kept)
         // Guilds:ShareWithoutParty (guilds SPEC §10.4): the killer's guild mates near the kill share as party members do.
         if (world.Guilds.SharingGuild(killer) is { } guild)
             foreach (var m in guild.Members)

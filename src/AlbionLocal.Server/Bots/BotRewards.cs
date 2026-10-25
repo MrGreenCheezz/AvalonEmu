@@ -73,6 +73,13 @@ public sealed class BotRewards(World world)
     {
         if (bot.Bot is not { } info || killer.IsBot || bot.Map is not { } map) return;
         var options = Options;
+        if (!options.RewardsEnabled)
+        {
+            // Bots:Rewards:Enabled off: no fame, no PvP goal credit, no bag or silver; the kill message and a crime's reputation stay.
+            Death.Reward(killer, bot, 0, attackers, crime, ticks, killMessage: death);
+            Log.Info("bots", $"'{killer.Character.Name}' defeated {info.PersonaId}: no reward (Bots:Rewards:Enabled false)");
+            return;
+        }
         Prune(ticks);
         var key = (killer.Character.Id, info.PersonaId);
         var full = !_full.TryGetValue(key, out var last) || ticks - last >= (long)(options.SameBotMinutes * TimeSpan.TicksPerMinute);

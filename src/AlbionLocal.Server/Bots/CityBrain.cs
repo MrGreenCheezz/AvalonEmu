@@ -130,8 +130,9 @@ public sealed class CityBrain(BotManager bots) : IBotBrain
         }
         BotPoi? poi = null;
         Vector2? goal = null;
-        if (bots.Random.NextDouble() < 0.6 && bots.PickPoi(map, nav, except: Poi) is { } p) (poi, goal) = (p, p.At);
-        else goal = nav.Grid.RandomNear(bots.Random, here, 15, 40) ?? nav.Roads.RandomNode(bots.Random);
+        var (near, far) = bots.Options.CityWanderMeters;
+        if (bots.Random.NextDouble() < bots.Options.CityPoiShare && bots.PickPoi(map, nav, except: Poi) is { } p) (poi, goal) = (p, p.At); // Bots:City:PoiShare
+        else goal = nav.Grid.RandomNear(bots.Random, here, (float)near, (float)far) ?? nav.Roads.RandomNode(bots.Random); // Bots:City:WanderMeters
         if (goal is not { } g) return;
         if (bots.FindPath(nav, here, g) is not { } path)
         {
@@ -144,13 +145,13 @@ public sealed class CityBrain(BotManager bots) : IBotBrain
     }
 
     /// <summary>
-    /// The stay is over: half the time to the gate of the nearest exit with a path (<see cref="BotExit.Gate"/>, facing the trigger; gone
+    /// The stay is over: with Bots:City:ExitShare (0.5) to the gate of the nearest exit with a path (<see cref="BotExit.Gate"/>, facing the trigger; gone
     /// there or within 2 m of the trigger, SPEC §1.4), else (or without one) a logout where it stands.
     /// </summary>
     private void Leave(Player bot, ClusterNav nav, TimeSpan now)
     {
         var here = bot.PositionAt(bots.Time);
-        if (bots.Random.NextDouble() < 0.5)
+        if (bots.Random.NextDouble() < bots.Options.CityExitShare)
             foreach (var exit in nav.Exits.OrderBy(e => Vector2.DistanceSquared(e.Gate, here)))
                 if (bots.FindPath(nav, here, exit.Gate) is { } path)
                 {

@@ -42,7 +42,7 @@ dotnet run --project tools/AlbionLocal.ModKit -- icons                   # од�
 перечисляйте сразу все нужные паки (`build pack1 pack2`).
 
 Чтобы сервер включил дропы пака: `--Mods:Packs=example-blade` при запуске сервера или
-в `config/albionlocal.json`: `"Mods": { "Packs": ["example-blade"] }`.
+в `config/world.jsonc`: `"Mods": { "Packs": ["example-blade"] }`.
 
 ## Как написать пак
 
@@ -197,7 +197,7 @@ dotnet run --project tools/AlbionLocal.ModKit -- icons                   # од�
 `AssemblyLoadContext`.
 
 Как включить:
-- в `config/albionlocal.json`: `"Plugins": { "Enabled": true, "List": ["welcome"] }` (`Enabled` уже включён в пресете pve;
+- в `config/world.jsonc`: `"Plugins": { "Enabled": true, "List": ["welcome"] }` (`Enabled` уже включён в пресете pve;
   без `List` грузятся плагины с `"enabled": true` в их `plugin.json`);
 - или прямо в игре (Admin) / в консоли сервера: `.plugins enable welcome` (до перезапуска).
 

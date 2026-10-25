@@ -11,7 +11,7 @@ namespace AlbionLocal.Server.Bots;
 /// is the player's consent) while a bot starts a fight only where Pvp:Mode makes the pair Hostile (under the pve preset Red against Red),
 /// and answers whoever the table lets it fight for Bots:Pvp:EngageSeconds (20) after that one's last hit on it or its patrol group
 /// (<see cref="Engaged"/>). Bots:PvpRulesByZone sets the rule per zone (pvpwarningtype; none by default).
-/// With Pvp:Mode Off nothing is Hostile but under Official.
+/// With Pvp:Mode Off nothing is Hostile but under Official. Bots:Pvp:Enabled false: a world bot is Hostile only to whoever it answers.
 /// </summary>
 public static class BotPvp
 {
@@ -40,13 +40,16 @@ public static class BotPvp
         if (mode == PvpMode.Off && rule != BotPvpRules.Official) return Relation.Neutral;
         var official = Pvp.Of(a.Flag, b.Flag, party: false, guild: false, rules);
         var server = Pvp.ModeOf(a.Flag, b.Flag, party: false, guild: false, rules, mode);
-        return rule switch
+        var relation = rule switch
         {
             BotPvpRules.Official => official,
             BotPvpRules.Server => server,
             _ when !a.IsBot => official,
             _ => server == Relation.Hostile || (official == Relation.Hostile && Engaged(a, b)) ? Relation.Hostile : Relation.Neutral,
         };
+        // Bots:Pvp:Enabled off: a world bot starts no fight; it still answers whoever hit it (or its group) within Bots:Pvp:EngageSeconds.
+        if (a.IsBot && relation == Relation.Hostile && !world.Config.Bots.PvpEnabled && !Engaged(a, b)) return Relation.Neutral;
+        return relation;
     }
 
     /// <summary>
@@ -60,7 +63,7 @@ public static class BotPvp
     {
         if (bot.Bot is not { } info || p.IsBot || bot.World.Duels.OpponentOf(p) is not null) return false;
         if (info.Fight.TargetId == p.Id || Engaged(bot, p)) return true;
-        if (info.Role != BotRole.Patrol || p.Map is not { } map) return false;
+        if (info.Role != BotRole.Patrol || p.Map is not { } map || !bot.World.Config.Bots.PvpEnabled) return false; // Bots:Pvp:Enabled
         var world = bot.World;
         return !(info.Fight.Spared.TryGetValue(p.Character.Id, out var until) && until > world.GameNow)
             && (!p.IsMounted || world.Config.Bots.AttackMounted) && world.Bots.Settled(map, p);

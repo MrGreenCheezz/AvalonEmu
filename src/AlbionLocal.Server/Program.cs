@@ -8,11 +8,16 @@ using AlbionLocal.Server.Protocol;
 ProtocolTrace.Enabled = args.Contains("--protocol-trace");
 
 ServerConfig config;
+AlbionLocal.Server.Configuration.ConfigurationLoadResult loaded;
 try
 {
-    config = ServerConfig.Load(Path.Combine("config", "albionlocal.json"), args);
+    var selection = AlbionLocal.Server.Configuration.ServerConfiguration.ParseArguments(args);
+    loaded = AlbionLocal.Server.Configuration.ServerConfiguration.Load(selection.Directory, selection.Arguments);
+    config = loaded.Config;
+    loaded.WriteSummary(Console.Out);
+    if (args.Contains("--check-config")) return 0;
 }
-catch (Exception e) when (e is InvalidDataException or JsonException)
+catch (Exception e) when (e is InvalidDataException or IOException or JsonException or ArgumentException or UnauthorizedAccessException)
 {
     Log.Error("main", $"config: {e.Message}");
     return 1;

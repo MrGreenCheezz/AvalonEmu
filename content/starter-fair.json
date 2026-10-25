@@ -1,4 +1,4 @@
-// The start of a new character under Progression:NewCharacters = FairStart (config/albionlocal.json): an empty destiny
+// The start of a new character under Progression:NewCharacters = FairStart (config/world.jsonc): an empty destiny
 // board, so only what it allows — items.xml unlockedtoequip T1 items — may be equipped. START (45 fame) unlocks the T2
 // bag and cape, COMBAT_TRAINEE (250 kill fame) the T2 sword, bow, fire staff, shield, book and SET1 armours; the rest
 // comes with the destiny board as fame fills it. Same format as starter.json; a missing key keeps the built-in value shown here.

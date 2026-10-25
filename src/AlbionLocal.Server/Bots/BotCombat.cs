@@ -33,13 +33,13 @@ namespace AlbionLocal.Server.Bots;
 /// </summary>
 public static class BotCombat
 {
-    /// <summary>How long a gatherer runs off (s, SPEC §1.9).</summary>
+    /// <summary>How long a gatherer runs off (s, SPEC §1.9): the default of Bots:Gatherer:FleeSeconds.</summary>
     public const double FleeSeconds = 20;
 
-    /// <summary>How far it runs (m).</summary>
+    /// <summary>How far it runs (m): the default of Bots:Gatherer:FleeDistance.</summary>
     public const float FleeDistance = 25;
 
-    /// <summary>The window of the retarget's damage (s), and the share an attacker must deal of the target's damage in it (SPEC §1.9).</summary>
+    /// <summary>The window of the retarget's damage (s), and the share an attacker must deal of the target's damage in it (SPEC §1.9): the defaults of Bots:Combat:RetargetSeconds / RetargetShare.</summary>
     public const double RetargetSeconds = 5;
 
     public const double RetargetShare = 1.5;
@@ -110,13 +110,13 @@ public static class BotCombat
 
     /// <summary>
     /// <paramref name="attacker"/>'s hit took <paramref name="damage"/> of <paramref name="bot"/>'s health at <paramref name="ticks"/>
-    /// (<see cref="Pvp.Damage"/>, next to <see cref="Death.Hit"/>): kept for the retarget for <see cref="RetargetSeconds"/>.
+    /// (<see cref="Pvp.Damage"/>, next to <see cref="Death.Hit"/>): kept for the retarget for Bots:Combat:RetargetSeconds.
     /// </summary>
     public static void Hurt(Player bot, Player attacker, double damage, long ticks)
     {
         if (bot.Bot is not { } info || damage <= 0 || info.Fight.Defeated) return;
         var hits = info.Fight.Hits;
-        hits.RemoveAll(h => h.At < ticks - (long)(RetargetSeconds * TimeSpan.TicksPerSecond));
+        hits.RemoveAll(h => h.At < ticks - (long)(bot.World.Config.Bots.RetargetSeconds * TimeSpan.TicksPerSecond));
         hits.Add((attacker.Id, ticks, damage));
     }
 
@@ -173,9 +173,9 @@ public static class BotCombat
         if (info.Role == BotRole.Gatherer && !fight.FleeRolled && bot.Health.At(ticks) < bot.Health.Max * bots.Options.FleeHealth)
         {
             fight.FleeRolled = true;
-            if (bots.Random.NextDouble() < bots.Options.FleeChance && BotNav.FleeFrom(bots, nav, bot, target.PositionAt(DateTime.UtcNow), FleeDistance))
+            if (bots.Random.NextDouble() < bots.Options.FleeChance && BotNav.FleeFrom(bots, nav, bot, target.PositionAt(DateTime.UtcNow), (float)bots.Options.FleeDistance))
             {
-                fight.FleeUntil = ticks + (long)(FleeSeconds * TimeSpan.TicksPerSecond);
+                fight.FleeUntil = ticks + (long)(bots.Options.FleeSeconds * TimeSpan.TicksPerSecond);
                 Log.Debug("bots", $"'{bot.Character.Name}' ({info.PersonaId}) runs off from '{target.Character.Name}'");
                 return true;
             }
@@ -361,7 +361,7 @@ public static class BotCombat
         if (Drink(bots, bot, Consumables.PotionSlot, ticks)) return true;
         if (info.Role == BotRole.Gatherer || info.Fight.FleeRolled) return false;
         info.Fight.FleeRolled = true;
-        if (!BotNav.FleeFrom(bots, nav, bot, target.PositionAt(DateTime.UtcNow), FleeDistance / 2)) return false;
+        if (!BotNav.FleeFrom(bots, nav, bot, target.PositionAt(DateTime.UtcNow), (float)bots.Options.FleeDistance / 2)) return false;
         info.Fight.FleeUntil = ticks + (long)(RetreatSeconds * TimeSpan.TicksPerSecond);
         Log.Debug("bots", $"'{bot.Character.Name}' ({info.PersonaId}) falls back from '{target.Character.Name}' at low health");
         return true;
@@ -410,14 +410,14 @@ public static class BotCombat
 
     /// <summary>
     /// A ranged bot (a weapon of at least <see cref="RangedWeapon"/> m) with <paramref name="target"/> nearer than Bots:Combat:KiteDistance edge to
-    /// edge steps back, at most every <see cref="KiteEverySeconds"/>: towards the walkable spot about its weapon's range away from the target with
-    /// a way to it (<see cref="BotNav.PathFrom"/>, never through a wall), for <see cref="KiteSeconds"/>. True when it kites.
+    /// edge steps back, at most every Bots:Combat:KiteEverySeconds: towards the walkable spot about its weapon's range away from the target with
+    /// a way to it (<see cref="BotNav.PathFrom"/>, never through a wall), for Bots:Combat:KiteSeconds. True when it kites.
     /// </summary>
     private static bool Kite(BotManager bots, Player bot, ClusterNav nav, Player target, Vector2 here, double range, long ticks)
     {
         var fight = bot.Bot!.Fight;
         var options = bots.Options;
-        if (options.KiteDistance <= 0 || range < RangedWeapon || bot.IsMounted || ticks - fight.KitedAt < (long)(KiteEverySeconds * TimeSpan.TicksPerSecond)
+        if (options.KiteDistance <= 0 || range < RangedWeapon || bot.IsMounted || ticks - fight.KitedAt < (long)(options.KiteEverySeconds * TimeSpan.TicksPerSecond)
             || Pvp.EdgeDistance(bot, here, target) >= options.KiteDistance || SpellEffects.Rooted(bot, ticks)) return false;
         var from = target.PositionAt(DateTime.UtcNow);
         var away = here - from;
@@ -434,7 +434,7 @@ public static class BotCombat
         fight.KitedAt = ticks;
         if (best is null) return false;
         bots.Walk(bot, best, null);
-        fight.KiteUntil = ticks + (long)(KiteSeconds * TimeSpan.TicksPerSecond);
+        fight.KiteUntil = ticks + (long)(options.KiteSeconds * TimeSpan.TicksPerSecond);
         Log.Debug("bots", $"'{bot.Character.Name}' ({bot.Bot.PersonaId}) steps back from '{target.Character.Name}'");
         return true;
     }
@@ -444,18 +444,18 @@ public static class BotCombat
         bot.Effects.Spells.Any(s => s.Caster == bot.Id && s.Live(ticks) && s.Spell.Name.StartsWith(spell.Name, StringComparison.Ordinal));
 
     /// <summary>
-    /// The valid attacker (object id) that dealt at least <see cref="RetargetShare"/> × the current target's health damage within
-    /// <see cref="RetargetSeconds"/> (the most of them), else null (SPEC §1.9).
+    /// The valid attacker (object id) that dealt at least Bots:Combat:RetargetShare × the current target's health damage within
+    /// Bots:Combat:RetargetSeconds (the most of them), else null (SPEC §1.9).
     /// </summary>
     private static long? Retarget(BotManager bots, Player bot, long ticks)
     {
         var fight = bot.Bot!.Fight;
-        var since = ticks - (long)(RetargetSeconds * TimeSpan.TicksPerSecond);
+        var since = ticks - (long)(bots.Options.RetargetSeconds * TimeSpan.TicksPerSecond);
         var dealt = fight.Hits.Where(h => h.At >= since).GroupBy(h => h.Id).ToDictionary(g => g.Key, g => g.Sum(h => h.Damage));
         var current = dealt.GetValueOrDefault(fight.TargetId);
         foreach (var (id, damage) in dealt.Where(d => d.Key != fight.TargetId).OrderByDescending(d => d.Value))
         {
-            if (damage <= 0 || damage < RetargetShare * current) break;
+            if (damage <= 0 || damage < bots.Options.RetargetShare * current) break;
             if (Valid(bots, bot, id, ticks) is not null) return id;
         }
         return null;

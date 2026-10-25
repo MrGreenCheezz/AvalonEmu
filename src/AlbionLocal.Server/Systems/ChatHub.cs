@@ -328,13 +328,28 @@ public sealed class ChatHub
     /// A whisper of <paramref name="sender"/> to <paramref name="target"/> (by name, ignoring case; 193 from either peer): no active
     /// chat connection of that name, or oneself, 7720; a second whisper within Chat:WhisperCooldownMs 7722; a target that muted the
     /// sender gets nothing and the sender RC 0 [choice]; else ChatWhisper 75 {0 sender, 3 text, 4 role} to the target and RC 0, on
-    /// which the sender's client writes its own "to &lt;target&gt;" line. 7723 (the whisper limit) is not used.
+    /// which the sender's client writes its own "to &lt;target&gt;" line. 7723 (the whisper limit) is not used. With Bots:Social:Enabled a world
+    /// bot of that name is a target too: RC 0, and maybe its ChatWhisper back later (<see cref="Bots.BotSocial.Whispered"/>).
     /// </summary>
     public short Whisper(Guid sender, string senderName, AccountLevel level, string? target, string? raw)
     {
         var text = (raw ?? "").Trim();
         var name = (target ?? "").Trim();
         var to = _sessions.Values.FirstOrDefault(x => x.Active && string.Equals(x.CharacterName, name, StringComparison.OrdinalIgnoreCase));
+        // Bot-social (Bots:Social:Enabled): a world bot of that name takes the whisper (RC 0, the cooldown as for a player) and may answer later.
+        if (to is null && world.Bots.Social.Find(Guid.Empty, name) is { } bot)
+        {
+            if (Config.ChatWhisperCooldownMs > 0)
+            {
+                var now = world.Clock.Now;
+                if (_lastWhisper.TryGetValue(sender, out var last) && now - last < TimeSpan.FromMilliseconds(Config.ChatWhisperCooldownMs)) return WhisperCooldown;
+                _lastWhisper[sender] = now;
+            }
+            if (text.Length == 0) return 0;
+            Log.Info("chat", $"'{senderName}' whispers to bot '{bot.Character.Name}'");
+            world.Bots.Social.Whispered(sender, senderName, bot);
+            return 0;
+        }
         if (to is null || to.CharacterId == sender)
         {
             Log.Info("chat", $"'{senderName}' whispers to '{name}': not online");

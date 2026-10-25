@@ -227,10 +227,17 @@ public static class GuildCommands
         ctx.Reply($"guild '{g.Name}': {string.Join("; ", week.Goals.Select(x => x.Describe()))}");
     }
 
-    /// <summary>.guild payout &lt;name&gt; &lt;silver&gt;: silver of the guild account to a member in game (MASTER_OF_COIN or higher, SPEC §10.5).</summary>
+    /// <summary>
+    /// .guild payout &lt;name&gt; &lt;silver&gt;: silver of the guild account to a member in game (MASTER_OF_COIN or higher, SPEC §10.5); only with
+    /// Guilds:SeasonRewards Content or another source of the account (Guilds:SilverTax, Guilds:Contracts).
+    /// </summary>
     [Command("guild payout", Level = AccountLevel.Player, Help = "pays <silver> of the guild account to the member <name> in game (Master of Coin or higher)")]
     public static void Payout(CommandContext ctx, string name, long silver)
     {
+        // The guild account fills only from the server's own sources: season silver (Guilds:SeasonRewards Content), Guilds:SilverTax, Guilds:Contracts.
+        var c = ctx.World.Config;
+        if (c.GuildSeasonRewards != RuleSource.Content && c.GuildSilverTax <= 0 && !c.GuildContracts)
+            throw new CommandError("no guild account payouts on this server (Guilds:SeasonRewards Official, no Guilds:SilverTax or Guilds:Contracts)");
         if (Guilds(ctx).Payout(ctx.RequirePlayer(), name, silver) is { } error) throw new CommandError(error);
         ctx.Reply($"{silver} silver paid to '{name}'");
     }
