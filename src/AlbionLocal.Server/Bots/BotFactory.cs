@@ -29,7 +29,7 @@ public sealed class BotFactory(World world)
     /// <paramref name="flag"/> (null: Red for a patrol, Blue for the others).
     /// </summary>
     public (Character Character, byte Avatar, List<ItemTemplate> Gear) Make(BotRole role, int tier, string cluster, string name, Vector2 at, float facing,
-        Random random, string? resource = null, byte? flag = null, BotIdentity? identity = null, GearStyle? style = null)
+        Random random, string? resource = null, byte? flag = null, BotIdentity? identity = null, GearStyle? style = null, PatrolPart part = PatrolPart.Dps)
     {
         var looks = world.GameData?.Looks ?? CharacterLooks.None;
         var population = random;
@@ -55,16 +55,18 @@ public sealed class BotFactory(World world)
             Flag = flag ?? (BotManager.Patrols(role) ? Pvp.Red : Pvp.Blue), // a gatherer's by its zone (BotManager, SPEC D4)
         };
         if (identity is not null) c.Id = identity.Id; // bot-roster: the same Guid every time (whispers, invites and friend requests by Guid)
-        return (c, avatar, Gear(role, tier, style?.Random ?? population, resource, style));
+        return (c, avatar, Gear(role, tier, style?.Random ?? population, resource, style, part));
     }
 
     /// <summary>
     /// The gear of <paramref name="role"/> at <paramref name="tier"/>, each item resolved and existing. With <paramref name="style"/> (a
     /// population bot, bot-roster gear realism) each armour piece, weapon, offhand and cape may be off its tier (MixedShare, Spread), an
     /// enchanted one (EnchantChance, EnchantLevels) or an artifact (ArtifactChance: weapons and armour, not a gatherer's set); every piece
-    /// draws the same numbers whatever comes of them, so one random seed gives one set in every zone.
+    /// draws the same numbers whatever comes of them, so one random seed gives one set in every zone. A patrol healer's or tank's weapon
+    /// (<paramref name="part"/>, bot support roles) is one of Gear.HealerWeapons / TankWeapons, a one-handed one with Gear.HealerOffhands /
+    /// TankOffhands.
     /// </summary>
-    public List<ItemTemplate> Gear(BotRole role, int tier, Random random, string? resource = null, GearStyle? style = null)
+    public List<ItemTemplate> Gear(BotRole role, int tier, Random random, string? resource = null, GearStyle? style = null, PatrolPart part = PatrolPart.Dps)
     {
         var s = Settings;
         var names = new List<string>();
@@ -79,15 +81,27 @@ public sealed class BotFactory(World world)
         {
             var material = tier < 2 ? "LEATHER" : Pick(s.Materials);
             var set = tier < 4 ? 1 : 1 + random.Next(3);
+            // Bot support roles: a healer in cloth, a tank in plate (from T4 of SET2 or SET3: the armour with TAUNT), the same numbers drawn.
+            if (part == PatrolPart.Healer && tier >= 2) material = "CLOTH";
+            if (part == PatrolPart.Tank && tier >= 2) (material, set) = ("PLATE", tier >= 4 ? Math.Max(2, set) : set);
             var artifact = style is not null && s.ArtifactSets.Count > 0 ? s.ArtifactSets[random.Next(s.ArtifactSets.Count)] : null;
             foreach (var slot in new[] { "HEAD", "ARMOR", "SHOES" })
                 Piece($"T{{t}}_{slot}_{material}_SET{set}", artifact is null ? null : $"T{{t}}_{slot}_{material}_{artifact}");
         }
         void Weapon()
         {
-            var weapon = Pick(s.Weapons);
+            var (weapons, offhands) = part switch
+            {
+                PatrolPart.Healer => (s.HealerWeapons, s.HealerOffhands),
+                PatrolPart.Tank => (s.TankWeapons, s.TankOffhands),
+                _ => (s.Weapons, s.Offhands),
+            };
+            // Of a support role's weapons the ones items.xml has at its tier (no holy staff below T3; none at all: a dps's, Spawn makes it one).
+            if (part != PatrolPart.Dps)
+                (weapons, offhands) = weapons.Where(w => Resolve($"T{{t}}_{w}", tier) is not null).ToList() is { Count: > 0 } usable ? ((IReadOnlyList<string>)usable, offhands) : (s.Weapons, s.Offhands);
+            var weapon = Pick(weapons);
             Piece($"T{{t}}_{weapon}", style is not null && s.ArtifactWeapons.GetValueOrDefault(weapon) is { Count: > 0 } arts ? $"T{{t}}_{arts[random.Next(arts.Count)]}" : null);
-            if (weapon.StartsWith("MAIN_", StringComparison.Ordinal)) Piece($"T{{t}}_{Pick(s.Offhands)}", null);
+            if (weapon.StartsWith("MAIN_", StringComparison.Ordinal)) Piece($"T{{t}}_{Pick(offhands)}", null);
         }
         switch (role)
         {

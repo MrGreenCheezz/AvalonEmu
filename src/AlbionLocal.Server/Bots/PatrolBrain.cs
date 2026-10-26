@@ -117,6 +117,24 @@ public sealed class BotGroup(PatrolRoute route)
     public List<Player> Members { get; } = [];
 
     /// <summary>
+    /// Bot support roles: the parts its members take as they spawn (Bots:Patrol:Makeups, drawn for a new population group); empty = every
+    /// member a damage dealer.
+    /// </summary>
+    public IReadOnlyList<PatrolPart> Makeup { get; set; } = [];
+
+    /// <summary>
+    /// The part of its next member: the first one of <see cref="Makeup"/> its live members do not hold yet (a fallen healer's place goes to
+    /// its replacement), else a damage dealer.
+    /// </summary>
+    public PatrolPart NextPart()
+    {
+        var held = Members.Where(m => m.Map is not null && m.Bot is { Fight.Defeated: false }).Select(m => m.Bot!.Part).ToList();
+        foreach (var part in Makeup)
+            if (!held.Remove(part)) return part;
+        return PatrolPart.Dps;
+    }
+
+    /// <summary>
     /// The road portals one of it passed through (stageL roads phase B): link → the GameTimeStamp its recently-used window ends, inside which
     /// the other members follow free (BotManager.PassAs).
     /// </summary>
@@ -242,6 +260,7 @@ public sealed class PatrolBrain(BotManager bots, BotGroup group) : IBotBrain
                 if (now >= _until) bots.Despawn(bot, "logged out", BotRefill.Arrival);
                 return;
         }
+        if (BotCombat.Support(bots, bot)) return; // bot support roles: a healer heals a member left hurt
         if (BotCombat.Scan(bots, bot, nav) is { } target)
         {
             BotCombat.Engage(bots, bot, target);

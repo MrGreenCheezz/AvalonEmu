@@ -251,7 +251,8 @@ public static partial class SpellCasts
         var map = p.Map!;
         if (map.FindPlayer(id) is { } q)
         {
-            if (!p.Observers.Contains(q) && !(p.IsCompanion && q.Map == p.Map)) return (null, CastRefusal.NoTarget); // a companion sees no other bot (it has no client)
+            // A companion sees no other bot (it has no client), nor does a world bot (bot support roles: a healer's group mates).
+            if (!p.Observers.Contains(q) && !((p.IsCompanion || p.IsBot && q.IsBot) && q.Map == p.Map)) return (null, CastRefusal.NoTarget);
             var facts = SpellTargets.Of(p, q, now);
             if (!SpellTargets.Cast(cls, facts))
                 return (null, Enemy(cls) ? CastRefusal.NotHostile

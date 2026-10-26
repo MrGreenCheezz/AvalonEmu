@@ -41,9 +41,15 @@
   // Gear patterns, {t} = the bot's tier (else the next lower tier items.xml has; nothing above T8 exists).
   "Gear": {
     "Materials": ["PLATE", "LEATHER", "CLOTH"],          // one material for head, armor and shoes (SET1-3, SET1 below T4)
-    // a MAIN_ weapon of a patrol or a city bot gets an offhand; no healer staff (its spells are heals, which a bot casts only on itself)
+    // a MAIN_ weapon of a patrol or a city bot gets an offhand; no healer staff here (a dps bot's heals go on itself only)
     "Weapons": ["MAIN_SWORD", "2H_BOW", "MAIN_FIRESTAFF", "MAIN_SPEAR", "2H_AXE", "MAIN_CURSEDSTAFF", "2H_QUARTERSTAFF", "MAIN_DAGGER"],
     "Offhands": ["OFF_SHIELD", "OFF_BOOK", "OFF_TORCH"],
+    // the healers and tanks of patrol groups (config/world.jsonc Bots:Patrol:Makeups, Bots:Support): their weapons (those items.xml has at
+    // the bot's tier), the offhand of a MAIN_ one; a healer wears cloth, a tank plate
+    "HealerWeapons": ["MAIN_HOLYSTAFF", "2H_HOLYSTAFF", "MAIN_NATURESTAFF", "2H_NATURESTAFF"],
+    "TankWeapons": ["MAIN_MACE", "2H_MACE", "2H_HAMMER", "MAIN_HAMMER"],
+    "HealerOffhands": ["OFF_BOOK"],
+    "TankOffhands": ["OFF_SHIELD"],
     "Cape": "T{t}_CAPE",
     "CityWeaponShare": 0.5,                              // city bots carrying a weapon
     "PatrolMount": "T{t}_MOUNT_HORSE",

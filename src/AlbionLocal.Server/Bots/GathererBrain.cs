@@ -29,14 +29,22 @@ public sealed record GatherProfile(string Resource, int Tier, int MinTier, int M
 /// ends the show after the repeat under way. After Bots:Gatherer:Nodes (6-20) nodes or its stay it walks out through the nearest exit
 /// (gone there, or at the end of its walk to that exit's gate; the next of its slot arrives at an exit later), or without a way to one logs
 /// out where it stands (World:LogoutSeconds, then gone). Attacked, it answers (<see cref="BotCombat"/>) and resumes after the fight: a bot on
-/// its way out plans its walk to an exit anew, never gone where the fight left it.
+/// its way out plans its walk to an exit anew, never gone where the fight left it (with Bots:Travel:Enabled the exit leads next door,
+/// <see cref="BotManager.Travellers"/>).
+/// <para>
+/// Bot-travel (<see cref="BotManager.GoesHome"/>): with Bots:Gatherer:BankAtHome, a full bag (its nodes) or the end of
+/// Bots:Gatherer:TripMinutes with something gathered sends it home instead: out through the exit to the next cluster of its way home
+/// (travelling there, <see cref="BotManager.ExitOrder"/>), and in its home city to the bank door, a pause of 3-8 s and its resources banked
+/// (<see cref="BotManager.Banked"/>); then a new trip (a visitor walks out again). <paramref name="done"/>: the nodes it gathered on
+/// this trip before it came to this map.
+/// </para>
 /// </summary>
-public sealed class GathererBrain(BotManager bots, GatherProfile profile, int nodes) : IBotBrain
+public sealed class GathererBrain(BotManager bots, GatherProfile profile, int nodes, int done = 0) : IBotBrain
 {
-    private enum Phase { Choose, Approach, Harvest, Leave, Logout }
+    private enum Phase { Choose, Approach, Harvest, Leave, Logout, Bank, Banking }
 
     private Phase _phase = Phase.Choose;
-    private int _done;
+    private int _done = done;
 
     /// <summary>The walkable cell it stepped off the grid from to its node (its way back onto the grid).</summary>
     private Vector2? _back;
@@ -49,8 +57,11 @@ public sealed class GathererBrain(BotManager bots, GatherProfile profile, int no
 
     private Vector2 _gate;
 
-    /// <summary>When its logout ends (<see cref="Phase.Logout"/>).</summary>
+    /// <summary>When its logout or its pause at the bank ends (<see cref="Phase.Logout"/>, <see cref="Phase.Banking"/>).</summary>
     private TimeSpan _until;
+
+    /// <summary>Bot-travel: the home city it walks out towards (<see cref="Phase.Leave"/> on its way home); null otherwise.</summary>
+    private string? _homing;
 
     /// <summary>Nodes it found no way to (it picks others).</summary>
     private readonly HashSet<Harvestable> _unreachable = [];
@@ -69,8 +80,10 @@ public sealed class GathererBrain(BotManager bots, GatherProfile profile, int no
     {
         Phase.Approach => $"walk to {Node}",
         Phase.Harvest => $"harvest {Node}",
-        Phase.Leave => "leave through an exit",
+        Phase.Leave => _homing is { } home ? $"walk home to {home}" : "leave through an exit",
         Phase.Logout => "log out",
+        Phase.Bank => "walk to the bank",
+        Phase.Banking => "bank",
         _ => $"look for {profile.Resource} T{profile.MinTier}-{profile.MaxTier} ({_done}/{nodes} nodes)",
     };
 
@@ -124,6 +137,27 @@ public sealed class GathererBrain(BotManager bots, GatherProfile profile, int no
             case Phase.Logout:
                 if (now >= _until) bots.Despawn(bot, "logged out", BotRefill.Arrival);
                 return;
+            case Phase.Bank: // at the bank door: a short pause
+                (_phase, _until) = (Phase.Banking, now + TimeSpan.FromSeconds(3 + bots.Random.NextDouble() * 5));
+                return;
+            case Phase.Banking:
+                if (now < _until) return;
+                bots.Banked(bot);
+                (_phase, _done, _homing) = (Phase.Choose, 0, null);
+                if (info.Slot is null) Leave(bot, nav, now); // a visitor (no gatherer slot in its city) sets off again
+                return;
+        }
+        // Bot-travel: a full bag or the trip's time over sends it home to bank (walking home already: on its way).
+        if (bots.GoesHome(bot, _done >= nodes, now) is { } home)
+        {
+            info.Homing = true;
+            if (map.Cluster == home) Bank(bot, nav, now);
+            else
+            {
+                _homing = home;
+                Leave(bot, nav, now);
+            }
+            return;
         }
         if (now >= info.StayUntil || _done >= nodes)
         {
@@ -222,7 +256,8 @@ public sealed class GathererBrain(BotManager bots, GatherProfile profile, int no
     private void Leave(Player bot, ClusterNav nav, TimeSpan now)
     {
         var here = bot.PositionAt(bots.Time);
-        foreach (var exit in bots.ExitsOf(bot.Map!, nav).OrderBy(e => Vector2.DistanceSquared(e.Gate, here)).Take(3)) // on a road its portals too
+        // On a road its portals too; bot-travel: the way home or a neighbour of its tier first (the nearest first without travel).
+        foreach (var exit in bots.ExitOrder(bot, bots.ExitsOf(bot.Map!, nav), here).Take(3))
             if (BotNav.PathFrom(bots, nav, here, exit.Gate, _back) is { } path)
             {
                 (_phase, Node, _exit, _gate) = (Phase.Leave, null, exit.Position, path[^1]);
@@ -230,6 +265,24 @@ public sealed class GathererBrain(BotManager bots, GatherProfile profile, int no
                 return;
             }
         (_phase, Node, _until) = (Phase.Logout, null, now + bot.World.LogoutTimeIn(bot.Map));
+    }
+
+    /// <summary>
+    /// Bot-travel: home, it walks to the nearest bank door of its city (a POI of <see cref="BotPoi.Building"/> "bank") and faces it; without
+    /// one (or a way to it) it pauses where it stands. Its resources are banked after the pause (<see cref="Phase.Banking"/>).
+    /// </summary>
+    private void Bank(Player bot, ClusterNav nav, TimeSpan now)
+    {
+        var here = bot.PositionAt(bots.Time);
+        _homing = null;
+        foreach (var bank in nav.Pois.Where(p => p.Building == "bank").OrderBy(p => Vector2.DistanceSquared(p.At, here)))
+            if (BotNav.PathFrom(bots, nav, here, bank.At, _back) is { } path)
+            {
+                (_phase, Node) = (Phase.Bank, null);
+                Go(bot, path, bank.Facing);
+                return;
+            }
+        (_phase, Node, _until) = (Phase.Banking, null, now + TimeSpan.FromSeconds(3 + bots.Random.NextDouble() * 5));
     }
 
     /// <summary>

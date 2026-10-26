@@ -83,7 +83,7 @@ public sealed class BotInfo
     /// <summary>The tier of its gear (1-8).</summary>
     public required int Tier { get; init; }
 
-    public required string PersonaId { get; init; }
+    public required string PersonaId { get; set; }
 
     public required IBotBrain Brain { get; set; }
 
@@ -91,10 +91,23 @@ public sealed class BotInfo
     public byte Avatar { get; init; }
 
     /// <summary>Where it spawned.</summary>
-    public Vector2 Home { get; init; }
+    public Vector2 Home { get; set; }
 
     /// <summary>The population slot it fills; null for a GM's bot (.bot spawn), which never respawns.</summary>
     public BotSlot? Slot { get; set; }
+
+    /// <summary>Bot-roster: the roster identity (<see cref="BotIdentity.Index"/>) it plays; null for a fresh name or a GM's bot.</summary>
+    public int? Identity { get; set; }
+
+    /// <summary>
+    /// Bot-travel: a gatherer's home city (cluster id; the nearest royal city or rest within Bots:Travel:MaxHops of where it came online),
+    /// when its trip ends (<see cref="World.Clock"/> time, Bots:Gatherer:TripMinutes) and whether it walks home to bank now. Kept over its travels.
+    /// </summary>
+    public string? HomeCity { get; set; }
+
+    public TimeSpan TripUntil { get; set; } = TimeSpan.MaxValue;
+
+    public bool Homing { get; set; }
 
     /// <summary><see cref="World.Clock"/> time of its spawn, and when it leaves (turnover: Bots:StayMinutes; never for a GM's bot).</summary>
     public TimeSpan SpawnedAt { get; init; }
@@ -138,6 +151,21 @@ public sealed class BotInfo
     /// this change only when a world bot accepts a party invite (bot-party, <see cref="BotManager.Recruit"/>): it becomes a companion.
     /// </summary>
     public CompanionInfo? Companion { get; set; }
+
+    /// <summary>
+    /// Bot support roles (Bots:Support:Enabled, Bots:Patrol:Makeups): a patrol's part in its group: a damage dealer (every other bot), a
+    /// healer (a holy or nature staff; it heals, shields and buffs its group) or a tank (a mace, hammer or shield; it engages first and holds
+    /// the attacker of its healer).
+    /// </summary>
+    public PatrolPart Part { get; init; }
+}
+
+/// <summary>Bot support roles: a patrol's part in its group (<see cref="BotInfo.Part"/>; Bots:Patrol:Makeups "dps", "healer", "tank").</summary>
+public enum PatrolPart : byte
+{
+    Dps,
+    Healer,
+    Tank,
 }
 
 /// <summary>

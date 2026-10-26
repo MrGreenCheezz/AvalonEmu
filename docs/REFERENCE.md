@@ -1844,7 +1844,8 @@ bot's own (moved, never copied) and nothing of a bot is ever saved, so no duplic
   EngageParty, CrimesAgainstBots, LethalToPlayers }, `Combat` { TickMs, ReactionMs, DamageFactor, HealthFactor, Spells, SpellChance,
   Tactics, KiteDistance, RetreatHealth, Potions, Food, FocusWeakest }, `Difficulty`, `Gear` { Mastery, DamageBonus, RedZoneTierBonus,
   Quality, EliteChance, EliteEnchant, EliteQuality }, `Patrol` {
-  LeashRadius, AggroRadius, SpareMinutes, JoinGraceSeconds, AttackMounted, GroupSize, RedGroupSize, RouteDwellSeconds, RouteEndDwellSeconds },
+  LeashRadius, AggroRadius, SpareMinutes, JoinGraceSeconds, AttackMounted, GroupSize, RedGroupSize, RouteDwellSeconds, RouteEndDwellSeconds,
+  Makeups }, `Support` { Enabled, HealBelow, ShieldBelow },
   `Defeat:DieInLethalZones`, `DownDespawnSeconds`, `Rewards` { FameFactor, GearDropChance, DeathGearDropChance, MinItems,
   ResourceDropShare, LootProtectionSeconds, BagsPerHour, SameBotMinutes, EliteSilverFactor, EliteExtraItems }, `City:Gatherers`), `content/bots.json` the tables
   (counts per zone, clusters excluded or overridden, city tiers, avatars, emotes, name syllables, gear patterns with
@@ -1909,6 +1910,7 @@ both presets, so the official preset is all off through the master alone and the
 | `Bots:Invader:Enabled` | `true` | corrupted dungeon bot invaders (with `Corrupted:BotInvaders`), also with `Bots:World:Enabled` false |
 | `Bots:Pvp:Enabled` | `true` | `false` = world bots never start a fight with a player; they still answer an attack (on them or their group) for `Bots:Pvp:EngageSeconds`. Arena, hellgate and invader bots are not affected |
 | `Bots:Rewards:Enabled` | `true` | `false` = a beaten bot gives no fame, PvP goal credit, silver or bag (the kill message and a crime's reputation stay) |
+| `Bots:Travel:Enabled` | `true` | a bot walking into an exit reappears next door (see Travel and gathering trips); `false` = gone there as before |
 
 Behaviour figures that were fixed before (both presets, today's values): `Bots:City:PoiShare` 0.6 (next goal a point of interest,
 else a spot `Bots:City:WanderMeters` 15-40 m away), `Bots:City:ExitShare` 0.5 (walk out through an exit, else log out),
@@ -1979,6 +1981,39 @@ does not go back to its old role; its slot was refilled when it joined. Nothing 
 | `Bots:Party:MaxMinutes` | `120` | how long it stays in the party at most |
 | `Bots:Party:City` / `Gatherer` / `Patrol` / `Drifter` | `true` | which kinds may accept |
 
+#### Support roles in patrol groups
+
+With `Bots:Support:Enabled` (default `true`; it needs `Bots:Enabled`, so on under pve, off under official) a patrol group may bring
+a **healer** and a **tank** instead of damage dealers only. A new population group draws one makeup of its zone class from
+`Bots:Patrol:Makeups` by weight; its members take the makeup's parts in order as they spawn (a fallen healer's replacement is the
+group's healer again), the members beyond the makeup are damage dealers, and a lone Drifter always is one.
+
+- A **healer** carries a holy or nature staff (content/bots.json `Gear.HealerWeapons`, a book with a one-handed one) in cloth, its
+  kit's heals chosen first (from the item's own spell lists, as a hired healer's). In a fight and after it, it heals the member of its
+  group (itself included) with the lowest health share below `Bots:Support:HealBelow`, walking into range when needed; in a fight it
+  also shields the lowest one below `Bots:Support:ShieldBelow` and puts its friendly buffs (HOLYHOT) on the fighting members. Every
+  cast goes through the players' checks (target class, `Pvp:FriendlySpells`, range, cooldown, energy): it never targets a human (a bot
+  and a human are never Friends), a hostile unit or a bot of another group (under `Pvp:FriendlySpells Group` the patrol group is a
+  bot's group); an area heal reaches whom a player's would (under `All` another bot standing in it too).
+- A **tank** carries a mace or hammer (`Gear.TankWeapons`, a shield with a one-handed one) in plate (SET2/SET3 from T4: the armour with
+  TAUNT), its kit's taunts chosen first. It engages without the reaction time, casts its taunts as soon as they are ready, and turns on
+  whoever hits its group's healer.
+- A healer or tank whose weapon items.xml lacks at its tier (no holy staff or mace below T3) is a damage dealer.
+- A healer patrol that joins your party (`Bots:Party`) plays as a companion healer: it heals and revives your party with the companion
+  code (`Companions:HealBelow`).
+- `Bots:Support:Enabled false`: every patrol a damage dealer of `Gear.Weapons` whose friendly spells go on itself only, as before.
+
+| Key | Default | Controls |
+|---|---|---|
+| `Bots:Support:Enabled` | `true` | healers and tanks in patrol groups and their help (`false` = as before) |
+| `Bots:Patrol:Makeups:<zone>` | Default `["dps=90", "healer,dps=7", "tank,healer,dps=3"]`; Red, Black, Roads `["dps=80", "healer,dps,dps=12", "tank,healer,dps=8"]` | a zone class's makeups, `"part,part,...=weight"` (parts `dps`, `healer`, `tank`; weight 0-1000, 1 when left out); `Bots:Patrol:Makeups` alone or `:Default` for every zone class without its own; on the command line a `;` list. The defaults keep nine groups in ten (eight in red and black zones and on the roads) as before |
+| `Bots:Support:HealBelow` | `0.7` | a healer heals a member below this health share |
+| `Bots:Support:ShieldBelow` | `0.9` | in a fight a healer shields a member below this health share |
+
+Client checks: in a yellow zone a patrol with a holy or nature staff and cloth among the others; hit its mate, and the healer's heal
+animation and green numbers on the mate (never on you); a plate patrol with a mace casts TAUNT at whoever hits the healer and turns to
+him; the party frame of a healer patrol you invited, its heals on you.
+
 #### Roster, hours and gear
 
 **Roster.** Like AzerothCore's random bots, the population is a fixed **roster** of `Bots:Roster:Size` identities derived from
@@ -2018,6 +2053,39 @@ bots and companions keep their plain sets.
 | `Bots:Gear:EnchantChance:<zone>` | City 0.03, Start 0, Safe 0.02, Yellow 0.04, Orange 0.06, Red 0.08, Black 0.12, Roads 0.12, Mists 0.08 | an enchanted piece per zone class |
 | `Bots:Gear:Enchant` | `"1-3"` | its level |
 | `Bots:Gear:ArtifactChance:<zone>` | Red 0.02, Black 0.06, Roads 0.06, Mists 0.03, else 0 | an artifact piece per zone class |
+
+#### Travel and gathering trips
+
+**Travel.** A city bot, gatherer or patrol member that walks into an exit no longer just vanishes: it leaves the map as a player
+taking the exit does, is "in transit" for `Bots:Travel:Seconds`, and then appears at the matching entrance of the neighbouring
+cluster (where a player coming through stands) as the same identity: name, Guid, gear, health and what it carries. There it takes a
+free slot of its role (its old slot gets a newcomer later, as at any turnover). Bots only live where players are, so the rule for
+map loading is simple: it travels only when, at the moment it takes the exit, the target map is **loaded with a player on it**, its
+zone gets world bots (`Bots:Zones`, `Bots:<Role>:Enabled`; never a dungeon, island, hellgate, arena, expedition or mists instance),
+its walk grid is ready, it has room under `Bots:MaxPerMap` and a slot of the role is free. Otherwise it simply logs out at the exit,
+as before. If the target stops taking it while it is in transit (unloaded, emptied, the slot taken), it logs out on the way. Nothing
+is stored. City bots therefore travel only between city maps that have city bots; gatherers and patrols move through the open world.
+A road's portals keep their own rules (Bots:Roads:Portals).
+
+**Route.** A leaving bot prefers an exit to a neighbour that takes it, with a zone of its own tier first (a royal city's tiers, a start
+town's T1-T2, the open world's map tier ±1), then the nearest tier; the other exits come after, nearest first.
+
+**Gathering trips.** A gatherer's home city is the nearest royal city or rest (with a bank; not an interior, hall, portal town or the
+Hell Den) within `Bots:Travel:MaxHops` clusters of where it came online. When its bag is full (`Bots:Gatherer:Nodes` nodes) or
+`Bots:Gatherer:TripMinutes` are over and it carries something, it walks home cluster by cluster along the shortest way over the
+cluster exits (never through an instance, a building interior, a road or a zone `Bots:Zones` leaves out), arriving in its city as a
+visitor when the city has no gatherer slot. There it walks to the bank door, pauses a few seconds and its gathered resources are
+banked: gone, in that city only. The regional economy stays as it is: per-city banks and markets, no global storage, and bots bank
+nothing anyone can take out. Then a new trip begins (a visitor walks out again). City bots already walk to their own city's bank and
+market doors among their points of interest. If a hop on the way home does not take it (no player there), it logs out at that exit.
+
+| Key | Default | Controls |
+|---|---|---|
+| `Bots:Travel:Enabled` | `true` | exits lead next door (needs `Bots:Enabled` and `Bots:World:Enabled`: off under official, on under pve); `false` = gone at the exit as before |
+| `Bots:Travel:Seconds` | `"10-20"` | time in transit |
+| `Bots:Travel:MaxHops` | `6` | how far a gatherer's home city may lie (1-50 clusters) |
+| `Bots:Gatherer:TripMinutes` | `30` | a trip's time budget (1-1440) |
+| `Bots:Gatherer:BankAtHome` | `true` | gatherers walk home to bank at the end of a trip (needs travel); `false` = they leave through an exit as before |
 
 ### Companions
 

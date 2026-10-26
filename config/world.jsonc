@@ -134,10 +134,18 @@
   //   "MountDistance": 40,     // a bot with a mount rides paths at least this long (m), out of combat
   //   "Gatherer": { "Enabled": true, // both presets: gatherer bots
   //                 "Flag": "Zone", "RedShare": 1.0, // Zone: Blue in safe/yellow/orange zones, Red in red/black ones (RedShare of them); or Blue / Red
-  //                 "Radius": 150, "Nodes": "6-20", // its nodes lie within this many m of its spawn; nodes before it walks out through an exit
+  //                 "Radius": 150, "Nodes": "6-20", // its nodes lie within this many m of its spawn; nodes before its bag is full (then home, or out through an exit)
   //                 "AvoidPlayerRadius": 6, "AvoidMobRadius": 12, // no node with a player this near, nor one by a hostile mob's home
   //                 "FleeHealth": 0.25, "FleeChance": 0.5, // below this health share it runs off once per fight, with this chance ...
-  //                 "FleeSeconds": 20, "FleeDistance": 25 }, // ... for this long and this far (m; both presets; a fighter's fall-back runs half of it)
+  //                 "FleeSeconds": 20, "FleeDistance": 25, // ... for this long and this far (m; both presets; a fighter's fall-back runs half of it)
+  //                 "TripMinutes": 30, // both presets: a trip ends after this long (1-1440) or with a full bag (Nodes) ...
+  //                 "BankAtHome": true }, // ... then it walks home (the nearest royal city or rest within Travel:MaxHops) cluster by cluster to its bank door and banks
+  //                                       //     there (its resources gone, in that city only: no global storage); needs Travel:Enabled; false = it leaves as before
+  //   "Travel": { "Enabled": true, // both presets (needs Enabled and World:Enabled, so off officially): a City, Gatherer or Patrol bot walking into an exit
+  //               //                  reappears at the matching entrance next door (same name, Guid, gear, bag) in a free slot of its role there, when that map
+  //               //                  is loaded with a player, its zone gets world bots (Zones; never an instance) and has room; else it logs out there as before
+  //               "Seconds": "10-20", // in transit this long; a target that stopped taking it meanwhile (unloaded, empty, slot taken): it logs out on the way
+  //               "MaxHops": 6 },     // how far a gatherer's home city may lie (clusters, 1-50); a leaving bot prefers a neighbour of its tier
   //   "ConsumeNodes": false,   // true: gatherer bots take the nodes' charges as players do (false: their harvest is a show)
   //   "Pvp": { "Enabled": true, // both presets; false = world bots never start a fight with a player (they still answer an attack; arena/hellgate/invader bots unaffected)
   //            "EngageSeconds": 20, "EngageParty": true, "CrimesAgainstBots": true, // a bot answers its attacker (and party) this long; attacking a bot is a crime (pve: false)
@@ -161,7 +169,14 @@
   //               "SpareMinutes": 5, "JoinGraceSeconds": 10, // not one it knocked down for 5 min, nor one who arrived on the map 10 s ago
   //               "GroupSize": "1-3", "RedGroupSize": "2-3", // groups on a road or a loop (in red and black zones RedGroupSize) ...
   //               "RouteDwellSeconds": "2-8", "RouteEndDwellSeconds": "5-20", // ... stops at its points
-  //               "FollowSpacing": 2.5 }, // both presets: a group member walks this far (m) x its place behind the leader
+  //               "FollowSpacing": 2.5, // both presets: a group member walks this far (m) x its place behind the leader
+  //               "Makeups": { // both presets (with Support:Enabled): a new group draws one by weight, its members take the parts in spawn order, the rest dps
+  //                 "Default": ["dps=90", "healer,dps=7", "tank,healer,dps=3"],    // "part,part,...=weight": dps, healer, tank; any zone class without its own list
+  //                 "Red": ["dps=80", "healer,dps,dps=12", "tank,healer,dps=8"],   // also "Black" and "Roads"; nine groups in ten (eight here) as before
+  //               } },
+  //   "Support": { "Enabled": true, // both presets (needs Enabled): healers (holy/nature staff) and tanks (mace/hammer, plate) in patrol groups; false = every patrol a dps, own heals only
+  //                "HealBelow": 0.7,     // a healer heals the group member (itself too) with the lowest health share below this, by the players' cast rules (Pvp:FriendlySpells; never a human)
+  //                "ShieldBelow": 0.9 }, // in a fight it shields the lowest member below this and buffs the fighting ones; a tank taunts at once and holds whoever hits its healer
   //   "Roads": { "PatrolGroupSize": "2-3", // the patrol groups of the Roads of Avalon (zone class Roads): the road gankers
   //              "Portals": true,      // on a road bots come and go through its portals (a charge each, never the last) and patrols beat between them
   //              "PortalWaitSeconds": "20-60" }, // how long a road patrol waits at a portal for a Red player

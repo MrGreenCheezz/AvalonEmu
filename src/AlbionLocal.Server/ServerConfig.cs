@@ -1653,6 +1653,11 @@ public sealed record ServerConfig
             Food = Flag("Bots:Combat:Food", d.Food),
             FocusWeakest = Flag("Bots:Combat:FocusWeakest", d.FocusWeakest),
             RedGroupSize = Range("Bots:Patrol:RedGroupSize", d.RedGroupSize, 1, 10),
+            // Bot support roles: healers and tanks in patrol groups (Bots:Patrol:Makeups), their friendly spells on the group.
+            SupportEnabled = Flag("Bots:Support:Enabled", d.SupportEnabled),
+            SupportHealBelow = Number("Bots:Support:HealBelow", d.SupportHealBelow, 0, 1),
+            SupportShieldBelow = Number("Bots:Support:ShieldBelow", d.SupportShieldBelow, 0, 1),
+            PatrolMakeups = Makeups(d.PatrolMakeups),
             EliteSilverFactor = Number("Bots:Rewards:EliteSilverFactor", d.EliteSilverFactor, 0, 100),
             EliteExtraItems = Int("Bots:Rewards:EliteExtraItems", d.EliteExtraItems, 0, 6),
             // Bot social presence and chat (bot-social; the lines are content/bots.json "Chat").
@@ -1686,6 +1691,12 @@ public sealed record ServerConfig
             EnchantChance = ByZone("Bots:Gear:EnchantChance:", d.EnchantChance),
             GearEnchant = Range("Bots:Gear:Enchant", d.GearEnchant, 1, 4),
             ArtifactChance = ByZone("Bots:Gear:ArtifactChance:", d.ArtifactChance),
+            // Bot-travel: exits lead next door, gatherers' trips home to their city's bank.
+            TravelEnabled = Flag("Bots:Travel:Enabled", d.TravelEnabled),
+            TravelSeconds = Range("Bots:Travel:Seconds", d.TravelSeconds, 0, 3600),
+            TravelMaxHops = Int("Bots:Travel:MaxHops", d.TravelMaxHops, 1, 50),
+            GathererTripMinutes = Number("Bots:Gatherer:TripMinutes", d.GathererTripMinutes, 1, 1440),
+            GathererBankAtHome = Flag("Bots:Gatherer:BankAtHome", d.GathererBankAtHome),
         };
 
         // Bots:Gear:EnchantChance:<zone> / ArtifactChance:<zone>: chances 0..1 per zone class over the preset's (a zone left out keeps its value).
@@ -1699,6 +1710,25 @@ public sealed record ServerConfig
                 var zone = Content.BotSettings.Zones.FirstOrDefault(z => z.Equals(key[prefix.Length..], StringComparison.OrdinalIgnoreCase))
                     ?? throw new InvalidDataException($"{key}: not one of {string.Join(", ", Content.BotSettings.Zones)}");
                 result[zone] = Number(key, 0, 0, 1);
+            }
+            return result;
+        }
+
+        // Bots:Patrol:Makeups:<zone> (or Bots:Patrol:Makeups alone = Default): a JSON array (the file) or a ';' list (the command line) of
+        // "part,part,...=weight" (parts dps, healer, tank; weight 0..1000, 1 when left out) over the preset's (a zone left out keeps its list).
+        IReadOnlyDictionary<string, IReadOnlyList<PatrolMakeup>> Makeups(IReadOnlyDictionary<string, IReadOnlyList<PatrolMakeup>> fallback)
+        {
+            const string prefix = "Bots:Patrol:Makeups";
+            var keys = values.Keys.Where(k => k.Equals(prefix, StringComparison.OrdinalIgnoreCase) || k.StartsWith(prefix + ":", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (keys.Count == 0) return fallback;
+            var result = new Dictionary<string, IReadOnlyList<PatrolMakeup>>(fallback, StringComparer.OrdinalIgnoreCase);
+            foreach (var key in keys)
+            {
+                var name = key.Length == prefix.Length ? BotOptions.DefaultMakeupZone : key[(prefix.Length + 1)..];
+                var zone = name.Equals(BotOptions.DefaultMakeupZone, StringComparison.OrdinalIgnoreCase) ? BotOptions.DefaultMakeupZone
+                    : Content.BotSettings.Zones.FirstOrDefault(z => z.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    ?? throw new InvalidDataException($"{key}: not Default or one of {string.Join(", ", Content.BotSettings.Zones)}");
+                result[zone] = PatrolMakeup.ParseList(Take(key)!, key);
             }
             return result;
         }
@@ -2485,6 +2515,36 @@ public sealed record BotOptions
         ["Red"] = 0.02, ["Black"] = 0.06, ["Roads"] = 0.06, ["Mists"] = 0.03,
     };
 
+    // ---- bot-travel: world bots that leave through an exit reappear next door (audit-bots.md improvement 6) ----
+
+    /// <summary>
+    /// Bots:Travel:Enabled (true; inert while Bots:Enabled or Bots:World:Enabled is false, so off under official): a City, Gatherer or Patrol
+    /// bot that walks into an exit is "in transit" for Bots:Travel:Seconds and then appears at the matching entrance of the neighbouring
+    /// cluster with the same name, Guid, gear and bag, in a free slot of its role there. Only when that map is loaded with a player on it,
+    /// its zone allows world bots (Bots:Zones) and gets bots of the role, and it is no instance; otherwise (and at arrival if that has
+    /// changed meanwhile) it simply logs out as before. false = every bot walking into an exit is gone there (the old behaviour).
+    /// </summary>
+    public bool TravelEnabled { get; init; } = true;
+
+    /// <summary>Bots:Travel:Seconds ("10-20"): how long a travelling bot is between two clusters (a player's loading screen and walk-in).</summary>
+    public (double Min, double Max) TravelSeconds { get; init; } = (10, 20);
+
+    /// <summary>Bots:Travel:MaxHops (6, 1-50): how far (clusters) a gatherer's home city may lie, and its way home.</summary>
+    public int TravelMaxHops { get; init; } = 6;
+
+    /// <summary>
+    /// Bots:Gatherer:TripMinutes (30, 1-1440): a gatherer's trip ends after this long (or when its bag is full: Bots:Gatherer:Nodes nodes);
+    /// with Bots:Gatherer:BankAtHome it then walks home to bank.
+    /// </summary>
+    public double GathererTripMinutes { get; init; } = 30;
+
+    /// <summary>
+    /// Bots:Gatherer:BankAtHome (true; needs Bots:Travel:Enabled): a gatherer whose trip is over walks back to its home city (the nearest
+    /// royal city or rest within Bots:Travel:MaxHops of where it first came online) cluster by cluster, to that city's bank door, pauses
+    /// and its gathered resources are gone (banked there: per city, nothing global). false = it leaves through an exit as before.
+    /// </summary>
+    public bool GathererBankAtHome { get; init; } = true;
+
     /// <summary>The factor of Bots:Schedule at <paramref name="utc"/> (local = UTC + the offset; linear between two hours).</summary>
     public double ScheduleAt(DateTime utc)
     {
@@ -2815,12 +2875,100 @@ public sealed record BotOptions
     public (double Min, double Max) RedGroupSize { get; init; } = (2, 3);
 
     /// <summary>
+    /// Bots:Support:Enabled (true; inert while Bots:Enabled is false, so official off, pve on): patrol groups get healers and tanks by
+    /// Bots:Patrol:Makeups. A healer (a holy or nature staff, its kit's heals first) heals, shields and buffs its group's members and itself
+    /// with the players' cast checks (Pvp:FriendlySpells, cooldowns, energy; never a human, a Hostile unit or a bot of another group); a tank
+    /// (a mace or hammer, a shield, its kit's taunts first) engages first and turns on whoever hits its healer. false = every patrol a
+    /// damage dealer whose friendly spells go on itself only, as before.
+    /// </summary>
+    public bool SupportEnabled { get; init; } = true;
+
+    /// <summary>Bots:Support:HealBelow (0.7): a healer heals the group member (itself included) with the lowest health share below this.</summary>
+    public double SupportHealBelow { get; init; } = 0.7;
+
+    /// <summary>Bots:Support:ShieldBelow (0.9): in a fight a healer shields the group member with the lowest health share below this.</summary>
+    public double SupportShieldBelow { get; init; } = 0.9;
+
+    /// <summary>The zone key of Bots:Patrol:Makeups that a zone class without its own list uses.</summary>
+    public const string DefaultMakeupZone = "Default";
+
+    /// <summary>
+    /// Bots:Patrol:Makeups:&lt;zone class or Default&gt; (with Bots:Support:Enabled): the makeups a new patrol group draws by weight, its members
+    /// taking the parts in order as they spawn, the ones beyond the makeup damage dealers. Default "dps=90", "healer,dps=7", "tank,healer,dps=3";
+    /// Red, Black and Roads "dps=80", "healer,dps,dps=12", "tank,healer,dps=8": nine groups in ten (eight in the red and black zones) as before.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<PatrolMakeup>> PatrolMakeups { get; init; } = DefaultPatrolMakeups;
+
+    public static readonly IReadOnlyDictionary<string, IReadOnlyList<PatrolMakeup>> DefaultPatrolMakeups = RedBlack(
+        PatrolMakeup.ParseList("dps=90;healer,dps=7;tank,healer,dps=3", "default"), PatrolMakeup.ParseList("dps=80;healer,dps,dps=12;tank,healer,dps=8", "default"));
+
+    private static Dictionary<string, IReadOnlyList<PatrolMakeup>> RedBlack(IReadOnlyList<PatrolMakeup> all, IReadOnlyList<PatrolMakeup> red) =>
+        new(StringComparer.OrdinalIgnoreCase) { [DefaultMakeupZone] = all, ["Red"] = red, ["Black"] = red, ["Roads"] = red };
+
+    /// <summary>The makeups of zone class <paramref name="zone"/>: its own list, else Default's, else none.</summary>
+    public IReadOnlyList<PatrolMakeup> MakeupsOf(string? zone) =>
+        zone is not null && PatrolMakeups.TryGetValue(zone, out var own) ? own : PatrolMakeups.GetValueOrDefault(DefaultMakeupZone) ?? [];
+
+    /// <summary>
     /// Bots:Rewards:EliteSilverFactor (2) x an elite bot's silver; Bots:Rewards:EliteExtraItems (1): its bag holds this many more of its worn
     /// items than Bots:Rewards:MinItems (its enchanted gear drops as it was worn).
     /// </summary>
     public double EliteSilverFactor { get; init; } = 2;
 
     public int EliteExtraItems { get; init; } = 1;
+}
+
+/// <summary>
+/// One entry of Bots:Patrol:Makeups: the parts of a patrol group's members in their spawn order (the ones beyond them damage dealers) and its
+/// weight among its zone's entries.
+/// </summary>
+public sealed record PatrolMakeup(IReadOnlyList<Entities.PatrolPart> Parts, double Weight)
+{
+    /// <summary>"part,part,...=weight" (dps, healer, tank; the weight 0..1000, 1 when left out).</summary>
+    public static PatrolMakeup Parse(string text, string key)
+    {
+        var (roles, weight) = text.Split('=', 2, StringSplitOptions.TrimEntries) is [var r, var w] ? (r, w) : (text.Trim(), "1");
+        if (!double.TryParse(weight, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var n) || !double.IsFinite(n) || n is < 0 or > 1000)
+            throw new InvalidDataException($"{key}: '{text}': the weight '{weight}' is not 0..1000");
+        var parts = new List<Entities.PatrolPart>();
+        foreach (var word in roles.Split(',', StringSplitOptions.TrimEntries))
+            parts.Add(word.ToLowerInvariant() switch
+            {
+                "dps" => Entities.PatrolPart.Dps,
+                "healer" => Entities.PatrolPart.Healer,
+                "tank" => Entities.PatrolPart.Tank,
+                _ => throw new InvalidDataException($"{key}: '{text}': '{word}' is not dps, healer or tank"),
+            });
+        return new PatrolMakeup(parts, n);
+    }
+
+    /// <summary>A JSON array of entries or a ';' list of them; at least one.</summary>
+    public static IReadOnlyList<PatrolMakeup> ParseList(string value, string key)
+    {
+        string[] items;
+        try
+        {
+            items = value.TrimStart().StartsWith('[') ? JsonSerializer.Deserialize<string[]>(value) ?? []
+                : value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        catch (JsonException)
+        {
+            throw new InvalidDataException($"{key}: '{value}' is not a list of makeups like \"tank,dps,healer=5\"");
+        }
+        if (items.Length == 0) throw new InvalidDataException($"{key}: no makeup");
+        return [.. items.Select(i => Parse(i, key))];
+    }
+
+    /// <summary>One of <paramref name="makeups"/> by weight; null when none weighs anything.</summary>
+    public static PatrolMakeup? Pick(IReadOnlyList<PatrolMakeup> makeups, Random random)
+    {
+        var total = makeups.Sum(m => m.Weight);
+        if (total <= 0) return null;
+        var roll = random.NextDouble() * total;
+        foreach (var m in makeups)
+            if ((roll -= m.Weight) < 0) return m;
+        return makeups.Last(m => m.Weight > 0);
+    }
 }
 
 /// <summary>Bots:Combat:Spells: whether fighting bots cast their gear's spells (stageJ pvp-spells SPEC §2.9).</summary>

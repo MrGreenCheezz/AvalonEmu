@@ -75,7 +75,7 @@ public sealed class BotSlot
 /// a Red player may be fought: PvpAllowed, PvpForced, None) and the rewards of a defeat (<see cref="BotRewards"/>). A fighting bot decides
 /// every Bots:Combat:TickMs. Touched only under <see cref="World.Sync"/>.
 /// </summary>
-public sealed class BotManager(World world)
+public sealed partial class BotManager(World world)
 {
     /// <summary>The account of every bot character: a constant no repository account has.</summary>
     public static readonly Guid Account = new("b0700000-0000-0000-0000-000000000000");
@@ -171,7 +171,7 @@ public sealed class BotManager(World world)
     }
 
     /// <summary>Whether roster identity <paramref name="identity"/> may come online now: no slot holds it and its name is free (<see cref="Taken"/>).</summary>
-    public bool IdentityFree(BotIdentity identity) => !_held.Contains(identity.Index) && !Taken(identity.Name);
+    public bool IdentityFree(BotIdentity identity) => !_held.Contains(identity.Index) && !_away.Contains(identity.Index) && !Taken(identity.Name);
 
     /// <summary>The roster identity <paramref name="slot"/> holds, released (a turnover, a player took its name, its map unloaded).</summary>
     private void Release(BotSlot slot)
@@ -280,6 +280,7 @@ public sealed class BotManager(World world)
         foreach (var gone in _maps.Keys.Where(m => m.Unloaded).ToList()) Unloaded(gone); // a map dropped by another system
         Social.Update(now); // bot-social: delayed answers, city chatter
         var enabled = Enabled;
+        if (_transit.Count > 0) Travel(now); // bot-travel: the bots between two clusters arrive (or log out on the way)
         foreach (var map in world.Maps.Maps)
         {
             if (map.HumanCount == 0 && map.Bots.Count == 0) continue;
@@ -355,15 +356,11 @@ public sealed class BotManager(World world)
         if (zone == "Mists" && map.Bots.Count > 0 && !DriftersWanted(map))
             foreach (var drifter in map.Bots.Values.Where(b => b.Bot is { Role: BotRole.Drifter, Fight.Active: false }).ToList())
                 Despawn(drifter, "no Red player in its private zone any more", BotRefill.Now);
-        var counts = Settings.CountsOf(zone, map.Cluster, map.Template!.Info.Type);
-        if (zone == "City" && Options.CityGatherers > 0 && !counts.ContainsKey(BotRole.Gatherer))
-            counts = new Dictionary<BotRole, int>(counts) { [BotRole.Gatherer] = Options.CityGatherers }; // Bots:City:Gatherers on the T1 trees
-        if (counts.Keys.Any(r => !RoleEnabled(r))) counts = counts.Where(c => RoleEnabled(c.Key)).ToDictionary(); // Bots:<Role>:Enabled
+        var counts = CountsFor(map, zone);
         // No walk grid is built for a map whose zone gets none of the populated roles (phase 1: the open world's gatherers and patrols).
         if (!counts.Any(c => c.Value > 0 && PopulatedRoles.Contains(c.Key)) || NavOf(map) is not { Usable: true } nav) return;
         state.Slots ??= BuildSlots(map, counts, zone, now);
-        var scale = Settings.ScaleOf(map.HumanCount) * ScheduleFactor; // bot-schedule: the hour's factor
-        int Target(BotRole role) => (int)Math.Round(counts.GetValueOrDefault(role) * scale);
+        int Target(BotRole role) => TargetOf(map, counts, role);
         Leaving(state.Slots, Target, now);
         var spawned = 0;
         foreach (var slot in state.Slots)
@@ -371,7 +368,7 @@ public sealed class BotManager(World world)
             if (slot.Bot is not null || now < slot.ReadyAt || slot.Index >= Target(slot.Role)) continue;
             if (slot.Role == BotRole.Drifter && !DriftersWanted(map)) continue; // stageL mists: Mists:DrifterNeedsRed
             if (spawned >= Options.SpawnPerPass || map.Bots.Count >= Options.MaxPerMap || _total >= Options.MaxTotal) break;
-            var mapTier = map.Template.Name.Tier ?? 0;
+            var mapTier = map.Template!.Name.Tier ?? 0;
             var tier = Factory.TierFor(zone, mapTier, Random);
             // Bot-roster: the slot's identity (kept over a respawn), else a free one of its kind with its home tier nearest; it wears its home
             // tier where the zone has that tier. None free (or the roster off): a fresh name as before.
@@ -408,6 +405,23 @@ public sealed class BotManager(World world)
             if (door is not null && PortalAt(map, door.Position) is { Slot.Link: { } link }) PassAs(group, link); // it came through: a charge and the window, or its group's
         }
     }
+
+    /// <summary>
+    /// The counts of <paramref name="map"/>'s zone class <paramref name="zone"/> (and its override): Bots:City:Gatherers added in a royal
+    /// city, the roles Bots:&lt;Role&gt;:Enabled turns off left out.
+    /// </summary>
+    private IReadOnlyDictionary<BotRole, int> CountsFor(Map map, string zone)
+    {
+        var counts = Settings.CountsOf(zone, map.Cluster, map.Template!.Info.Type);
+        if (zone == "City" && Options.CityGatherers > 0 && !counts.ContainsKey(BotRole.Gatherer))
+            counts = new Dictionary<BotRole, int>(counts) { [BotRole.Gatherer] = Options.CityGatherers }; // Bots:City:Gatherers on the T1 trees
+        if (counts.Keys.Any(r => !RoleEnabled(r))) counts = counts.Where(c => RoleEnabled(c.Key)).ToDictionary(); // Bots:<Role>:Enabled
+        return counts;
+    }
+
+    /// <summary>How many bots of <paramref name="role"/> <paramref name="map"/> has now: its count × the Scale of its humans × the hour's factor.</summary>
+    private int TargetOf(Map map, IReadOnlyDictionary<BotRole, int> counts, BotRole role) =>
+        (int)Math.Round(counts.GetValueOrDefault(role) * Settings.ScaleOf(map.HumanCount) * ScheduleFactor); // bot-schedule: the hour's factor
 
     /// <summary>
     /// The slots of a map's zone class (and its override) for the populated roles: per role its count × the largest Scale factor (so that a
@@ -502,7 +516,11 @@ public sealed class BotManager(World world)
             slot.ReadyAt = world.Clock.Now + TimeSpan.FromMinutes(1);
             return null;
         }
-        return state.Groups[slot.Group] = new BotGroup(route);
+        var group = state.Groups[slot.Group] = new BotGroup(route);
+        // Bot support roles (Bots:Support:Enabled): a patrol group's makeup of its zone class by weight (a Drifter roams alone, a dps).
+        if (Options.SupportEnabled && slot.Role == BotRole.Patrol && PatrolMakeup.Pick(Options.MakeupsOf(ZoneOf(map)), Random) is { } makeup)
+            group.Makeup = makeup.Parts;
+        return group;
     }
 
     /// <summary>A stop of <paramref name="group"/>'s route out of every human's view (a new group's start; a newcomer walks to its leader from there).</summary>
@@ -556,7 +574,7 @@ public sealed class BotManager(World world)
             Despawn(bot, $"left through the portal {portal.Slot}", BotRefill.Arrival);
             return true;
         }
-        Despawn(bot, "left through an exit", BotRefill.Arrival);
+        if (!Depart(bot, exit)) Despawn(bot, "left through an exit", BotRefill.Arrival); // bot-travel: next door, else gone as before
         return true;
     }
 
@@ -681,7 +699,7 @@ public sealed class BotManager(World world)
     /// with none in its band the bot takes the tier present nearest to its own (lower first: a royal city's T1 trees make a T1 gatherer);
     /// null when the map has no node a gatherer takes.
     /// </summary>
-    public GatherProfile? ProfileFor(Map map, int tier)
+    public GatherProfile? ProfileFor(Map map, int tier, string? prefer = null)
     {
         var nodes = NodesOf(map);
         if (nodes.Count == 0) return null;
@@ -690,6 +708,8 @@ public sealed class BotManager(World world)
             tier = present.OrderBy(t => Math.Abs(t - tier)).ThenBy(t => t).First();
         var band = nodes.Where(n => n.Tier >= tier - 2 && n.Tier <= tier).ToList();
         var pick = band[Random.Next(band.Count)]; // a kind by its share of the band's nodes
+        // Bot-travel: a gatherer that came from another cluster keeps its kind where the band has it.
+        if (prefer is not null && band.FirstOrDefault(n => string.Equals(n.Type.Resource, prefer, StringComparison.OrdinalIgnoreCase)) is { } same) pick = same;
         var tiers = band.Where(n => n.Type.Resource == pick.Type.Resource).Select(n => n.Tier).ToList();
         return new GatherProfile(pick.Type.Resource!.ToUpperInvariant(), Math.Clamp(tier, 1, 8), tiers.Min(), tiers.Max());
     }
@@ -716,10 +736,11 @@ public sealed class BotManager(World world)
     /// view of the humans around (NewCharacter). <paramref name="slot"/> null = a GM's bot (persona "gm:&lt;id&gt;", no stay, never respawns).
     /// A city bot dwells at <paramref name="poi"/> first; a gatherer gathers by <paramref name="profile"/> (null: <see cref="ProfileFor"/> its
     /// tier, which may move its tier to the nodes the map has). Null when the map has no template, no free name was found or a gatherer
-    /// finds nothing to gather.
+    /// finds nothing to gather. Bot support roles: a patrol's <paramref name="part"/> (null: its group's next, <see cref="BotGroup.NextPart"/>)
+    /// with Bots:Support:Enabled, its weapon and kit by it; one whose weapon did not resolve at its tier (no holy staff below T3) a dps.
     /// </summary>
     public Player? Spawn(Map map, BotRole role, int tier, Vector2 at, float facing, BotSlot? slot = null, BotPoi? poi = null, GatherProfile? profile = null,
-        BotGroup? group = null, double healthFactor = 1, double damageFactor = 1, bool? elite = null, BotIdentity? identity = null)
+        BotGroup? group = null, double healthFactor = 1, double damageFactor = 1, bool? elite = null, BotIdentity? identity = null, PatrolPart? part = null)
     {
         if (map.Template is null) return null;
         if (role == BotRole.Gatherer && (profile ??= ProfileFor(map, tier)) is null) return null;
@@ -743,8 +764,11 @@ public sealed class BotManager(World world)
         var style = populated ? new GearStyle(identity?.GearRandom(role, tier, profile?.Resource) ?? Random, Options.GearTierSpread, Options.GearMixedShare,
             Options.EnchantChance.GetValueOrDefault(zone), Options.GearEnchant, Options.ArtifactChance.GetValueOrDefault(zone)) : null;
         var qualities = identity is not null ? identity.GearRandom(role, tier + 100, profile?.Resource) : Random; // its qualities the same too
+        var ownPart = role == BotRole.Patrol && Options.SupportEnabled ? part ?? group?.NextPart() ?? PatrolPart.Dps : PatrolPart.Dps;
         var (character, avatar, gear) = Factory.Make(role, tier, map.Cluster, name, at, facing, Random, profile?.Resource,
-            role == BotRole.Gatherer ? GathererFlag(map) : null, identity, style);
+            role == BotRole.Gatherer ? GathererFlag(map) : null, identity, style, ownPart);
+        if (ownPart != PatrolPart.Dps && !SupportWeapon(gear, ownPart)) ownPart = PatrolPart.Dps;
+        var prefer = ownPart switch { PatrolPart.Healer => Companions.Prefer(CompanionKind.Healer), PatrolPart.Tank => Companions.Prefer(CompanionKind.Tank), _ => null };
         var session = WorldSession.ForBot(world);
         var inventory = new Inventory(character.EquipmentContainer, character.InventoryContainer);
         // StageN botpower: a world bot's gear of quality Bots:Gear:Quality; a patrol or Drifter an elite with Bots:Gear:EliteChance (its
@@ -755,7 +779,7 @@ public sealed class BotManager(World world)
         if (isElite) gear = [.. gear.Select(g => Factory.Enchanted(g, Roll(Options.EliteEnchant)))];
         foreach (var item in gear)
             inventory.Equipment.Put(Array.IndexOf(Inventory.SlotNames, item.Slot),
-                session.NewBotItem(item, quality: !worldBot ? 1 : isElite ? Roll(Options.EliteQuality) : Roll(Options.Quality, qualities)));
+                session.NewBotItem(item, prefer, quality: !worldBot ? 1 : isElite ? Roll(Options.EliteQuality) : Roll(Options.Quality, qualities)));
         // StageM bots: an armed gatherer's weapon waits in its bag (its tool has no spell slot); BotCombat.Arm swaps it in when attacked.
         if (role == BotRole.Gatherer && Factory.GathererWeapon(tier, Random) is { } weapon && inventory.Bag.FreeSlot() is var free and >= 0)
             inventory.Bag.Put(free, session.NewBotItem(weapon, quality: Roll(Options.Quality)));
@@ -783,9 +807,12 @@ public sealed class BotManager(World world)
         var info = new BotInfo
         {
             Role = role, Tier = tier, PersonaId = slot?.PersonaId ?? $"gm:{id}", Brain = brain, Avatar = avatar, Home = at, Slot = slot, SpawnedAt = now,
-            StayUntil = slot is null ? TimeSpan.MaxValue : stay, Group = group, HealthFactor = healthFactor, DamageFactor = damageFactor, Elite = isElite,
+            StayUntil = slot is null ? TimeSpan.MaxValue : stay, Group = group, HealthFactor = healthFactor, DamageFactor = damageFactor, Elite = isElite, Part = ownPart,
             NextThink = now + TimeSpan.FromSeconds(Random.NextDouble() * Options.ThinkSeconds.Max),
+            Identity = slot is null ? null : identity?.Index,
         };
+        if (role == BotRole.Gatherer && slot is not null) // bot-travel: its home city and the end of its first trip
+            (info.HomeCity, info.TripUntil) = (HomeCityOf(map.Cluster), now + TimeSpan.FromMinutes(Options.GathererTripMinutes));
         // StageM bots: what a gatherer carries from its spawn (Gear.GathererStartCarry), minted only by its defeat's bag like its harvests.
         if (role == BotRole.Gatherer && Factory.GathererStartCarry(profile!, Random) is { } carry) info.Fight.Carried[carry.Item] = carry.Amount;
         var bot = new Player(session, world, id, character, inventory, GearProgression()) { Bot = info, Facing = facing, MoveStamp = world.GameNow };
@@ -835,6 +862,7 @@ public sealed class BotManager(World world)
         _live.Remove(bot.Character.Name);
         _total--;
         if (info.Role == BotRole.Companion) world.Companions.Gone(bot, why); // stageN: out of its owner's list and party
+        if (info.Slot is null && info.Identity is { } away) _away.Remove(away); // bot-travel: a visitor's identity is offline now
         if (info.Slot is { } slot && slot.Bot == bot)
         {
             var now = world.Clock.Now;
@@ -854,6 +882,18 @@ public sealed class BotManager(World world)
         Log.Debug("bots", $"map {map.Cluster}: bot '{bot.Character.Name}' ({info.PersonaId}) gone: {why}");
     }
 
+    /// <summary>
+    /// Bot support roles: whether <paramref name="gear"/> holds the weapon of <paramref name="part"/> (<see cref="Companions.KindOf"/>'s rule: a
+    /// healer a holy or nature staff; a tank a mace, a hammer or a shield).
+    /// </summary>
+    private static bool SupportWeapon(List<ItemTemplate> gear, PatrolPart part)
+    {
+        var main = gear.FirstOrDefault(g => g.Slot == "mainhand")?.Name ?? "";
+        var off = gear.FirstOrDefault(g => g.Slot == "offhand")?.Name ?? "";
+        return part == PatrolPart.Healer ? main.Contains("HOLYSTAFF", StringComparison.Ordinal) || main.Contains("NATURESTAFF", StringComparison.Ordinal)
+            : main.Contains("MACE", StringComparison.Ordinal) || main.Contains("HAMMER", StringComparison.Ordinal) || off.Contains("SHIELD", StringComparison.Ordinal);
+    }
+
     /// <summary>Every bot of <paramref name="map"/> despawned (<see cref="Despawn"/>); returns how many.</summary>
     public int Clear(Map map, string why, BotRefill refill)
     {
@@ -864,7 +904,7 @@ public sealed class BotManager(World world)
     }
 
     /// <summary>Every bot in the world despawned; returns how many.</summary>
-    public int ClearAll(string why, BotRefill refill) => world.Maps.Maps.ToList().Sum(m => Clear(m, why, refill));
+    public int ClearAll(string why, BotRefill refill) => DropTravellers(why) + world.Maps.Maps.ToList().Sum(m => Clear(m, why, refill));
 
     /// <summary>The map is unloaded (World's idle unload; a map dropped by another system): its bots gone, its slots forgotten.</summary>
     public void Unloaded(Map map)
@@ -1020,6 +1060,7 @@ public sealed class BotManager(World world)
     public void NameTaken(string name)
     {
         _characterNames?.Add(name);
+        DropTravellers("a player created a character of its name", name);
         foreach (var bot in All.Where(b => b.Character.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).ToList())
         {
             if (bot.Bot!.Slot is { } slot)

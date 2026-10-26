@@ -121,7 +121,7 @@ public static class BotCommands
         static string On(bool on) => on ? "on" : "off";
         return $"switches: world {On(o.WorldEnabled)} (city {On(o.CityEnabled)}, gatherer {On(o.GathererEnabled)}, patrol {On(o.PatrolEnabled)}, drifter {On(o.DrifterEnabled)}; "
             + $"zones {(o.Zones.Count == 0 ? "all" : string.Join("/", o.Zones))}), arena {On(o.ArenaEnabled)}, hellgate {On(o.HellgateEnabled)}, invader {On(o.InvaderEnabled)}, "
-            + $"pvp {On(o.PvpEnabled)}, rewards {On(o.RewardsEnabled)}";
+            + $"pvp {On(o.PvpEnabled)}, rewards {On(o.RewardsEnabled)}, travel {On(o.TravelEnabled)} (bank at home {On(o.GathererBankAtHome)})";
     }
 
     /// <summary>

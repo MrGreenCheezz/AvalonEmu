@@ -84,13 +84,25 @@ public sealed record BotSettings
 
     /// <summary>
     /// The weapons of patrols, of the city bots that carry one and of armed gatherers (T{t}_{weapon}; a MAIN_ weapon of a patrol or a city
-    /// bot gets an offhand). StageM bots: no healer staff (its three spells are friendly ones, which a bot casts only on itself), a cursed
-    /// staff, a quarterstaff and a dagger instead.
+    /// bot gets an offhand). StageM bots: no healer staff (its three spells are friendly ones, which a dps bot casts only on itself; the
+    /// healers of patrol groups have <see cref="HealerWeapons"/>), a cursed staff, a quarterstaff and a dagger instead.
     /// </summary>
     public IReadOnlyList<string> Weapons { get; init; } = ["MAIN_SWORD", "2H_BOW", "MAIN_FIRESTAFF", "MAIN_SPEAR", "2H_AXE", "MAIN_CURSEDSTAFF", "2H_QUARTERSTAFF", "MAIN_DAGGER"];
 
     /// <summary>The offhands of a one-handed weapon.</summary>
     public IReadOnlyList<string> Offhands { get; init; } = ["OFF_SHIELD", "OFF_BOOK", "OFF_TORCH"];
+
+    /// <summary>
+    /// Bot support roles (config/world.jsonc Bots:Patrol:Makeups): the weapons of a patrol healer (holy and nature staffs: their heals) and a
+    /// patrol tank (maces and hammers), and the offhands of their one-handed ones (a book; a shield).
+    /// </summary>
+    public IReadOnlyList<string> HealerWeapons { get; init; } = ["MAIN_HOLYSTAFF", "2H_HOLYSTAFF", "MAIN_NATURESTAFF", "2H_NATURESTAFF"];
+
+    public IReadOnlyList<string> TankWeapons { get; init; } = ["MAIN_MACE", "2H_MACE", "2H_HAMMER", "MAIN_HAMMER"];
+
+    public IReadOnlyList<string> HealerOffhands { get; init; } = ["OFF_BOOK"];
+
+    public IReadOnlyList<string> TankOffhands { get; init; } = ["OFF_SHIELD"];
 
     /// <summary>
     /// Bot-roster gear realism (Bots:Gear:ArtifactChance): the artifact sets of an armour piece (T{t}_{slot}_{material}_{set}; a combination
@@ -224,7 +236,7 @@ public sealed record BotSettings
     /// <summary>
     /// The file: Counts { zone: { role: n } }, Scale { humans: factor }, Clusters { Include [], Exclude [], Override { id or type: { role: n } } },
     /// CityTiers { tier: weight }, Avatars [], Emotes { index: weight }, Names { Prefixes, Middles, Suffixes, ReservedNames }, Gear { Materials,
-    /// Weapons, Offhands, Cape, PatrolMount, ArmoredMount, ArmoredShare, Tools { kind: pattern }, GathererSet, GathererBag, GathererMounts,
+    /// Weapons, Offhands, HealerWeapons, TankWeapons, HealerOffhands, TankOffhands, Cape, PatrolMount, ArmoredMount, ArmoredShare, Tools { kind: pattern }, GathererSet, GathererBag, GathererMounts,
     /// CityWeaponShare, GathererWeaponShare, GathererStartCarry "min-max", ArtifactSets [], ArtifactWeapons { weapon: [] } }, Rewards { Silver { tier: silver }, PatrolExtra [{ Item, Chance }] },
     /// Chat { Whisper [], Say [], Greet [], Win [], Loss [], EmoteReplies { emote: emote } }.
     /// </summary>
@@ -353,6 +365,10 @@ public sealed record BotSettings
                             "Materials" => s with { Materials = NonEmpty(Strings(g.Value, key), key) },
                             "Weapons" => s with { Weapons = NonEmpty(Strings(g.Value, key), key) },
                             "Offhands" => s with { Offhands = NonEmpty(Strings(g.Value, key), key) },
+                            "HealerWeapons" => s with { HealerWeapons = NonEmpty(Strings(g.Value, key), key) },
+                            "TankWeapons" => s with { TankWeapons = NonEmpty(Strings(g.Value, key), key) },
+                            "HealerOffhands" => s with { HealerOffhands = NonEmpty(Strings(g.Value, key), key) },
+                            "TankOffhands" => s with { TankOffhands = NonEmpty(Strings(g.Value, key), key) },
                             "Cape" => s with { Cape = Str(g.Value, key) },
                             "PatrolMount" => s with { PatrolMount = Str(g.Value, key) },
                             "ArmoredMount" => s with { ArmoredMount = Str(g.Value, key) },

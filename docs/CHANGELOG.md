@@ -3,6 +3,27 @@
 The `modifications` branch carries everything in `main` plus modding. This update also brings it the five-file
 JSONC configuration from PR #2 (`config/*.jsonc` in place of `config/albionlocal.json`).
 
+## 2026-10-26 (later) — bots travel and play support roles
+
+Both features need `Bots:Enabled` (off under `official`, on under `pve`).
+
+**Travel between clusters** (`Bots:Travel:*`, `Bots:Gatherer:TripMinutes`, `Bots:Gatherer:BankAtHome`)
+- A world bot leaving through an exit appears 10-20 s later at the matching entrance next door, as the same character
+  (name, gear, health, bag). It only travels to a map that has a player on it and a free bot slot of its role;
+  otherwise it logs out at the exit as before. Bots never enter instances, islands, hellgates or the Roads.
+- Gatherers have a home city with a bank. When the bag is full or the trip time (30 min) is up, a gatherer walks home
+  cluster by cluster, goes to its city's bank door, pauses and banks its haul — per city, no global storage.
+
+**Support roles in patrol groups** (`Bots:Support:*`, `Bots:Patrol:Makeups`)
+- Patrol groups are drawn from weighted makeups per zone (`dps`, `healer`, `tank`); by default 9 in 10 stay all-dps
+  (8 in 10 in red and black zones and on the Roads).
+- Healers (holy or nature staff, cloth) heal and shield their own group, lowest health first, through the players'
+  cast rules; they never target players or other groups' bots (area heals behave like a player's).
+- Tanks (mace or hammer, shield, plate) open with taunts and turn on whoever hits their healer.
+- A healer bot in a player's party heals the party.
+
+Self-tests: 484 on `main`, 512 on `modifications`.
+
 ## 2026-10-26 — official by default, switchable player bots
 
 The server now follows the course of emulators such as TrinityCore and AzerothCore: **`Preset: official` behaves like

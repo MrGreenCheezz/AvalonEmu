@@ -147,7 +147,7 @@ public static class SpellTargets
     /// knocked down, both humans or both bots (D10), neither in a duel under Pvp:DuelIsolation (a duelist takes and gives friendly effects
     /// only itself), not Hostile by <see cref="Pvp.Of(Player, Player)"/> (the server's Pvp:Mode) and not by <see cref="OfficialOf"/> (the
     /// client's table: under the consensual mode a Blue healer never helps a Red player in a fight the client calls hostile), then
-    /// Pvp:FriendlySpells (All; Group: the party or the guild; Self: nobody).
+    /// Pvp:FriendlySpells (All; Group: the party or the guild, for two world bots their patrol group; Self: nobody).
     /// </summary>
     public static bool Friend(Player a, Player b, long now)
     {
@@ -160,7 +160,8 @@ public static class SpellTargets
         return world.Config.PvpFriendlySpells switch
         {
             FriendlySpells.All => true,
-            FriendlySpells.Group => Pvp.SameParty(a, b) || world.Guilds.Same(a.Character.Id, b.Character.Id),
+            // Bot support roles: two world bots of one patrol group are a group too (bots have no party or guild).
+            FriendlySpells.Group => Pvp.SameParty(a, b) || world.Guilds.Same(a.Character.Id, b.Character.Id) || a.Bot?.Group is { } g && b.Bot?.Group == g,
             _ => false,
         };
     }
