@@ -225,3 +225,57 @@ public sealed record PvpDeathSettings(ItemLossRule AliveToDead, ItemLossRule Kno
             fame is null ? d.FameSharingRadius : N(fame, "pvpfamesharingradius", d.FameSharingRadius));
     }
 }
+
+/// <summary>
+/// One &lt;PlayerFocusFire&gt;&lt;attackers&gt; row (stageP SPEC §2.3): from <see cref="Attackers"/> distinct attacking players on, the
+/// share of a player hit's damage the target's resilience takes away, by the attacker's weapon (melee, ranged) or on a mounted target.
+/// </summary>
+public sealed record FocusFireRow(int Attackers, double Melee, double Ranged, double Mounted);
+
+/// <summary>
+/// The gamedata.xml numbers of the PvP details of stageP (analysis/work/stageP/league-pvp/SPEC.md §2): &lt;DeathRecap timeframe&gt;
+/// (180 s, the death recap's window), &lt;PlayerHealingSickness lookbackseconds="10"&gt; with its &lt;attackers numbergreaterorequal
+/// buff&gt; rows (2 → HEALINGSICKNESS_2 … 20 → HEALINGSICKNESS_20; the counted units are the distinct healers, SPEC §2.2) and
+/// &lt;PlayerFocusFire lookbackseconds="10" effectdurationinsec="5"&gt; with its rows (2 → 0.143 … 26+ → 0.75, mounted up to 0.80).
+/// </summary>
+public sealed record PvpDetailSettings(double DeathRecapSeconds, double SicknessLookbackSeconds, IReadOnlyList<(int Healers, string Buff)> Sickness,
+    double FocusFireLookbackSeconds, double FocusFireSeconds, IReadOnlyList<FocusFireRow> FocusFire)
+{
+    private static readonly double[] MeleeDefault =
+        [0.143, 0.259, 0.353, 0.420, 0.466, 0.500, 0.524, 0.546, 0.566, 0.585, 0.602, 0.618, 0.633, 0.646, 0.659, 0.671, 0.682, 0.692, 0.702, 0.711, 0.720, 0.728, 0.736, 0.743, 0.750];
+
+    private static readonly double[] MountedDefault =
+        [0.143, 0.259, 0.353, 0.430, 0.494, 0.547, 0.592, 0.630, 0.662, 0.690, 0.713, 0.734, 0.752, 0.768, 0.782, 0.795, 0.800];
+
+    /// <summary>The 345319 values.</summary>
+    public static PvpDetailSettings Default { get; } = new(180, 10, [.. Enumerable.Range(2, 19).Select(n => (n, $"HEALINGSICKNESS_{n}"))], 10, 5,
+        [.. Enumerable.Range(2, 29).Select(n => new FocusFireRow(n, MeleeDefault[Math.Min(n - 2, MeleeDefault.Length - 1)],
+            MeleeDefault[Math.Min(n - 2, MeleeDefault.Length - 1)], MountedDefault[Math.Min(n - 2, MountedDefault.Length - 1)]))]);
+
+    /// <summary>The buff of <paramref name="healers"/> distinct healers: the row with the highest count not above it; null below the first.</summary>
+    public string? SicknessBuff(int healers) => Sickness.Where(r => r.Healers <= healers).Select(r => r.Buff).LastOrDefault();
+
+    /// <summary>The row of <paramref name="attackers"/> distinct attackers: the highest count not above it; null below the first.</summary>
+    public FocusFireRow? FocusFireRowOf(int attackers) => FocusFire.LastOrDefault(r => r.Attackers <= attackers);
+
+    /// <summary>Reads gamedata.xml's root; what is missing keeps <see cref="Default"/>'s value.</summary>
+    internal static PvpDetailSettings Read(XElement gamedata)
+    {
+        var d = Default;
+        var recap = gamedata.Descendants("DeathRecap").FirstOrDefault();
+        var sick = gamedata.Descendants("PlayerHealingSickness").FirstOrDefault();
+        var sickRows = sick?.Elements("attackers").Select(a => ((int)PvpDeathSettings.N(a, "numbergreaterorequal", 0), (string?)a.Attribute("buff") ?? ""))
+            .Where(r => r.Item1 > 0 && r.Item2.Length > 0).OrderBy(r => r.Item1).ToList();
+        var focus = gamedata.Descendants("PlayerFocusFire").FirstOrDefault();
+        var focusRows = focus?.Elements("attackers").Select(a => new FocusFireRow((int)PvpDeathSettings.N(a, "numbergreaterorequal", 0),
+                PvpDeathSettings.N(a, "meleemodifier", 0), PvpDeathSettings.N(a, "rangedmodifier", 0), PvpDeathSettings.N(a, "mountedmodifier", 0)))
+            .Where(r => r.Attackers > 0).OrderBy(r => r.Attackers).ToList();
+        return new PvpDetailSettings(
+            recap is null ? d.DeathRecapSeconds : PvpDeathSettings.N(recap, "timeframe", d.DeathRecapSeconds),
+            sick is null ? d.SicknessLookbackSeconds : PvpDeathSettings.N(sick, "lookbackseconds", d.SicknessLookbackSeconds),
+            sickRows is { Count: > 0 } ? sickRows : d.Sickness,
+            focus is null ? d.FocusFireLookbackSeconds : PvpDeathSettings.N(focus, "lookbackseconds", d.FocusFireLookbackSeconds),
+            focus is null ? d.FocusFireSeconds : PvpDeathSettings.N(focus, "effectdurationinsec", d.FocusFireSeconds),
+            focusRows is { Count: > 0 } ? focusRows : d.FocusFire);
+    }
+}

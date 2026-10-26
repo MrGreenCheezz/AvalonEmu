@@ -46,6 +46,24 @@ public sealed partial class WorldSession
     private AlbionResponse? GetGuildMightCategoryContribution(GetGuildMightCategoryContributionRequest req) =>
         Player is { } player ? world.GuildGoals.MightContribution(player, req.nf, req.ng, req.nh, req.ni, req.nj) : null;
 
+    /// <summary>GetGvgSeasonHistoryRankings (op 153, t0: 0 guild name): afs {0 time, 1 past client seasons, 2 ranks, 3 points} (stageP territories SPEC P2).</summary>
+    [Handles(OperationCodes.GetGvgSeasonHistoryRankings, Status = SessionStatus.InWorld)]
+    private AlbionResponse? GetGvgSeasonHistoryRankings(GetGvgSeasonHistoryRankingsRequest req) =>
+        Player is { } player ? world.GuildGoals.HistoryRankings(player, req.nr) : null;
+
+    /// <summary>GetGvgSeasonGuildMemberHistory (op 154, tz: 0 season index): afr, the members' challenge points and might of that season, 12 parallel arrays.</summary>
+    [Handles(OperationCodes.GetGvgSeasonGuildMemberHistory, Status = SessionStatus.InWorld)]
+    private AlbionResponse? GetGvgSeasonGuildMemberHistory(GetGvgSeasonGuildMemberHistoryRequest req) =>
+        Player is { } player ? world.GuildGoals.MemberHistory(player, req.nq) : null;
+
+    /// <summary>
+    /// GvGSeasonPlayerGuildParticipationDetails (op 504, vn: 0 season index, 1 the requester's Guid): ag5, the guild, its points and rank and the
+    /// member's participation; no answer for a season the client lacks (stageP territories SPEC P2).
+    /// </summary>
+    [Handles(OperationCodes.GvGSeasonPlayerGuildParticipationDetails, Status = SessionStatus.InWorld)]
+    private AlbionResponse? GvGSeasonPlayerGuildParticipationDetails(GvGSeasonPlayerGuildParticipationDetailsRequest req) =>
+        Player is { } player ? world.GuildGoals.Participation(player, req.pu, req.pv) : null;
+
     /// <summary>
     /// QueryGuildPlayerStats (op 309, zj: 0 TimeFrame, 1 the stat; no request id): aic {0 the member Guids, 1 their values (a7m)}, never
     /// null arrays (the client passes both to its GUI unchecked); empty arrays outside a guild, zeros with Guild:Enabled off.

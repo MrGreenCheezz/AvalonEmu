@@ -70,6 +70,12 @@ public sealed class GuildGoals(World world)
     /// <summary>GameEvent (162) key 0 of the might level popup (SendPopupMessage type 68: JSON level = the row's index, category, season).</summary>
     public const int MightPopupType = 68;
 
+    /// <summary>
+    /// The GvgSeasonActivity names of the territory phases (stageP territories SPEC §0.2, but.cs: TerritoryHold 1, TerritoryConquer 2,
+    /// TerritoryPrimeTime 3), the Overview rows their season points will go to (<see cref="AddActivityPoints"/>; P3/P4).
+    /// </summary>
+    public const string TerritoryHold = "TerritoryHold", TerritoryConquer = "TerritoryConquer", TerritoryPrimeTime = "TerritoryPrimeTime";
+
     private static readonly long Week = TimeSpan.FromDays(7).Ticks;
 
     private readonly HashSet<(Guid Guild, object Instance)> _clears = [];
@@ -207,6 +213,15 @@ public sealed class GuildGoals(World world)
 
     /// <summary>.guildgoal points: <paramref name="points"/> season points for <paramref name="g"/> (a GM's, activity ChallengeLevelUp, no factor).</summary>
     public void GrantPoints(Guild g, long points) => AddPoints(g, StateOf(g, Season), points, ChallengeLevelUp);
+
+    /// <summary>
+    /// <paramref name="points"/> season points of <paramref name="activity"/> (a GvgSeasonActivity name: <see cref="TerritoryHold"/> …) for
+    /// <paramref name="g"/> in the current season, as given (the caller applies its factor); the territory phases' entry point.
+    /// </summary>
+    public void AddActivityPoints(Guild g, long points, string activity)
+    {
+        if (Enabled) AddPoints(g, StateOf(g, Season), points, activity);
+    }
 
     // ---- hooks
 
@@ -778,6 +793,132 @@ public sealed class GuildGoals(World world)
         return answer;
     }
 
+    // ---- the season history and participation (stageP territories SPEC §6 P2)
+
+    /// <summary>
+    /// GetGvgSeasonHistoryRankings (153, t0: 0 a guild name, the requester's guild when unknown; afs, read by dd9.c 0x180ac76f0 into its list
+    /// per guild name): 0 the time of the list (DateTime ticks: a change clears the client's rows; the guild's latest gain), 1 the client season
+    /// indexes (bcp.abo: an index the client lacks leaves its row empty, so only client seasons), 2 the guild's rank, 3 its season points; one
+    /// row per past client season (not the current one) the guild has points in, by index. The arrays are parallel, as key 1 drives the loop.
+    /// </summary>
+    public GetGvgSeasonHistoryRankingsResponse HistoryRankings(Player p, string? name)
+    {
+        var answer = new GetGvgSeasonHistoryRankingsResponse { ayu = [], ayv = [], ayw = [] };
+        if (!Enabled || world.GvgSeasons is not { } data || (world.Guilds.Find(name) ?? world.Guilds.Of(p.Character.Id)) is not { } g) return answer;
+        var current = Season.Key;
+        var rows = data.Seasons.Where(s => s.Key != current && Peek(g, s) is { Points: > 0 })
+            .Select(s => (Season: s, State: Peek(g, s)!, Rank: Ranked(s.Key).FindIndex(x => x.Guild == g) + 1))
+            .Where(r => r.Rank > 0).OrderBy(r => r.Season.Index).ToList();
+        answer.ayt = rows.Count > 0 ? rows.Max(r => r.State.PointsAt) : 0;
+        answer.ayu = [.. rows.Select(r => r.Season.Index!.Value)];
+        answer.ayv = [.. rows.Select(r => r.Rank)];
+        answer.ayw = [.. rows.Select(r => r.State.Points)];
+        return answer;
+    }
+
+    /// <summary>
+    /// GetGvgSeasonGuildMemberHistory (154, tz: 0 the season index; afr): no reader in this client (no ci9.b&lt;afr&gt; instance), so the columns
+    /// are the server's reading: 0/1 the members' Guids and names (by challenge points, then name), 2 the challenge points each gave in that
+    /// season, 3 their guild might (a7m, all categories), 4-11 0 (parallel). Outside a guild or for a season the client lacks: empty arrays.
+    /// </summary>
+    public GetGvgSeasonGuildMemberHistoryResponse MemberHistory(Player p, int index)
+    {
+        var answer = new GetGvgSeasonGuildMemberHistoryResponse { ayh = [], ayi = [], ayj = [], ayk = [], ayl = [], aym = [], ayn = [], ayo = [], ayp = [], ayq = [], ayr = [], ays = [] };
+        if (GuildOf(p) is not { } g || world.GvgSeasons?.Seasons.ElementAtOrDefault(index) is not { } season) return answer;
+        var st = Peek(g, season);
+        var rows = g.Members.Select(m => (m.Id, m.Name, Challenge: st?.Members.GetValueOrDefault(m.Id) ?? 0,
+                Might: st?.Might.Values.Sum(x => x.Members.GetValueOrDefault(m.Id)) ?? 0))
+            .OrderByDescending(r => r.Challenge).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        var n = rows.Count;
+        answer.ayh = [.. rows.Select(r => r.Id)];
+        answer.ayi = [.. rows.Select(r => r.Name)];
+        answer.ayj = [.. rows.Select(r => r.Challenge)];
+        answer.ayk = [.. rows.Select(r => r.Might)];
+        (answer.ayl, answer.aym, answer.ayn, answer.ayo, answer.ayp, answer.ays) = (new int[n], new int[n], new int[n], new int[n], new int[n], new int[n]);
+        (answer.ayq, answer.ayr) = (new float[n], new float[n]);
+        return answer;
+    }
+
+    /// <summary>
+    /// GvGSeasonPlayerGuildParticipationDetails (504, vn: 0 the season index, 1 the requester's Guid; ag5 into c20 by c21.a 0x180a49a80): 0/1 echo
+    /// the request (the client's callbacks wait under that pair), 2 the guild's name, 3-9 its crest (bux.j in order), 10 its season points (the
+    /// client's bracket of them, but.aa), 11 0 (kept, not read), 12 its rank (the chest upgrade rows' rank limit, bq6.e; -1 = none), 13 the
+    /// participation time (c4 ticks, shown against the season's length x minimumparticipationpercentage): this server counts no time, so the
+    /// member's share of the participation rule (<see cref="Participants"/>: its challenge points or guild might against MinParticipation of the
+    /// members' average) x that required time, 14 whether it is reached. A season index the client lacks gets no answer (c21.a throws on it);
+    /// outside a guild only 0, 1 and 12 -1.
+    /// </summary>
+    public GvGSeasonPlayerGuildParticipationDetailsResponse? Participation(Player p, int index, Guid requester)
+    {
+        if (world.GvgSeasons?.Seasons.ElementAtOrDefault(index) is not { } season) return null;
+        var answer = new GvGSeasonPlayerGuildParticipationDetailsResponse { a6m = requester, a6n = index, a6o = "", a6y = -1 };
+        if (GuildOf(p) is not { } g) return answer;
+        var st = Peek(g, season);
+        var l = g.Logo;
+        (answer.a6o, answer.a6p, answer.a6q, answer.a6r, answer.a6s, answer.a6t, answer.a6u, answer.a6v) =
+            (g.Name, l.Schema, l.Symbol, l.Color1, l.Color2, l.SymbolColor, l.Scale, l.Offset);
+        answer.a6w = st?.Points ?? 0;
+        var rank = Ranked(season.Key).FindIndex(x => x.Guild == g);
+        answer.a6y = rank < 0 ? -1 : rank + 1;
+        var share = st is null ? 0 : Share(g, st, p.Character.Id);
+        var required = (season.End - season.Start).Ticks * S.MinParticipation;
+        answer.a6z = (long)(Math.Clamp(share, 0, 1) * Math.Max(0, required));
+        answer.a60 = share >= 1;
+        return answer;
+    }
+
+    /// <summary>
+    /// How far <paramref name="member"/> is towards <see cref="Participants"/>' rule in <paramref name="st"/>: the larger of its challenge points and
+    /// its guild might, each against MinParticipation of the members' average (1 = taking part; 0 = nothing given).
+    /// </summary>
+    private double Share(Guild g, GuildSeasonState st, Guid member)
+    {
+        if (g.Members.Count == 0) return 0;
+        long Challenge(Guid id) => st.Members.GetValueOrDefault(id);
+        long Might(Guid id) => st.Might.Values.Sum(x => x.Members.GetValueOrDefault(id));
+        double Part(Func<Guid, long> of)
+        {
+            var own = of(member);
+            if (own <= 0) return 0;
+            var need = S.MinParticipation * g.Members.Average(m => (double)of(m.Id));
+            return need <= 1e-9 ? 1 : own / need;
+        }
+        return Math.Max(Part(Challenge), Part(Might));
+    }
+
+    /// <summary>
+    /// The winner of the client season before <paramref name="index"/>: the first of the local guilds ranked in it, with its points and how
+    /// many of the client seasons up to it it won (at least 1); null = none (no season before, nobody with points).
+    /// </summary>
+    private (Guild Guild, long Points, int Wins)? Winner(int index)
+    {
+        if (index < 1 || world.GvgSeasons is not { } data || data.Seasons.ElementAtOrDefault(index - 1) is not { } before) return null;
+        var ranked = Ranked(before.Key);
+        if (ranked.Count == 0) return null;
+        var (g, st) = ranked[0];
+        var wins = data.Seasons.Take(index).Count(s => Ranked(s.Key) is { Count: > 0 } r && r[0].Guild == g);
+        return (g, st.Points, Math.Max(1, wins));
+    }
+
+    /// <summary>
+    /// GvgSeasonUpdate (351, ap4; dd7.r 0x180ac6110) of client season <paramref name="index"/>: 0 the season, 1 the one before, and with a winner
+    /// of the one before (<see cref="Winner"/>) the GvgSeasonWinnerGui's keys: 2 its Guid (Empty = no winner window), 3 its name, 4-6 its alliance's
+    /// Guid, name and tag ("" without one, as the official sample), 7-13 its crest in dd7.r's order (bux.j takes 7, 10, 8, 9, 11, 12, 13: schema,
+    /// symbol, colour 1, colour 2, symbol colour, scale, offset), 14 its season points (the winner window's bracket), 15 its season wins
+    /// (the window shows a count from 2 on).
+    /// </summary>
+    public GvgSeasonUpdateEvent SeasonUpdate(int index)
+    {
+        var e = new GvgSeasonUpdateEvent { cg5 = index, cg6 = Math.Max(0, index - 1) };
+        if (Winner(index) is not { } w) return e;
+        var a = world.Alliances.OfGuild(w.Guild.Id);
+        var l = w.Guild.Logo;
+        (e.cg7, e.cg8, e.cg9, e.cha, e.chb) = (w.Guild.Id, w.Guild.Name, a?.Id ?? Guid.Empty, a?.Name ?? "", a?.Tag ?? "");
+        (e.chc, e.chf, e.chd, e.che, e.chg, e.chh, e.chi) = (l.Schema, l.Symbol, l.Color1, l.Color2, l.SymbolColor, l.Scale, l.Offset);
+        (e.chj, e.chk) = (w.Points, w.Wins);
+        return e;
+    }
+
     // ---- the season's end (phase 3)
 
     /// <summary>
@@ -992,7 +1133,7 @@ public sealed class GuildGoals(World world)
         var season = Season;
         if (season.Index is { } index)
         {
-            p.Session.Send(new GvgSeasonUpdateEvent { cg5 = index, cg6 = Math.Max(0, index - 1) });
+            p.Session.Send(SeasonUpdate(index));
             p.GvgSeasonSent = index;
         }
         if (arrived) return;

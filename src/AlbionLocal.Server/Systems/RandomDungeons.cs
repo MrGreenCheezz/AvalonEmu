@@ -958,6 +958,7 @@ public sealed class RandomDungeons(World world)
         if (!chest.MayOpen(p)) return $"locked (ChestState {chest.ViewerState(p).State})";
         if (world.Corrupted.ChestRefused(p, chest) is { } refused) return refused; // stageL corrupted: a run's chests are its owner's
         if (world.Hellgates.ChestRefused(p, chest) is { } lost) return lost; // stageL hellgates phase B: a match's chests are the winners'
+        if (world.Territories.ChestRefused(p, chest) is { } notOwner) return notOwner; // stageP P5: a castle chest is its owner guild's (Castles:ChestNeedsOwnership)
         if (chest.RolledFor(p)) return null;
         var map = chest.Map!;
         var floor = Find(map.Cluster);

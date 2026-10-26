@@ -30,6 +30,18 @@ public sealed record DefenseStats(double Armor, double MagicResistance, double C
 }
 
 /// <summary>
+/// An item power cap (stageP league-pvp SPEC §2.5, the arena's Arena:ItemPowerCap): each item's power above <see cref="Cap"/> counts
+/// × <see cref="Factor"/> (0 = a hard cap; the 1v1's 0.2: 1000 → 920).
+/// </summary>
+public readonly record struct ItemPowerCap(double Cap, double Factor)
+{
+    public double Apply(double ip) => ip <= Cap ? ip : Cap + (ip - Cap) * Factor;
+
+    /// <summary><paramref name="ip"/> under <paramref name="cap"/>, unchanged without one.</summary>
+    public static float Apply(float ip, ItemPowerCap? cap) => cap is { } c ? (float)c.Apply(ip) : ip;
+}
+
+/// <summary>
 /// Health/energy from the equipment, as the client computes item stats (bc9.a 0x1805fcfc0 item power,
 /// bej.a 0x180624200 attribute contribution, float arithmetic). Verified against the official Join and
 /// RegenerationPlayerComboChanged values (analysis/work/impl-stats/harness). Not modelled: buffs, food,
@@ -50,7 +62,7 @@ public sealed class StatCalculator(GameData data)
     /// Max health/energy are rounded (the official values are whole numbers; the midpoint rule is not
     /// known), regeneration is not.
     /// </summary>
-    public CharacterStats Compute(IReadOnlyList<EquippedItem?> slots10, IReadOnlyDictionary<int, int> levels)
+    public CharacterStats Compute(IReadOnlyList<EquippedItem?> slots10, IReadOnlyDictionary<int, int> levels, ItemPowerCap? cap = null)
     {
         var b = Data.Bases;
         float baseHp = (float)b.HitPoints, baseHpRegen = (float)b.HitPointsRegeneration;
@@ -64,7 +76,7 @@ public sealed class StatCalculator(GameData data)
             hpRegenBonus += (float)item.HitPointsRegenerationBonus;
             enRegenBonus += (float)item.EnergyRegenerationBonus;
             if (Data.ProgressionOf(item) is not { } prog) continue;
-            var f = ItemPower(e, levels) / 100f;
+            var f = ItemPowerCap.Apply(ItemPower(e, levels), cap) / 100f;
             var ph = (float)Math.Pow((float)prog.HitPoints, f);
             var pe = (float)Math.Pow((float)prog.Energy, f);
             var sh = (float)Data.HitPointsShare(item.ProgressionType);
@@ -90,12 +102,12 @@ public sealed class StatCalculator(GameData data)
     /// control resistance and 0.0305 defence. <paramref name="scaled"/> false (Combat:GearArmor false): the raw items.xml values
     /// summed, as before stageJ (no crowd control resistance, no defence vs mobs).
     /// </summary>
-    public DefenseStats Defense(IReadOnlyList<EquippedItem?> slots10, IReadOnlyDictionary<int, int> levels, bool scaled = true)
+    public DefenseStats Defense(IReadOnlyList<EquippedItem?> slots10, IReadOnlyDictionary<int, int> levels, bool scaled = true, ItemPowerCap? cap = null)
     {
         var items = new List<(ItemData, double)>();
         for (var s = 0; s < Math.Min(StatSlots, slots10.Count); s++)
             if (slots10[s] is { } e && Data.Item(e.TypeIndex) is { } item)
-                items.Add((item, scaled ? ItemPower(e, levels) : 0));
+                items.Add((item, scaled ? ItemPowerCap.Apply(ItemPower(e, levels), cap) : 0));
         return scaled ? Defense(items) : RawDefense(items);
     }
 

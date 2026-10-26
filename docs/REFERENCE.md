@@ -425,7 +425,7 @@ There is no real death in PvE: no respawn point, no silver or durability loss (t
 `Pve:KnockdownWear` adds a share of each item's maximum durability, 0 by default),
 and nothing of the knockdown is saved, so a player who leaves while down comes back standing
 at that spot with full bars. `.damage <n>`, `.kill` and `.heal` try it on oneself. The knockdown screen's death recap
-is empty (the damage sources are not recorded yet).
+lists what hit the player (see "Death recap and PvP details" below).
 
 Reviving (stageN, `analysis/work/stageN/revive/SPEC.md`; `Pve:PartyRevive`, on in the pve preset): a player knocked down (by a mob,
 or a non-lethal PvP knockdown outside a duel) while a party or guild mate is on its map **bleeds out** instead (BleedOut 693: the
@@ -1105,8 +1105,8 @@ both wagers (they are held only in memory).
 ### Arena, ladders and tournaments
 
 `../analysis/work/stageN/arena/SPEC.md`. The arena agency in a city takes registrations: its Register button queues for the
-**1v1** (the client's 1v1 arena, map ARENA-1v1-01) or the **5v5** (unranked or ranked, map ARENA-STANDARD); tick "as a group"
-to queue with your party. `.arena join 1v1|2v2|5v5 [group]` does the same from chat, and is the only way to the **2v2** (the
+**1v1** (the client's 1v1 arena, map ARENA-1v1-01), the **5v5** (unranked, map ARENA-STANDARD) or the **Crystal Arena** (ranked,
+below; the 5v5 with `Arena:CrystalArena` false); tick "as a group" to queue with your party. `.arena join 1v1|2v2|5v5 [group]` does the same from chat, and is the only way to the **2v2** (the
 client offers none). The queue HUD shows the wait; when a match is found the client's ready popup asks you to join within 60 s
 (or `.arena accept`); `.arena leave` leaves the queue or forfeits a match, `.arena status` lists queues and matches. Teams are
 filled by count, then by rating. With too few players a match starts after `Arena:BotWaitSeconds` (20) with player-bots: by
@@ -1119,9 +1119,9 @@ is not driven). The result pays 5000 silver and 30000 fame for a win, 1500 and 1
 official unranked items (a win lootbag, the first 3 wins a day a royal sigil bag; tomes for a loss). 15 s later everyone goes
 back where they registered.
 
-Ratings: an Elo ladder (start 1200, K 20) per mode (`1v1`, `2v2`, `5v5`) and for duels, saved (schema v32). Arena matches
+Ratings: an Elo ladder (start 1200, K 20) per mode (`1v1`, `2v2`, `5v5`, `crystal`) and for duels, saved (schema v32). Arena matches
 with bots are not rated (`Arena:RateWithBots`); a duel counts when won by knockdown, the area rule or the opponent leaving.
-`.ladder [duel|1v1|2v2|5v5] [count]` lists the best, `.rating [name]` shows a player's ratings and places.
+`.ladder [duel|1v1|2v2|5v5|crystal] [count]` lists the best, `.rating [name]` shows a player's ratings and places.
 
 Tournament: a GM opens a sign-up with `.tournament open`, players `.tournament join` (`.tournament` shows the state), the GM
 `.tournament start`s it: single elimination seeded by duel rating (an odd count gives the best a bye). Each pair fights a normal
@@ -1131,12 +1131,62 @@ duel; the first duel won between them decides it (a GM can `.tournament win <nam
 Config (`Arena:*`): `Enabled`, `Bots`, `BotWaitSeconds`, `BotFill` (Balanced/Full), `BotTier` (0 = from the players' item
 power), `BotDamageFactor`, `BotHealthFactor`, `ReadyCheck`, `AcceptSeconds`, `ArrivalSeconds`, `CountdownSeconds`,
 `RespawnSeconds`, `Tickets2v2`, `Tickets5v5`, `TicketsPerDeath`, `MatchMinutes`, `EndSeconds`, `Rated`, `RateWithBots`, `StartRating`, `K`,
-`DuelsRated`, `WinSilver`, `LossSilver`, `WinFame`, `LossFame`, `RewardItems`, `DailyWins`, `RewardsWithBots`, `FallbackCluster`.
+`DuelsRated`, `WinSilver`, `LossSilver`, `WinFame`, `LossFame`, `RewardItems`, `DailyWins`, `RewardsWithBots`, `FallbackCluster`,
+`ItemPowerCap`, `DoubleHealerPenalty`, `EnterBuffs`, `WarcampDefense`, `Psp`, `Orbs`, `OrbRoundLookup`, `MatchHud`, `CrystalArena`,
+`RankPoints`, `RankPointMinGain`, `RankPointBoosters`.
 The figures above are the pve preset's. Under `Preset official` the arena follows matchtypes MATCH_ARENA: a 15 s countdown, 150
-tickets with 2 lost per death (the orbs' ticket loss is not modelled, so a match mostly runs to its limit), 25 minutes, no silver
-or fame (officially season points, not modelled; the unranked items stay), no duel ladder, and no bots (`Arena:Bots` false). A
+tickets with 2 lost per death and 10 per runestone the other team claims (below), 25 minutes, no silver
+or fame (season points instead, below; the unranked items stay), no duel ladder, and no bots (`Arena:Bots` false). A
 match never starts with empty slots when bots are off or unavailable (`Bots:Enabled` false): a lone registration waits for players,
 and a match whose other team could not join goes back to the queue.
+
+**Official arena rules** (`../analysis/work/stageP/league-pvp/SPEC.md` §2.5, §3.3; on under `Preset official`, all off under pve,
+which keeps the arena described above). `Arena:ItemPowerCap`: in a match every worn item counts at most 600 item power in the
+unranked modes (2v2, 5v5), and in the 1v1 900 plus a fifth of the power above (1000 → 920); the bars, armour, damage and spell
+power follow, and lift again on leaving. `Arena:DoubleHealerPenalty`: a team with two or more healers (a holy or nature staff in the
+main hand) all carry DOUBLEHEALER_PENALTY (healing received −35 %, renewed while it lasts). `Arena:EnterBuffs`: on arrival the
+map's ARENA_* buffs are cast: ARENA_ENTER (full health and energy, cooldowns reset), ARENA_OVERLOAD_PROTECTION, and in the 1v1
+ARENA_1V1_ENTER (healing −60 %). `Arena:WarcampDefense`: each camp shoots the other team within 18 m for 10 % of its maximum
+health every 0.4 s during the fight (a knockdown there costs a ticket), and its own team standing within 8.7 m of it is
+invulnerable (ARENA_WARCAMP_INVULNERABILITY: attacking breaks it until you step out and back in). The turret has no visual of
+its own (NewWarCampObject is not decoded): the hits show as plain health loss. `Arena:Psp`: the result pays the client's
+personal season points while an Adventurer's Challenge season runs: unranked win 1200, loss or draw 400 (premium 1500 / 600),
+1v1 400 / 175 (premium 500 / 250), the Crystal Arena 1200 / 500 (1500 / 750): the first rank's figures, with `Arena:RankPoints`
+those of the player's rank (below).
+
+**Runestones** (`Arena:Orbs`, official on, pve off; §3.2). The 2v2/5v5 map has three runestones (ORB_ARENA). They wake 60 s
+into the fight; a team that stands alone with at least one player within 9 m of one for 10 s claims it, and the other team loses
+10 tickets (chat line). Taking the other team's runestone needs 4 s more first (it turns neutral, then 10 s to claim); with both
+teams in the circle the capture pauses; a capture left alone for 20 s is lost. The 1v1 map has none. The client is sent the
+runestones (NewOrbObject) and their claims and resets (OrbClaimed, OrbReset); the crystal maps' channel runestones (a 7.5 s
+channel, broken by a hit or by moving, −1 ticket per claim, and every 120 s the side holding more takes 20/30/40) are in place
+for the Crystal Arena (below). `Arena:OrbRoundLookup` (false) adds MATCH_ARENA's 60 s orb-difference
+score, which the tutorial does not mention. `Arena:MatchHud` (false in both presets until captures confirm the fields) sends the
+match HUD's OrbUpdate, MatchUpdate, StartArenaMatchInfos and MatchNewCombatRound / MatchEndCombatRound; off, nothing partly
+decoded goes out and the score stays in chat.
+
+**Crystal Arena** (`Arena:CrystalArena`, official on, pve off; §3.4). The agency's ranked category (Crystal Arena) is its own 5v5
+queue (`.arena join crystal`, ladder `crystal`) on the Crystal Realm (CrystalRealm03) with the client's MATCH_CRYSTAL_GVG_NONLETHAL:
+150 tickets, 6 lost per death, respawn after 18 s, 24 minutes. Its three runestones are claimed by a 7.5 s channel within 8 m
+(broken by a hit or by moving; −1 ticket for the other team); every 120 s the side holding more runestones takes 20, 30 or 40
+tickets (a difference of 1, 2, 3) and its runestones turn neutral. Item power is soft-capped at 900 (× 0.2 above), the camps
+shield their team (WARCAMP_INVULNERABILITY) and shoot the other one (non-lethal), and the result pays arena.bin's ranked rewards
+(win bag and season points of the player's rank, tomes for a loss, the daily royal sigil shared with the other queues). Bots fill
+empty slots only under the usual arena bot rules (`Arena:Bots`). Not yet: the realm's exits and winner/loser chests. Off, the
+ranked category queues for the 5v5 as before.
+
+**Arena ranks** (`Arena:RankPoints`, official on, pve off; §3.3). The two ranked queues, the Crystal Arena and the 1v1, each keep
+rank points (RP) and one of the season's 17 ranks (arena.bin RANKED_BRACKETS_ARENA_S26: Iron 1-4, Bronze 1-4, Silver 1-4, Gold 1-4,
+Crystal). A rank is reached at 150, 300, … 2400 RP and lost below 0, 100, … 2350 RP. Each new rank gives its rank-up chest once
+a season (the Crystal Arena's T4_LOOTBAG_ARENA_RANK_UP_*, the 1v1's T4_LOOTBAG_1V1_ARENA_RANK_UP_*; a player offline at the
+result gets it with the next one), and the win and loss rewards and season points follow the player's rank (the 1v1 then pays
+its own 1v1 bags instead of the unranked ones). The arena window shows the rank and RP (GetArenaRankings). Only rated results
+count (`Arena:Rated`, not with bots unless `Arena:RateWithBots`). The client data has no rank point formula, so this is a
+placeholder [H] until a capture shows real RP changes: a win gives winrankpointmodifier (4 at Iron 1 … 1 at Gold 4) × the Elo
+gain, plus elowinbooster (10, Crystal 5) while the Elo is above the rank's expectedelo; a loss takes loserankpointmodifier (1) ×
+the Elo lost, plus elolosebooster (1) while the Elo is below expectedelo; the 1v1 counts half (rankpointfactor 0.5); a draw
+nothing; RP never go below 0. `Arena:RankPointMinGain` (1) is the least Elo change counted, `Arena:RankPointBoosters` (true)
+the boosters. Ranks are saved (schema v42); the season's rank-down at a new season is not applied yet.
 
 ### Spells on other players
 
@@ -1227,7 +1277,53 @@ before). Phase 3 has no keys of its own.
   `AttackMounted`); a gatherer's only the players it answers (those that hit it or its party in the last 20 s), never another Red
   player nearby. Gatherers carry tools without spells, so in practice the patrols cast. `Off`: bots only auto-attack, as before.
 
-Not yet (SPEC phase 5): focus fire, healing sickness, resurrection.
+Not yet (SPEC phase 5): resurrection. Focus fire (resilience) and healing sickness: see "Death recap and PvP details" below.
+
+### Death recap and PvP details
+
+`../analysis/work/stageP/league-pvp/SPEC.md` §2 (phases P1-P3). All on in both presets (the official rules; the pve preset keeps
+them as they are).
+
+**Death recap** (`DeathRecap:*`, §2.1). The server records what happens to a player: every hit by a mob or a player (bots count as
+players), its heals, and every spell another unit puts on it that is crowd control or a debuff (and any spell of a mob), plus its
+own spells on itself. At a knockdown or death the last `DeathRecap:Seconds` (gamedata `<DeathRecap timeframe="180"/>`) are frozen as
+its recap; the knockdown screen's request (op 492) and the character menu's later one get it, in the layout of the two official
+responses: entry 0 the victim, then one entry per causer (most damage first) with its buckets: damage or heals of one spell (or
+auto-attack, -1) merged with their count and the first hit's time, each crowd control or debuff its own bucket with its end time,
+the kind 0 spell, 1 melee and 2 ranged auto-attack. Mob rows are as captured (mobs.xml avatar and ring, flag 0x80); player rows
+carry the name, HUMAN_MALE/FEMALE, AVATAR_nn, RING1, the flag, the main hand's item and quality, the guild and the average item
+power. The recap is kept per character for the server's run (a relog still shows it, a restart forgets it). Not recorded: the
+mount bar's hits and damage the server deals in the player's own name (the hellgate ring). `DeathRecap:Enabled` false: the empty
+recap of before.
+
+**Healing sickness** (`Pvp:HealingSickness`, §2.2). A player or bot healed by two or more distinct other players or bots within 10 s
+(gamedata `<PlayerHealingSickness lookbackseconds="10">`) gets `HEALINGSICKNESS_n` for n healers (8 s; 2 and 3: -35.3 % healing
+received, up to -78.2 % at 20), before the heal that made it n is worked out; a higher one is not replaced by a lower one. Heal spells,
+heal-over-time ticks and heal areas of others count; one's own heals, potions, food and regeneration do not [infer: the tooltip only
+says "healed by too many sources"]. It cuts every heal received, × (1 − value) on top of the other healing modifiers. The client
+shows it as a normal debuff (ActiveSpellEffectsUpdate). Mobs never.
+
+**Resilience** (`Pvp:Resilience`, §2.3, focus fire protection). Every damage hit of a player or bot on another notes the attacker;
+with two or more distinct attackers within 10 s (gamedata `<PlayerFocusFire lookbackseconds="10" effectdurationinsec="5">`) the
+target's resilience is raised to that count for 5 s, renewed by each such hit. While it lasts every player hit on it does
+× (1 − m × (1 − penetration)): m the row's meleemodifier or rangedmodifier by the attacker's weapon (2 attackers 14.3 %, 3 25.9 %, …
+26 and more 75 %), the mountedmodifier (up to 80 %) on a mounted target, penetration the attacker's
+`focusfireprotectionpenetration` (the Resilience Penetration trait, its items) [infer: how penetration combines]. Mob hits neither
+count nor are reduced. The client has no spell for it and no reference to its status text was found, so it shows no icon here
+[infer; capture R1 will show how the official server displays it].
+
+**Zone-entry protection** (`Pvp:SpawnBuffs`, `Pvp:EnterSpellCooldowns`, §2.4). On the Join that ends a cluster change (and a
+respawn's arrival) the cluster type's worldsettings `<spawnbuff>` list is applied as officially: its `SPAWN_*` buffs in document
+order whose conditions hold (isclusterchange, isrevive, ispvppossible = the zone allows any PvP, fromshortspawnbuffcluster = the
+cluster one came from has `hasshortspawnbuffonleave`, i.e. a dungeon, expedition or tunnel; hideouts, GvG and territories do not
+exist here). In blue, yellow, red and black zones that is SPAWN_INVULNERABILITY (30 s invincible, invisible to mobs, immune to
+damage, debuffs and crowd control; ends on attacking, casting, interacting or after 150 m; SPAWN_INVULNERABILITY_SHORT, 50 m,
+coming out of a dungeon), SPAWN_SPEED (+20 % for 15 s) and SPAWN_BUFFIMMUNITY (no second shield within 60 s and 150 m); dungeon
+and expedition entrances give SPAWN_INVULNERABILITY_EXPEDITION; a respawn's SPAWN_BUFFIMMUNITY_ONDEATH blocks the shield for 10 s. A
+spot-bound effect of the last cluster ends first, so each zone change gives a new shield [infer: capture R6]. Hellgates keep giving
+their own lists (`Hellgates:SpawnBuffs`); the lists' other names (ARENA_*, MISTS_*, CORRUPTED_DUNGEON_ENTER, hideout and shrine
+buffs) are their systems'. `spellcooldownsonenteringseconds` (15 s in the yellow, red and black zones, their dungeons and tunnels)
+puts every gear spell slot (not potion and food) on that cooldown on arrival [infer: which slots; capture R6]. Not on a login.
 
 ## Extra action bars
 
@@ -2154,7 +2250,7 @@ and `.g` only, as before).
   longer reach you (the whisper is dropped quietly); at most `Social:MuteLimit` 100.
 - Friends, open requests and mutes are saved in `albionlocal.db` (schema v21; an older server build then refuses the file) and go with a deleted character; chat channels,
   lines and whispers are not stored. Not there yet: changing the chat tabs (the client's settings are reset to the default tabs
-  at every Join), alliance and faction channels (no alliances or faction warfare), chat history for players who log in later,
+  at every Join), faction channels (no faction warfare), chat history for players who log in later,
   item links shown from a snapshot, the official whisper limit.
 
 Commands: `.friends [name]` (yours; a GM may name a character), `.chat` (GameMaster: the chat connections and channels).
@@ -2189,7 +2285,8 @@ Right Hand (the guild right "access guild mail"), the guild's; the filters (all,
 
 Not checked in the client yet (SPEC §7): the rows and bodies of the market notices, the envelope count, the write view's error boxes,
 and whether the read view drops a claimed item by itself (the client reads the mail again only after a refusal; reopen the mail if
-an item still shows). Not there: guild applications and alliance invitations by mail, gold market and real estate mails.
+an item still shows). Alliance invitations arrive as their own mail kind (README Alliances). Not there: guild applications by mail,
+gold market and real estate mails.
 
 Commands: `.mail <name> <subject> | <text>` and `.mail item <name> <item> [count] [quality]` (GameMaster: a server notice, with an item attached).
 
@@ -2242,7 +2339,7 @@ Guilds work through the game's own guild window (`../analysis/work/stageH/guilds
   line `[Guild] name: text` to the members without a chat connection.
 - Guilds, members, roles and crests are saved in `albionlocal.db` (schema v17); open invitations are not.
   `Guilds:Enabled false` turns guilds off (saved ones stay; a deleted character still leaves its guild, and a guild
-  left empty is removed at startup). Not there: the guild bank window and the official tax setting, alliances, territories and GvG, the guild finder,
+  left empty is removed at startup). Not there: the guild bank window and the official tax setting, territories and GvG, the guild finder,
   guild mail, custom access tags, crest change; the guild keys of other messages (party invite key 6, Died 3/11, the
   player loot bag 20/21, a mob's owner guild, NewMountObject 9-17) stay empty for now.
 - Known limit: a member whose connection drops in the middle of a cluster change stays "online" for its guild mates
@@ -2285,6 +2382,211 @@ Commands (Player unless noted): `.g <text>`, `.guild info [name]`, `.guild creat
 (`Recruit`, `Member`, `Guardsman`, `Officer`, `Warmaster`, `MasterOfCoin`, `TheRightHand`, `Guildmaster`), `.guild contracts`,
 `.guild payout <name> <silver>`, `.guild list` and `.guild xp <guild> <amount>` (GameMaster), `.guild disband <name>` (Admin):
 the same rules as the window, for when a dialog does not do what it should.
+
+### Alliances
+
+Guilds can join in alliances through the guild window's alliance tab (`../analysis/work/stageP/hideouts/SPEC.md` phases A1/A2;
+`Alliances:Enabled`, true in both presets):
+
+- **Create** with a name (3-30 latin letters, digits, `-`, `_`, single spaces) and a tag (2-5 latin letters and digits), both
+  unique ignoring case. Only a guild master or The Right Hand (the ALLIANCE_MANAGEMENT right) creates, and the cost,
+  `Alliances:CreateCost` (5000000 silver, gamedata), is paid from the **guild account** (official; the client says so when it is
+  short). The creating guild is the founder: it alone disbands the alliance and cannot leave it while other guilds are in it.
+- **Invite**: the founder guild's master or Right Hand invites a guild by name; the invitation is an "Alliance Invitation"
+  mail (kind 2) in the invited guild's mailbox (its master and Right Hand read it), whose Accept / Decline buttons answer it.
+  The founder can withdraw an open invitation in the member list (shown there as "(Invited)"). Open invitations are saved.
+- **Kick**: the founder guild kicks any other guild; the founder guild itself cannot be kicked.
+- **Limits** (gamedata): `Alliances:MaxGuilds` 100 guilds (open invitations count) and `Alliances:MaxPlayers` 30000 players in
+  all its guilds; the latter also stops guild invitations and joins of its guilds (4251 / 4123).
+- **Leave / disband**: a member guild leaves (its guild master or The Right Hand); the founder alone leaving disbands it.
+  After founding or joining an alliance a guild founds or joins no other for `Alliances:ChangeCooldownMinutes` (10080,
+  gamedata changecooldownminutes); the same time keeps it from rejoining the alliance it left [H].
+- The alliance shows on the guild window and over every member: GuildUpdate kind 5 (keys 16/17), Join 79/80, NewCharacter
+  51/52 and GuildMemberWorldUpdate 11/12. Whether the official nameplate key carries the alliance's name or its tag is open
+  (capture R3): `Alliances:PlateText` `Name` (default, the SPEC's reading) or `Tag`.
+- **Allies are friends**: in PvP an ally counts like a guild mate (black zones Friendly, red zones as the guild row of the
+  official table), which is what the client draws once it knows the alliance. A guild that leaves (or is kicked, or whose
+  alliance is disbanded) stays friendly with it for `Alliances:LeaveProtectionSeconds` (30, gamedata) [H].
+  `Alliances:NoFriendlyFire` (pve true, official false, as `Guilds:NoFriendlyFire`) makes a Hostile ally (two factions in one
+  alliance) Neutral. Spells with the `alliancemember` target condition reach allies.
+- **Alliance chat**: the chat server's Alliance channel (type 25, `Alliances:Chat` true) for the members of all its guilds,
+  joined and left with the alliance like the guild channel.
+- The alliance window's member list (AllianceGetMemberInfos) and the alliance details (AllianceGetDetailInfo, by name or tag)
+  are answered; the meaning of a few of their fields is inferred (SPEC §2.1-§2.2).
+- Saved in `albionlocal.db` (schema v38: alliances, their guilds, open invitations and the cooldown history). A guild that is
+  deleted leaves its alliance (the founder role passes to the oldest guild; an alliance left without guilds goes).
+  Not there: alliance logs and stats (QueryAllianceGuildStats stays unanswered), the gold upkeep flag, territories.
+
+Commands (Player unless noted): `.alliance info [name or tag]`, `.alliance invite <guild>`, `.alliance accept [alliance]`,
+`.alliance decline [alliance]` (also the way to answer with `Mail:Enabled false`), `.alliance kick <guild>`, `.alliance leave`,
+`.alliance list` and `.alliance disband <name or tag>` (GameMaster).
+
+Not checked in the client yet: the invitation mail's text (its body is stored as `inviting guild|alliance name` [H] for the
+client's "{0} wants you to join the Alliance '{1}'"), the meaning of AllianceGetMemberInfos keys 1/4/5/18 and
+AllianceGetDetailInfo keys 2/3/8-12/20/21, the nameplate text (`Alliances:PlateText`).
+
+### Guild territories and castles
+
+The guild territories of the black zones (`../analysis/work/stageP/territories/SPEC.md`, phases P1-P5;
+`Territories:Enabled` and `Castles:Enabled`, true in both presets): the data, the world presence, the claim, upkeep and season points
+of the watchtower territories and the castle fights. Running a server of this version converts `albionlocal.db` to schema v41 (the tables
+territory_owners, v39, and territory_state, v41: a territory's food, access and tower power; an older server build refuses the
+converted file).
+
+- **Data**: world.xml's 268 watchtower territories (170 resource, 98 farm) and 118 castle territories (23 castles, MEDIUMCASTLE, and
+  95 castle outposts, SMALLCASTLE) in 269 clusters, with territorytypes.bin (claim cost 2 000 000, food, tower levels, base season
+  points by cluster type), castles.bin, the timeregions of worldsettings (prime time = the timeregion's start, UTC, for 1 h; Europe
+  US_22_00 20:00-21:00) and gamedata (1 000 000 guild fame, 15 s claim); the region is `Guild:Region` (europe). The season's
+  seasontimes give the claimable windows (SEASON_34 Europe: day 1 18:00 to day 29 11:00, day 29 18:00 to day 57 11:00); a local
+  season after the client's last one reuses SEASON_34's. All three region files filter those events by the same six timeregions.
+- **World presence**: every watchtower territory's monolith (NewMonolithObject, bound to the landscape tower, key 7 the territory)
+  and every castle territory's castle or castle outpost (NewCastleObject from its tile T1_CASTLE …, the castles.xml type, its phase,
+  owner and chest) stand in their clusters.
+- **Castle fight** (`Castles:Timers` "data" = castles.xml): the castle tile's guards stand (its basic guards and mortars; health ×
+  `Castles:GuardScale`, pve 0.6). Hitting or killing one starts the fight; when all basic guards are dead the elite guards come
+  (castle outposts after 1 min, castles at once), when those are dead the castle lord (outposts after 1 min), and his death opens the
+  capture zone. A phase not won within 30 min fails the attack: the castle stands as before. A capture zone nobody claims for 300 s
+  brings the lord back. The client hears each phase (CastlePhaseChanged 417: 0 at rest, 1 guards, 3/4 elites coming/standing, 5/6
+  lord coming/standing, 7 capture zone, 8 the lord back; only 0 and 7 are decoded in the client, the rest is the server's numbering).
+  No gate yet (the gate buildings are not spawned) and no GameEvent texts.
+- **Capture**: the zone (12 m around the castle) belongs to the team that stands in it alone (a guild with its alliance; a player
+  without a guild never claims; mounted players count as presence only): 16 s fill the claim, another team alone empties it in 8 s,
+  an empty zone lets it run out in 30 s, two teams (or a defender) pause it. A full claim makes the guild the owner (saved, the
+  members are told, the owner's name and crest on the castle; the old owner's guild is told it lost it); the owner's own team in the
+  zone ends the fight and keeps the castle. Then the guards come back after 1 h (territorytypes GuardSettings). A disbanded guild's
+  castles are unowned. The client shows the claim (CastleClaimProgress 513, the claiming guild's crest 514).
+- **Chests** (`Castles:Chests`, `ChestSchedule`): at every respawn of treasuredistribution's castle schedule (every 2 h UTC 10:00 to
+  22:00, the weekend's 18:00 always legendary; "hourly" = every full hour) the data's draw (castles 240/120/40/21 standard to
+  legendary or nothing 579, outposts 400/200/70/21 or nothing 309) puts a TREASURE_CASTLE_* chest (loot of lootchests.xml) on the
+  castle's treasure spot, for 30 min. With `ChestNeedsOwnership` (official) only owned castles get chests and only the owner guild's
+  members open them; pve: every castle, anyone. The castle shows the chest (ChestState) and its rarity.
+- **Claim** (op 302 at the tower, a 15 s channel, `Territories:ClaimChannelSeconds`): a member of a guild with the right Claim Territory
+  (the master always) claims a free watchtower territory when the season has it claimable (`SeasonSchedule` "data"), in the zone's prime
+  time (`PrimeTimeOnly`; not needed within the claimlimitoverrideminutes, 16 h, after the season opens the claims), with no Tower
+  Guardian standing (`Invader`), not in the first 2 minutes after entering the zone, under `MaxPerGuild`, with the guild fame
+  (`GuildFameRequirement` "data": 1 000 000 for the first and each further territory) and the cost in the guild account (`ClaimCost`
+  "data": 2 000 000 silver, taken at the channel's end). Moving, damage or a knockdown break the channel. A refusal shows the client's
+  territory error and a system line saying why. The tower then shows the guild's name and crest, the members get the territory in
+  their guild list, and a hideout's tribute in that zone goes to the new owner.
+- **Food** (`Territories:Food`): a claim stores 4000 food; one is eaten every 22.2 s (the storage of 38 880 lasts 10 days); anybody at
+  the tower may feed it food items (items' nutrition; op 223). An empty store loses the territory (the guild is told). pve: nothing
+  is eaten.
+- **Give up and access**: a member with Give Up Territory lets it go (op 115); Territory Access changes the access setting (op 116;
+  kept and saved, no shield exists yet).
+- **Guild list**: GetMyTerritories (op 138) lists the guild's territories and castles with the food and tower power of each.
+- **Season schedule** (`SeasonSchedule` "data"): the season's resetterritories (SEASON_34: day 1, 29 and 57 at 11:00 UTC) frees every
+  territory, and castle (the season lists CASTLE), held from before it; spawninvader puts the season's Tower Guardian
+  (T6_MOB_ARCANE_ELEMENTAL_ELITE_BOSS) at each free tower of a loaded zone, and claims wait until it is dead (a server restart brings it
+  back until killed again). "off" (pve): always claimable, never reset, no Tower Guardian.
+- **NPC holders** (`Territories:NpcOwners`, pve true): a free watchtower is held by the "Outlands Wardens": fortification guards
+  (T4-T8_MOB_WATCHTOWER_SWORD / CROSSBOW / STAFF by the zone's tier, on the territory's guard spots nearest the tower, health ×
+  `Castles:GuardScale`) stand at the tower; with all of them dead it is free to claim for 1 h, then they hold it again. A territory
+  given up, starved or reset goes back to them. They pay and get nothing (no tribute, no season points).
+- **Territory season points**: every `Territories:ScoreTickMinutes` (60; the official tick is not in the data) a held territory pays
+  its guild's season the base points of its zone (territorytypes: black zone 1 60, 2 75, 3 90, 4 110, 5 130, 6 160) × the season's
+  score multiplier (SEASON_34: 2 from day 29) × `Territories:SeasonPointsFactor`, while the season's territory scoring runs for its
+  timeregion (SEASON_34: from day 1 18:00 to day 29 00:00 local and again from day 29 18:00; always with `SeasonSchedule` "off"),
+  as Holding Territories; a tick in the zone's prime time pays `Territories:PrimeTimeBonus` (1) × as much again as Prime Time:
+  Territory Bonus Points. They count for the standings, brackets and rewards like every season point (the Overview rows, 447). The
+  NPC holders score nothing.
+- **Tower power**: a territory's tower power points (0 at a claim; nothing but the GM raises them yet: power crystals are a later
+  phase) set its tower level by the levels' pools stacked (level 2 from 9613, 3 from 24 609, … 8) and decay by the current level's
+  pool over its decaydays (2 days at level 1 … 4.8 at level 8), level by level; the zone's players get TowerPowerPointUpdate (433)
+  when they are set.
+- **Castle season points**: `Castles:SeasonPoints` (0 = off, both presets: the official amount is not in the data) × `Territories:SeasonPointsFactor`
+  per `Territories:ScoreTickMinutes` to the owner guild's season (the Overview's Territory row).
+- **Territory window**: GetMonolithInfo (117) answers a held territory's food and tower level (0/0 otherwise), GetClaimInfo (118)
+  the guild's fame (its members' fame since joining: PvE, PvP, gathering, crafting), the territories it owns and whether the season
+  lets the territory be claimed now (the client adds its own prime-time check), GetTerritorySeasonPoints (120) only whether the
+  reader's guild holds it (no points breakdown yet: tower level -1, the rest 0).
+- **World map**: the territory clusters stay without map info (the client's map indexes keys 4-18 per territory without checks
+  and no official sample confirms them): `Territories:WorldMapInfo` true sends them, one neutral entry per territory, every
+  array of the same length (a self-test checks it). Try it only with that in mind.
+- `Raids` and `Attacks` are read for the phases still to come; pve presets: 200 000 silver, no fame, any time, no food, no season
+  schedule, no raids, NPC holders, castle chests for anyone, guards × 0.6.
+- Commands: `.territory [id or name]` (the counts and rules, or one territory's cluster, owner, prime time and season window; a
+  castle's phase, claim, chest and guards; a tower's food, power, NPC holder and Tower Guardian), GM
+  `.castle capture|reset|chest|free|owner [guild]` on the nearest castle of the map, GM `.tower owner [guild]|free|food <n>|power <n>|beat`
+  on the nearest territory tower.
+
+Not checked in the client yet (captures T1, T3, T5): the monolith's keys 8-20 and 28 and the castle's key 11 are sent as their
+neutral values (0, false); the castle's key 13 is the standing chest's rarity name ("standard" … "legendary", "" without); the
+phase numbers other than 0 and 7; CastleClaimProgress keys 3-6 (the claim as a7m 0-10000 at the stamp, rate 0: an update every
+change instead) and the crest order of 514 (read from bux.j's call: 2 schema, 3/4 colours, 5 symbol, 6 symbol colour, 7/8 scale and
+offset); whether the client itself lets a non-owner open a castle chest (pve). GetMonolithInfo's two numbers and GetClaimInfo key 2
+have no reader found (food and level, false), and the world map's territory order is world.xml's. Claim (capture T1/T2): the cancel
+reason of an interrupted claim (341 key 1 12080; only 12085, the territory error, is decoded), GuildMemberTerritoryUpdate's keys (the
+territory, gained), GetMyTerritories keys 4-6 (0) and its hideout keys 7-18 (left out), the access byte's meaning, the reading of
+claimlimitoverrideminutes as "claims outside prime time", and whether the Tower Guardian stands at every free tower. Scoring (capture
+T6): the tick length and the prime-time bonus, the tower level's reading of powerpointspool and decaydays, GetTerritorySeasonPoints
+keys 1-8; no ReceivedGvgSeasonPoints (432) is sent for territory points (its key 2 is a mob type).
+
+### Guild hideouts
+
+A guild's hideouts in the black zones (`../analysis/work/stageP/hideouts/SPEC.md`, phases H1-H4; section `Hideouts` of
+`config/world.jsonc`, the same in both presets). Running a server of this version converts `albionlocal.db` to schema v40 (the tables
+hideouts and hideout_homes; an older server build refuses the converted file).
+
+- **Placement** (H1): the kit UNIQUE_HIDEOUT (items.xml hideoutitem, sent as a simple item) is placed like a placeable building: the
+  client's confirmation sends PlaceableObjectPlace (69) with the kit and the hideoutbuilding's type (decoded in the client, not
+  ConstructionSiteCreate). The rules of the data: a zone whose clustertype allows hideouts (OPENPVP_BLACK_1-6; the Roads' hideout
+  tunnels), with a territory (`RequireTerritory`), a guild member whose role has Manage Hideouts, during the zone's prime time
+  (the timeregion's start + 60 min, `RequirePrimeTime`, `PrimeTime`), at most 6 hideouts per guild (`MaxPerGuild`) and one per zone,
+  180 m from another hideout (60 m in a tunnel), and `BlockRadius` (50 m, a choice: the data has no radii) from a territory's monolith
+  (castles twice that), a zone exit and an outpost. After the kit's 15 s the kit is used and the hideout stands; a refusal is a system
+  line with the reason (the client's own CanBuild texts are named in it) and the kit stays.
+- **Construction** (H1): hideouts.xml's phases as timers: 1200 s, then invulnerable until the zone's next prime time, then 1200 s; then
+  the hideout is built at level a (HIDEOUT-0001a, 2 shields) with its starting food (15 000). `ConstructionSeconds` (a number) makes
+  the whole construction that long. Attacks are not made (`Sieges` false): no phase can be lost. The guild gets a mail at the start
+  and at the end (plain text).
+- **Surface object**: NewHideoutObject (419) with the owner guild and alliance, key 13 the level index, 14 the shields left, 15 the
+  mode (1 construction with 17 the phase and 18 its end, 2 established), 21/22 the durability bar; sent again to the zone at every
+  change. AccessStatus: the preset (closed, private, public) with the owner guild's role.
+- **Interior and entry** (H2): a built hideout's interior is the instance `@HIDEOUT@<guid>` built from the world.xml cluster of its
+  level (HIDEOUT-0001a: bank, repair shop, travel point; 0001b/c add the market, the farming merchant, the season store, meld
+  building, vanity store). ExitEnterStart (237) on the surface object channels hideouts.xml enterchanneltime (4 s, 253/255 to those
+  in view; a move, damage or knockdown breaks it with 254), then the push {0 the instance, 1 the level's cluster, 2 the guild's
+  name}; the arrival is the exit's spawn point inside. Inside: NewHideoutManagement (420, key 1 the instance id) with
+  HideoutManagementUpdate (425: level, food, tribute, a running upgrade) and NewHideoutExit (421); the exit leads out the same way
+  to the zone, 12 m in front of the hideout. A ChangeCluster on either object goes at once. Access by the preset
+  (accessrights.xml): private (the default) = the owner guild, public = everyone, closed = the guild master and the members with
+  Manage Hideouts; none while under construction or being upgraded. The alliance has no right of its own in the presets: allies
+  enter a public hideout. A login inside a hideout that is gone puts the character in front of it (without its row: in its last
+  city). HideoutGetOwnerInfo (399) answers the owner guild's name. A disbanded guild's hideouts go, players inside are put out.
+- **Services** (H3): the bank inside opens the hideout's **own vault** (`BankVault` "Own": the location `@HIDEOUT@<guid>`, a vault no
+  city bank opens, and no hideout bank opens a city's; the per-city logistics rule). `BankVault` "City" opens the nearest city's
+  vault instead (by world.xml exits, its "Bank of …" interior). Under `Bank:Shared` it is the shared vault like every bank. The
+  market of levels b and c (MARKETPLACE_HIDEOUT) is a market of its own location (the instance id), the repair shop an ordinary
+  one. **Make Home** (MakeHome 205 on the management; hideouts.xml makehome: levels a/b the owner guild, c also its alliance) and
+  Leave Home (206): saved, Join key 67 carries the home (the instance id), UpdateHome (216) tells the client at once. A death
+  respawns inside the home hideout (`RespawnAtHome`; not while it is being upgraded, not from a mists zone), and the travel
+  window's home entry (BuyJourney kind 1) is the **Journey Back** into it (to its travel point; 8047 while it is being upgraded).
+  The access preset is changed by AccessRightsChangeSettings (198) on the hideout or its management by the guild master or a
+  member with Manage Hideouts (custom roles are read as the nearest preset); the AccessStatus goes out again.
+- **Food, upgrades, tribute** (H4): HideoutFillNutrition (397) on the management takes food items of the inventory (items.xml
+  nutrition, the client's own test) into the store, as many as the level's storage takes (150 000 / 400 000 / 750 000). At each
+  prime-time start of the zone (`Upkeep`) the level's dailyupkeepnutrition (15 000 / 20 000 / 25 000) is eaten; a day with too
+  little food empties the store and costs a shield (the guild gets a mail), a fed day gives one back up to the level's
+  (shieldregenerationrate 1). Attacks are not made, so a starving hideout only loses its shields (no destruction yet, phase H5).
+  UpgradeHideout (394) by a member with Manage Hideouts: the next level's silver (20 M / 80 M) from that member and its resources
+  (GvG tokens, T1 wood and rock, T6 stone blocks) from its inventory, then its time (48 h / 96 h); nobody enters meanwhile, at the
+  end the players inside are put out and the next entry builds the new level (HIDEOUT-0001b/c, with the market and more); the
+  return code is the client's UpgradeResult (2 already upgrading, 3 last level, 4 not the owner guild, 5 no permission, 6 not
+  enough silver, 8 not enough resources). HideoutSetTribute (400) by the guild's managers (else 16000 NoPermission) sets the daily
+  tribute, paid at the prime time from the guild account (at most what it holds) to the guild owning a territory of the zone (the
+  first owned one: today the castles; watchtowers once they can be claimed); nothing without an owner. GM `.hideout day` runs a
+  day's upkeep and tribute now.
+- Commands: `.hideout list [all]` (your guild's hideouts; a GameMaster: all), GM `.hideout finish` (the construction or upgrade of
+  the hideout you are in or the nearest one ends now), GM `.hideout place` (a hideout of your guild where you stand, no kit, no rules), GM `.hideout day` (a day's food and tribute now).
+
+Not checked in the client yet (no capture holds a hideout, SPEC §9 P1/P5): NewHideoutObject keys 10, 12, 16, 19, 20, 23, 24, 26-29 are
+sent neutral (left out: 0, false, ""), key 11 is the placement time [H], key 22 the durability's stamp [H]; the mode values 0 and 3
+of key 15 are not used. The way in is ExitEnterStart (237) on the hideout [H, SPEC Q6] and the way in's ChangeCluster push carries the
+guild's name as key 2 [H]. NewHideoutManagement key 5 is the surface position [H], keys 6 and 8-13 neutral; HideoutManagementUpdate
+keys 4, 5 and 11-14 neutral. MakeHome, LeaveHome, AccessRightsChangeSettings, HideoutFillNutrition and HideoutSetTribute answer the bare
+return code (0 or the codes above), UpgradeHideout the UpgradeResult as its return code [H]. HideoutGetInfo (398) keeps the server's default empty
+answer, as before (its keys are not decoded). Not made yet: destruction and recovery (H5), power cores (H6), sieges (H7), HQ, boosters, moving and the
+world map's hideout keys (H8); outlaws and the static-dungeon rule are not checked at the entrance.
 
 ### Guild goals: the Guild Challenge, weekly goals, ranking and guild might
 
@@ -2337,6 +2639,14 @@ animals (v28) merged in, the conversion goes on to v28.
 - **Ranking**: the season window's Rankings tab lists the guilds of this server with season points (rank, crest, points;
   ties go to the guild that got there first), its Overview the points by activity ("Guild Challenge" = challenge levels and
   weekly goals, "Killing Mobs" = bosses, "Might: …" = might levels). `.guild ranking` shows the top ten in chat.
+- **Season history and participation** (`../analysis/work/stageP/territories/SPEC.md` phase P2): the Rankings tab's history of a
+  guild (GetGvgSeasonHistoryRankings: every past client season it has points in, with its rank and points), the members' history
+  of a season (GetGvgSeasonGuildMemberHistory: their challenge points and might; this client never reads it), and the reward
+  tab's participation (GvGSeasonPlayerGuildParticipationDetails: the guild, its points and rank, and the member's participation
+  shown as time: this server counts none, so the bar is the member's share of the `MinParticipation` rule above, full when the
+  member qualifies). At every Join of a client season GvgSeasonUpdate carries the previous season's winner among this server's
+  guilds (name, alliance, crest, points, seasons won) for the client's season winner window; without one only the season keys.
+  The Overview's territory rows (TerritoryHold, TerritoryConquer, TerritoryPrimeTime) get points once territories score.
 - **Season end** (the silver and items only with `Guilds:SeasonRewards Content`, the pve preset's; official: none): when a season ends (or at the first start after a downtime across its end) each guild with points gets,
   once, `BracketSilver` of its bracket (iron 0.5 M, bronze 1 M, silver 2 M, gold 4 M, crystal 8 M silver) into the guild
   account, and every member who gave something and at least `MinParticipation` (51 %) of the members' average, in Guild

@@ -49,6 +49,39 @@
   //   "ShareWithoutParty": false, "SilverTax": 0, "Contracts": false, "ContractCount": 3, "ContractPeriod": "Weekly", "ContractXp": 20000, "ContractSilver": 100000,
   //   "BossSeasonPoints": false, // content/goals.json Guild BossSeasonPoints: guild season points for boss kills (pve: true)
   //   "SeasonRewards": "Official" }, // Official = no bracket silver or items of content/goals.json at a season's end, .guild payout only with SilverTax or Contracts; Content = the file's (pve: Content)
+  // "Alliances": { "Enabled": true, "CreateCost": 5000000, "MaxGuilds": 100, "MaxPlayers": 30000, "ChangeCooldownMinutes": 10080, "LeaveProtectionSeconds": 30, // alliances of guilds (README Alliances; gamedata values)
+  //   "NoFriendlyFire": false, // allies never Hostile to each other outside a duel (pve: true, as Guilds:NoFriendlyFire)
+  //   "Chat": true, "PlateText": "Name" }, // the Alliance chat channel (type 25); the nameplate keys carry the alliance's Name or its Tag (open until a capture)
+  // "Territories": { "Enabled": true, // guild territories (README Guild territories and castles): the monoliths and castles of the black zones; claim, give up, food, the guild's list, the season schedule
+  //   "WorldMapInfo": false, // true = ClusterInfoUpdate keys 4-18 for the 269 territory clusters (no official sample yet: a wrong array crashes the client's map); false = they stay unanswered
+  //   "ClaimCost": "data", "GuildFameRequirement": "data", // territorytypes claimcost 2000000 silver from the guild account, gamedata 1000000 guild fame per territory (pve: 200000, 0)
+  //   "PrimeTimeOnly": true, "PrimeTimeOffsetHours": 0, // claims, raids and battles only in the cluster's prime time (worldsettings timeregion + 1 h; pve: false); the offset shifts every prime time
+  //   "ClaimChannelSeconds": "data", "Food": true, // gamedata territoryclaimtimeinsec 15; food: 4000 at a claim, 1 eaten per 22.2 s (38880 max), empty = the territory is lost (pve: false = never eaten)
+  //   "SeasonSchedule": "data", "Invader": true, // the season's seasontimes: claimable windows (prime time not needed within claimlimitoverrideminutes), resetterritories frees what was held before it
+  //                                              // (castles too: the season lists CASTLE), spawninvader puts the Tower Guardian at each free monolith (it blocks claims until killed);
+  //                                              // pve "off" = always claimable, never reset, no Tower Guardian
+  //   "SeasonPointsFactor": 1, "ScoreTickMinutes": 60, // x territory and castle season points; the scoring tick (official unknown, a placeholder): a held territory pays its
+  //                                                    // owner its cluster type's base points (B1 60 ... B6 160) x the season's scoremultiplier (2 from day 29) per tick, in the
+  //                                                    // season's territoryscoringstart..end window (always with SeasonSchedule off) -> guild season standings (TerritoryHold)
+  //   "PrimeTimeBonus": 1, // a tick in the zone's prime time pays this x its points once more (TerritoryPrimeTime; official amount unknown); 0 = none
+  //   "Raids": true, "Attacks": true, // raids and attacks: later phases (pve: Raids false)
+  //   "NpcOwners": false, // pve true: a free watchtower is held by the NPC "Outlands Wardens": their fortification guards (x Castles:GuardScale) at the tower must die
+  //                       // before a claim; they hold it again after 1 h unclaimed, or when it is given up, starves or is reset
+  //   "MaxPerGuild": 0 }, // 0 = no cap per guild (officially the alliance penalty limits instead)
+  // "Castles": { "Enabled": true, "Timers": "data", // the castles (MEDIUMCASTLE) and castle outposts (SMALLCASTLE): guards -> elite guards -> lord -> capture zone; castles.xml timers (arrivals, 30 min phase timeout, 16/8/30 s claim, lord back 300 s)
+  //   "Chests": true, "ChestSchedule": "data", // the castle chests of treasuredistribution (every 2 h UTC 10:00-22:00, weekend legendary 18:00; gone after 30 min); "hourly" = every full hour
+  //   "ChestNeedsOwnership": true, // only an owned castle gets chests and only its guild opens them (lootchests requirescastleownership); pve false: every castle, anyone
+  //   "GuardScale": 1.0, // x the health of the guards, elites and lord (pve: 0.6)
+  //   "SeasonPoints": 0 }, // guild season points per Territories:ScoreTickMinutes to a castle's owner, x Territories:SeasonPointsFactor (official value unknown: 0 = off)
+  // "Hideouts": { "Enabled": true, // guild hideouts (README Guild hideouts): the kit (UNIQUE_HIDEOUT) placed in a black zone, construction, the interior, its own bank and market, home, food and upgrades
+  //   "MaxPerGuild": "data", "RequireTerritory": true, "RequirePrimeTime": true, // gamedata maxhideouts 6; only in a zone with a territory (Roads: a hideout tunnel); the kit only in the zone's prime time (+60 min)
+  //   "PrimeTime": "data", "ConstructionSeconds": "data", // the zone's timeregion (or "HH:MM" UTC for every zone); hideouts.xml phases 1200 s / invulnerable until the next prime time / 1200 s (a number = the whole construction, split in three)
+  //   "BlockRadius": 50, // m from a territory's monolith (castles x 2), a zone exit or an outpost (the data has no radii)
+  //   "BankVault": "Own", // the hideout's own vault, a location of its own (official); "City" = the vault of the nearest city
+  //   "RespawnAtHome": true, // a death respawns in the home hideout (Make Home) while its owner still lets the character in; false = the city as before
+  //   "Upkeep": true, // the daily food (15000/20000/25000 nutrition at the zone's prime time; a starving day costs a shield); false = no food is eaten
+  //   "Sieges": false, // attacks on hideouts are not made yet: the construction phases are timers (true changes nothing yet)
+  //   "PowerDecay": true, "Headquarters": true, "RecoveryFeeFactor": "data", "RecoveryWaitSeconds": "data" }, // read for the later phases (power cores, HQ, recovery)
   // "Islands": { "Enabled": true, "StarterIsland": false, "StarterLevel": 0, "PremiumDays": 31, "BuyWithoutPremium": true, "FreeIslands": false, "GrowthSpeed": 1, "FocusSeedReturn": true, "WaterFocusFactor": 1, "StarterBuildings": false },
   //   personal islands (README Personal islands): StarterIsland = a free island at the first island merchant (at level 0-5), StarterBuildings = with a farm and a herb garden,
   //   GrowthSpeed 4 = crops grow 4 x as fast, WaterFocusFactor 0 = watering takes no focus (pve: StarterIsland true, StarterBuildings true, GrowthSpeed 4, WaterFocusFactor 0).
@@ -79,13 +112,24 @@
   // "Arena": {               // the arena queues (README "Arena"); official MATCH_ARENA figures, pve in the notes
   //   "Enabled": true, "ReadyCheck": true, "AcceptSeconds": 60, "ArrivalSeconds": 60, "RespawnSeconds": 10, "EndSeconds": 15,
   //   "CountdownSeconds": 15,  // pve: 10
-  //   "Tickets2v2": 150, "Tickets5v5": 150, "TicketsPerDeath": 2, // pve: 6, 15, 1; the orbs' ticket loss is not modelled, so a match mostly runs to its time limit
+  //   "Tickets2v2": 150, "Tickets5v5": 150, "TicketsPerDeath": 2, // pve: 6, 15, 1; with Orbs each runestone claim costs the other team 10 more
   //   "MatchMinutes": 25,      // pve: 15 (the 1v1 always 10 min, best of three)
   //   "Bots": false,           // pve: true; bots fill empty slots after BotWaitSeconds (needs Bots:Enabled and Bots:Arena:Enabled; without bots a match starts only with both teams of players)
   //   "BotWaitSeconds": 20, "BotFill": "Balanced", "BotTier": 0, "BotDamageFactor": 1, "BotHealthFactor": 1,
   //   "Rated": true, "RateWithBots": false, "StartRating": 1200, "K": 20, // the arena ladders (arena.bin startingelo, elok)
   //   "DuelsRated": false,     // pve: true; a duel won moves the duel ladder
-  //   "WinSilver": 0, "LossSilver": 0, "WinFame": 0, "LossFame": 0, // pve: 5000, 1500, 30000, 10000 (officially season points, not modelled)
+  //   "WinSilver": 0, "LossSilver": 0, "WinFame": 0, "LossFame": 0, // pve: 5000, 1500, 30000, 10000 (officially season points instead: Psp)
+  //   "ItemPowerCap": true,    // pve: false; every worn item capped in a match: unranked 600 (hard), 1v1 900 + 20 % of the power above
+  //   "DoubleHealerPenalty": true, // pve: false; DOUBLEHEALER_PENALTY (healing received −35 %) on a team with two or more healers (holy/nature staff)
+  //   "EnterBuffs": true,      // pve: false; ARENA_ENTER (full bars, cooldowns reset), ARENA_OVERLOAD_PROTECTION, the 1v1's ARENA_1V1_ENTER (healing −60 %) on arrival
+  //   "WarcampDefense": true,  // pve: false; the camp turret (10 % max health per 0.4 s on enemies within 18 m, lethal) and ARENA_WARCAMP_INVULNERABILITY within 8.7 m
+  //   "Psp": true,             // pve: false; personal season points at the result: unranked win 1200 / loss 400 (premium 1500 / 600), 1v1 400 / 175 (500 / 250)
+  //   "Orbs": true,            // pve: false; the 2v2/5v5 map's three runestones: a team alone within 9 m for 10 s claims one, the other team loses 10 tickets; none in the fight's first 60 s
+  //   "OrbRoundLookup": false, // MATCH_ARENA's 60 s orb-difference score (10/10/20/20) on top; not in the official tutorial
+  //   "CrystalArena": true,   // pve: false (category 1 stays the 5v5); the client's ranked category = the Crystal Arena: 5v5 on CrystalRealm03, MATCH_CRYSTAL_GVG_NONLETHAL (150 tickets, 6 per death, 18 s respawn, 24 min), channel runestones (−1 per claim; every 120 s the side holding more takes 20/30/40 and its runestones reset), 900 soft cap, arena.bin's ranked rewards
+  //   "RankPoints": true,     // pve: false; rank points and the 17 ranks (ARENA_IRON_1 … ARENA_CRYSTAL, a rank every 150 RP) of the Crystal Arena and the 1v1 (× 0.5), rank-up chests, the rank's rewards, GetArenaRankings' real rank and RP; [H] the RP formula is a placeholder (not in the client data): win = winrankpointmodifier × Elo gain (+ elowinbooster above expectedelo), loss = loserankpointmodifier × Elo loss (+ elolosebooster below it)
+  //   "RankPointMinGain": 1, "RankPointBoosters": true, // [H] the placeholder's least Elo change counted, and its boosters
+  //   "MatchHud": false,       // official true once captures confirm the fields; true sends the partly decoded OrbUpdate, MatchUpdate, StartArenaMatchInfos and MatchNew/EndCombatRound (the client's match HUD), false keeps the score in chat
   //   "RewardItems": true, "DailyWins": 3, "RewardsWithBots": true, "FallbackCluster": "0000" // arena.bin's unranked items; the daily Royal Sigils
   // },
   // "Vanity": { "Enabled": true }, // cosmetics drop from content (README "Cosmetics"), both presets; the chances are Vanity:*Chance
@@ -100,6 +144,14 @@
   //   "FriendlySpells": "All", // both presets: heals, shields and buffs reach every Friend (not Hostile by Pvp:Mode nor by the client's table); Group = party and guild only; Self = none
   //   "DuelIsolation": true,   // both presets: no friendly spell reaches a duelist or comes from one (but its own)
   //   "Spells": true,          // both presets: enemy spells (damage, DoTs, debuffs, stuns, knockbacks) reach the players and bots a sword may hit; false = mobs only
+  //   "HealingSickness": true, // both presets: HEALINGSICKNESS_n on a player healed by n ≥ 2 distinct others within 10 s (gamedata PlayerHealingSickness); false = none
+  //   "Resilience": true,      // both presets: focus fire protection, a player hit by n ≥ 2 distinct players within 10 s takes less player damage (gamedata PlayerFocusFire); false = none
+  //   "SpawnBuffs": true,      // both presets: worldsettings spawn buffs on a zone change / respawn (SPAWN_INVULNERABILITY 30 s, SPAWN_SPEED, SPAWN_BUFFIMMUNITY); false = only the hellgates' own
+  //   "EnterSpellCooldowns": true, // both presets: spellcooldownsonenteringseconds (15 s in yellow/red/black zones) on the gear spells on arrival; false = none
+  // },
+  // "DeathRecap": {          // the death recap (op 492; README "Death recap and PvP details"), both presets
+  //   "Enabled": true,         // false = nothing recorded, the empty recap
+  //   "Seconds": "gamedata"    // the window before the knockdown; "gamedata" = <DeathRecap timeframe> (180 s)
   // },
   // "Bots": {                // player bots (stage I; README "Player bots"): not official, so Enabled false; the rest matters only with them on (pve: Enabled true)
   //   "Enabled": false,        // the master switch over every kind below (pve: true); .bot on|off for this run only (not saved, no .bot reload); the tables (counts per zone, names, gear) are content/bots.json

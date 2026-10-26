@@ -124,8 +124,9 @@ public sealed partial class WorldSession
     /// </summary>
     private Vault AttachVault(Player player, Building bank, int view, Guid tab)
     {
-        // StageH islands (SPEC §0.2): an island's bank opens its home city's vault (world.xml bankgroup).
-        var key = Character.VaultKey(world.Config.BankShared ? Character.SharedVault : Systems.Islands.VaultLocation(player.Map!), tab);
+        // StageH islands (SPEC §0.2): an island's bank opens its home city's vault (world.xml bankgroup). StageP hideouts (SPEC §5): a hideout's
+        // bank its own vault (Hideouts:BankVault Own), never a city's.
+        var key = Character.VaultKey(world.Config.BankShared ? Character.SharedVault : world.Hideouts.VaultLocation(player.Map!) ?? Systems.Islands.VaultLocation(player.Map!), tab);
         var id = VaultContainerId(player.Character.Id, key);
         if (!player.OpenVaults.TryGetValue(id, out var vault))
         {

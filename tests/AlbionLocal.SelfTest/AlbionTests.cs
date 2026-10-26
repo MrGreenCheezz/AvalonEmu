@@ -35,7 +35,7 @@ public static class AlbionTests
         ("logout: cancel keeps the session, the countdown ends it", Logout),
         ("session: WorldSession through a FakePeer, object ids shared by the World", WorldSessionFakePeer),
         ("opcodes: handlers bound to their request classes, status gate, unhandled default", Opcodes),
-        ("opcode stubs: content file, GetArenaRankings keys, silent and ack answers, mistakes stop the start", OpcodeStubsContent),
+        ("opcode stubs: content file, BuyPremium's code, silent and ack answers, mistakes stop the start", OpcodeStubsContent),
         ("side requests in code: referral season end, status online, GetRankings echoes the list asked for, GetMailInfos an empty mailbox", SideRequests),
     ];
 
@@ -48,7 +48,7 @@ public static class AlbionTests
         OpcodeTable.Build(typeof(LoginSession), typeof(WorldSession), typeof(ChatSession));
         var login = OpcodeTable.For(typeof(LoginSession));
         var game = OpcodeTable.For(typeof(WorldSession));
-        Check(login.Handlers.Count == 8 && game.Handlers.Count == 199 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+        Check(login.Handlers.Count == 8 && game.Handlers.Count == 230 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.QuestGiverRequest) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.SetNextTutorialState) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.UseFunction) is { Status: SessionStatus.InWorld }
@@ -110,8 +110,7 @@ public static class AlbionTests
 
     /// <summary>
     /// content/opcode-stubs.json loaded as ServerHost loads it (checked against both handler tables); on a session
-    /// without handlers GetArenaRankings gets the configured keys, each response its own arrays, counted as stubbed and
-    /// not as unhandled, its season and categories found in the Europe arena file; BuyPremium gets its return code; a
+    /// without handlers BuyPremium gets its return code (GetArenaRankings is a handler since stageP P7, CrystalArenaTest); a
     /// silent operation (QueryAllianceGuildStats) gets nothing, an ack one the bare {253, 255?} with RC 0; then the mistakes that stop
     /// the start.
     /// </summary>
@@ -121,7 +120,8 @@ public static class AlbionTests
         static string? HandlerOf(OperationCodes code) =>
             (OpcodeTable.For(typeof(LoginSession)).Find(code) ?? OpcodeTable.For(typeof(WorldSession)).Find(code) ?? OpcodeTable.For(typeof(ChatSession)).Find(code))?.Method;
         var stubs = OpcodeStubs.Load(Path.Combine(DataDir(), "..", "content", "opcode-stubs.json"), HandlerOf);
-        Check(stubs.KindOf(OperationCodes.GetArenaRankings) == OpcodeStubs.StubKind.Response && stubs.KindOf(OperationCodes.QueryAllianceGuildStats) == OpcodeStubs.StubKind.Silent
+        Check(stubs.KindOf(OperationCodes.GetArenaRankings) is null && stubs.KindOf(OperationCodes.BuyPremium) == OpcodeStubs.StubKind.Response
+              && stubs.KindOf(OperationCodes.QueryAllianceGuildStats) == OpcodeStubs.StubKind.Silent
               && stubs.KindOf(OperationCodes.CastStart) is null && stubs.KindOf(OperationCodes.RegisterToObject) is null
               && stubs.KindOf(OperationCodes.GetCharacterStats) == OpcodeStubs.StubKind.Ack && stubs.KindOf(OperationCodes.Move) is null,
               "the content file loads: filled, silent and ack entries");
@@ -129,32 +129,14 @@ public static class AlbionTests
         var peer = new FakePeer();
         var session = new BareSession(peer) { Stubs = stubs };
         var table = OpcodeTable.For(typeof(BareSession));
-        session.OnRequest(Request(new GetArenaRankingsRequest(), 11), encrypted: false);
-        session.OnRequest(Request(new GetArenaRankingsRequest(), 12), encrypted: false);
-        // Keys 1-4 parallel, one entry per ranked category (arena.xml index 1 ranked, 2 ranked_1v1): ArenaQueueView reads one per category.
-        Check(peer.Responses is [{ ReturnCode: 0 } r, { ReturnCode: 0 } r2] && r.Parameters[ReservedKeys.RequestId] is 11
-              && r.Parameters[ReservedKeys.OperationCode] is (short)OperationCodes.GetArenaRankings
-              && r.Parameters[0] is short && r.Parameters[1] is int[] and [1, 2]
-              && r.Parameters[2] is short[] { Length: 2 } && r.Parameters[3] is int[] { Length: 2 } && r.Parameters[4] is short[] { Length: 2 }
-              && r2.Parameters[1] is int[] and [1, 2] && !ReferenceEquals(r.Parameters[1], r2.Parameters[1]),
-              "GetArenaRankings: season, both ranked categories, rank and points per category");
-        Check(table.Stubbed.GetValueOrDefault(OperationCodes.GetArenaRankings) == 2 && !table.Unhandled.ContainsKey(OperationCodes.GetArenaRankings),
-              "counted as stubbed, not as unhandled");
-        // The client reads the arena file of its region (Login key 26 "europe" → arena_europe.bin); the season is an
-        // index into its arenaseason list, which a miss leaves without rank, points and rewards.
-        var arena = GameDataFile.Open(ClientGameDataDir(), "arena_europe.bin").Root();
-        var seasons = arena.Descendants("arenaseason").Select(s => (string?)s.Attribute("name")).ToList();
-        var ranked = arena.Descendants("arenacategory").Select(c => (string?)c.Attribute("isranked") == "true").ToList();
-        var season = (short)peer.Responses[0].Parameters[0]!;
-        Check(season < seasons.Count && seasons[season] == "SEASON_34" && ranked is [false, true, true, ..],
-              $"GetArenaRankings: season {season} is SEASON_34 in arena_europe (got {(season < seasons.Count ? seasons[season] : "none")}), categories 1/2 ranked");
         session.OnRequest(Request(new BuyPremiumRequest(), 13), encrypted: false);
-        Check(peer.Responses is [_, _, { ReturnCode: 10522 } buy] && buy.Parameters[ReservedKeys.RequestId] is 13,
-              "BuyPremium: 10522, the offer is no longer available");
+        Check(peer.Responses is [{ ReturnCode: 10522 } buy] && buy.Parameters[ReservedKeys.RequestId] is 13
+              && table.Stubbed.GetValueOrDefault(OperationCodes.BuyPremium) == 1 && !table.Unhandled.ContainsKey(OperationCodes.BuyPremium),
+              "BuyPremium: 10522, the offer is no longer available; counted as stubbed, not as unhandled");
         // Silent: no answer to an operation with a response class (the unhandled default would send its empty response).
         var silent = new OperationRequest(AlbionSerializer.PhotonOperationCode, new() { [ReservedKeys.OperationCode] = (short)OperationCodes.QueryAllianceGuildStats });
         session.OnRequest(silent, encrypted: false);
-        Check(peer.Responses.Count == 3 && table.Stubbed.GetValueOrDefault(OperationCodes.QueryAllianceGuildStats) == 1 && !table.Unhandled.ContainsKey(OperationCodes.QueryAllianceGuildStats),
+        Check(peer.Responses.Count == 1 && table.Stubbed.GetValueOrDefault(OperationCodes.QueryAllianceGuildStats) == 1 && !table.Unhandled.ContainsKey(OperationCodes.QueryAllianceGuildStats),
               "QueryAllianceGuildStats: no answer at all, counted as stubbed");
         // Ack: the bare rc-0 answer of an operation without a response class, with the request id or, as official for
         // PartyFinderUnregisterApplicants, without it.
@@ -162,7 +144,7 @@ public static class AlbionTests
             id is { } rid ? new() { [ReservedKeys.OperationCode] = (short)code, [ReservedKeys.RequestId] = rid } : new() { [ReservedKeys.OperationCode] = (short)code });
         session.OnRequest(Bare(OperationCodes.GetCharacterStats, 20), encrypted: false);
         session.OnRequest(Bare(OperationCodes.PartyFinderUnregisterApplicants, 21), encrypted: false);
-        Check(peer.Responses is [_, _, _, { ReturnCode: 0 } stats, { ReturnCode: 0 } unregister]
+        Check(peer.Responses is [_, { ReturnCode: 0 } stats, { ReturnCode: 0 } unregister]
               && stats.Parameters.Keys.Order().SequenceEqual(new[] { ReservedKeys.OperationCode, ReservedKeys.RequestId }) && stats.Parameters[ReservedKeys.RequestId] is 20
               && stats.Parameters[ReservedKeys.OperationCode] is (short)OperationCodes.GetCharacterStats
               && unregister.Parameters.Keys.SequenceEqual(new[] { ReservedKeys.OperationCode }) && stats.DebugMessage is null,
@@ -181,8 +163,9 @@ public static class AlbionTests
             }
         }
         Refused("""{ "GetArenaRanking": {} }""", "unknown operation 'GetArenaRanking' (closest: GetArenaRankings)");
-        Refused("""{ "GetArenaRankings": { "Season": 1 } }""", "no field 'Season'", "0 SeasonId");
-        Refused("""{ "GetArenaRankings": { "0": 40000, "CategoryIds": [1, "x"] } }""", "2 problem(s)", "-32768..32767", "CategoryIds (key 1, int[]): [1]: expected an integer");
+        Refused("""{ "GetCrystalLeagueStatistics": { "Season": 1 } }""", "no field 'Season'", "0 bnx");
+        Refused("""{ "BuyPremium": { "ReturnCode": 40000 }, "GetCrystalLeagueStatistics": { "bnx": [1, "x"] } }""", "2 problem(s)", "-32768..32767", "bnx (key 0, int[]): [1]: expected an integer");
+        Refused("""{ "GetArenaRankings": {} }""", "GetArenaRankings is handled by WorldSession."); // stageP P7
         Refused("""{ "BuyPremium": { "ReturnCode": 40000 } }""", "BuyPremium.ReturnCode (short): expected an integer -32768..32767");
         Refused("""{ "Move": {} }""", "Move is handled by WorldSession.");
         Refused("""{ "AcceptPopups": {} }""", "no response class"); // stageM: ReportClientError has its handler now (logged at Info)

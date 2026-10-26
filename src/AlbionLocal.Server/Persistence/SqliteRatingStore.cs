@@ -52,3 +52,54 @@ public sealed partial class SqliteCharacterRepository : IRatingStore
         }
     }
 }
+
+/// <summary>
+/// A character's arena rank in one ranked category as saved (stageP league-pvp SPEC §3.3, schema v42): the arena season, the rank index in the
+/// season's template (0 = ARENA_IRON_1), the rank points, the highest rank whose rank-up chest was given, and when its last result came.
+/// </summary>
+public sealed record RankRow(Guid Character, int Category, int Season, int Rank, int Points, int Peak, long Updated);
+
+/// <summary>The arena ranks (<see cref="Systems.Ratings"/> keeps them in memory and writes each result through here at once).</summary>
+public interface IRankStore
+{
+    IReadOnlyList<RankRow> LoadRanks();
+
+    void SaveRanks(IReadOnlyList<RankRow> rows);
+}
+
+/// <summary><see cref="IRankStore"/> in the character database (schema v42: arena_ranks).</summary>
+public sealed partial class SqliteCharacterRepository : IRankStore
+{
+    public IReadOnlyList<RankRow> LoadRanks()
+    {
+        lock (_sync)
+        {
+            var rows = new List<RankRow>();
+            using var select = Command("SELECT character_id, category, season, rank, points, peak, updated FROM arena_ranks", null);
+            using var r = select.ExecuteReader();
+            while (r.Read())
+                if (Guid.TryParse(r.GetString(0), out var id))
+                    rows.Add(new RankRow(id, r.GetInt32(1), r.GetInt32(2), r.GetInt32(3), r.GetInt32(4), r.GetInt32(5), r.GetInt64(6)));
+            return rows;
+        }
+    }
+
+    public void SaveRanks(IReadOnlyList<RankRow> rows)
+    {
+        lock (_sync)
+        {
+            using var tx = _db.BeginTransaction();
+            foreach (var row in rows)
+            {
+                using var upsert = Command("""
+                    INSERT INTO arena_ranks (character_id, category, season, rank, points, peak, updated)
+                    VALUES ($id, $category, $season, $rank, $points, $peak, $updated)
+                    ON CONFLICT (character_id, category) DO UPDATE SET season = $season, rank = $rank, points = $points, peak = $peak, updated = $updated
+                    """, tx, ("$id", row.Character.ToString()), ("$category", row.Category), ("$season", row.Season), ("$rank", row.Rank),
+                    ("$points", row.Points), ("$peak", row.Peak), ("$updated", row.Updated));
+                upsert.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+    }
+}

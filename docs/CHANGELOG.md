@@ -3,6 +3,51 @@
 The `modifications` branch carries everything in `main` plus modding. This update also brings it the five-file
 JSONC configuration from PR #2 (`config/*.jsonc` in place of `config/albionlocal.json`).
 
+## 2026-10-26 (evening) — PvP end-game (the parts the client code and data settle)
+
+Everything below is on under `Preset: official`, where the official game has it; each system has its own switch.
+Fields that are only inferred are sent as neutral values and marked `[H]` in the code and in REFERENCE.md; captures
+of the official server will settle them. The database schema goes from v37 to v42 — back up your save first.
+
+**PvP details**
+- Death recap (op 492): mob and player hits, heals, crowd control and debuffs of the last 180 s (`DeathRecap:*`).
+- Healing sickness (`Pvp:HealingSickness`): 2+ distinct healers within 10 s give `HEALINGSICKNESS_n`.
+- Resilience / focus-fire protection (`Pvp:Resilience`): less damage from 2–30 attackers, with penetration.
+- Zone entry (`Pvp:SpawnBuffs`, `Pvp:EnterSpellCooldowns`): the worldsettings spawn buffs (spawn shield, speed) and
+  the 15 s spell cooldown on entering yellow, red and black zones.
+
+**Arena**
+- Official rules: item power caps (600 hard; 900 soft for 1v1 and the Crystal Arena), the double-healer penalty,
+  `ARENA_*` entry buffs, camp turret and camp invulnerability, personal season points (`Arena:ItemPowerCap`,
+  `DoubleHealerPenalty`, `EnterBuffs`, `WarcampDefense`, `Psp`).
+- Runestones (`Arena:Orbs`): zone orbs in the unranked arena (active after 60 s, a claim costs the enemy 10 tickets),
+  channel orbs in the Crystal Arena with the 120 s majority score.
+- Crystal Arena as its own mode on CrystalRealm03 (`Arena:CrystalArena`), and rank points with the 17 ranks from Iron 1
+  to Crystal and rank-up chests (`Arena:RankPoints`; the rank point formula is not in the client data, so it is a
+  configurable Elo-like placeholder).
+- The in-match HUD events stay off (`Arena:MatchHud` false) until captures confirm them.
+
+**Alliances** (`Alliances:*`): create (5 M from the guild account), disband, leave, member and detail info, invitations
+by mail, answer, cancel, kick, limits and cooldowns, the alliance chat channel; allies are friendly in PvP.
+
+**Guild territories and castles** (`Territories:*`, `Castles:*`)
+- The 268 watchtower territories, 23 castles and 95 castle outposts from the client data, with their monoliths and
+  castles in the world; guild season history, participation and the full season update.
+- Territory claims in the season's claimable window and prime time, giving up, access rights, monolith food, the
+  guild's territory list, the season schedule with its Tower Guardian, and season points for holding territories.
+- Castles and outposts: guards, elite guards and the lord in phases, the capture zone, ownership, and chests on the
+  treasure schedule for the owner.
+- The world-map territory info stays off (`Territories:WorldMapInfo` false): wrong array lengths crash the client's map.
+
+**Guild hideouts** (`Hideouts:*`): placing the construction kit by the data's rules, construction, the hideout
+instance with entry, exit and access rights, its own bank vault (separate from every city bank) and market, Make Home,
+respawn and Journey Back, food upkeep, upgrades and tribute to the territory owner.
+
+Not yet (they need captures): raids and conquest of territories, hideout sieges and destruction, power cores,
+fortifications, the Crystal League.
+
+Self-tests: 519 on `main`, 547 on `modifications`.
+
 ## 2026-10-26 (later) — bots travel and play support roles
 
 Both features need `Bots:Enabled` (off under `official`, on under `pve`).

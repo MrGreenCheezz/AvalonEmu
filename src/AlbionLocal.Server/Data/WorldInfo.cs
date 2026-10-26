@@ -99,7 +99,10 @@ public sealed class WorldInfo
             IslandAccessPoints = [.. List("islandaccesspoints", "islandaccesspoint")
                 .Select(a => new WorldIslandAccessPoint(Id(a, "id", $"{id} islandaccesspoint", problems), Id(a, "travelpointid", $"{id} islandaccesspoint", problems)))],
             Outposts = [.. List("outposts", "outpost").Select(o => new WorldOutpost(Id(o, "id", $"{id} outpost", problems), (string?)o.Attribute("type") ?? "", Pos(o)))],
-            Territories = List("territories", "territory").Count(),
+            TerritoryList = [.. List("territories", "territory").Select(t => new WorldTerritory(Id(t, "id", $"{id} territory", problems),
+                (string?)t.Attribute("name") ?? "", (string?)t.Attribute("territorytype") ?? "", (string?)t.Attribute("resourcetype") ?? "",
+                (string?)t.Attribute("castletype") ?? "", TileMath.V2((string?)t.Attribute("center")) ?? Vector2.Zero,
+                TileMath.V2((string?)t.Attribute("size")) ?? Vector2.Zero, TileMath.V2((string?)t.Attribute("monolith")) ?? Vector2.Zero))],
             QuestGivers = [.. List("questgivers", "questgiver").Select(q => new WorldQuestGiver(Id(q, "id", $"{id} questgiver", problems), (string?)q.Attribute("type") ?? "", Pos(q)))],
             MinimapMarkers = [.. List("minimapmarkers", "marker").Select(m => new WorldMarker((string?)m.Attribute("type") ?? "", Pos(m)))],
             RealEstates = Number(distribution, "realestates", $"{id} distribution", problems),
@@ -164,8 +167,14 @@ public sealed record ClusterInfo
     public IReadOnlyList<WorldIslandAccessPoint> IslandAccessPoints { get; init; } = [];
     public IReadOnlyList<WorldOutpost> Outposts { get; init; } = [];
 
-    /// <summary>territories/territory: the guild territories of the cluster (269 clusters have some); only counted (ClusterInfoUpdate skips them).</summary>
-    public int Territories { get; init; }
+    /// <summary>
+    /// territories/territory in file order (stageP territories SPEC §1): the guild territories of the cluster (269 clusters have some), in the
+    /// order the client's world map iterates them (WorldmapCluster.UpdateTerritories 0x181be2e30 indexes ClusterInfoUpdate 4-18 by it).
+    /// </summary>
+    public IReadOnlyList<WorldTerritory> TerritoryList { get; init; } = [];
+
+    /// <summary>The number of <see cref="TerritoryList"/>.</summary>
+    public int Territories => TerritoryList.Count;
     public IReadOnlyList<WorldQuestGiver> QuestGivers { get; init; } = [];
     public IReadOnlyList<WorldMarker> MinimapMarkers { get; init; } = [];
 
@@ -195,6 +204,16 @@ public sealed record TravelConnection(Guid Target, string TargetCluster, float C
 public sealed record WorldIslandAccessPoint(Guid Id, Guid Travelpoint);
 
 public sealed record WorldOutpost(Guid Id, string Type, Vector2 Position);
+
+/// <summary>
+/// territories/territory (stageP territories SPEC §1): its Guid (also the Guid of the cluster's monolith or castle member, NewMonolithObject key 7,
+/// NewCastleObject key 3), name, territorytype WATCHTOWER or CASTLE, resourcetype (Resource, Farm; "" for a castle), castletype (SMALLCASTLE = castle
+/// outpost, MEDIUMCASTLE = castle; "" for a watchtower), the center and size of its area and the position of its monolith (a castle's own position).
+/// </summary>
+public sealed record WorldTerritory(Guid Id, string Name, string Type, string ResourceType, string CastleType, Vector2 Center, Vector2 Size, Vector2 Monolith)
+{
+    public bool IsCastle => Type == "CASTLE";
+}
 
 public sealed record WorldQuestGiver(Guid Id, string Type, Vector2 Position);
 

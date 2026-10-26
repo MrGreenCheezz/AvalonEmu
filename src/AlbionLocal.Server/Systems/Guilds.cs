@@ -38,8 +38,8 @@ public sealed partial class Guilds
     public const short Refused = 1,
         NameTaken = 4200, NameNotAllowed = 4201, NotEnoughSilver = 4204, AlreadyInGuild = 4205, CreateCooldown = 4206,
         PlayerDoesNotExist = 4240, NotInGuild = 4241, PlayerNotOnline = 4242, NoInviteRight = 4243, PlayerInGuild = 4244,
-        PlayerInvited = 4245, InviteSelf = 4247, ChangeCooldown = 4249, GuildFull = 4252,
-        JoinInGuild = 4120, JoinGuildFull = 4122, JoinCooldown = 4124;
+        PlayerInvited = 4245, InviteSelf = 4247, ChangeCooldown = 4249, AllianceMaxPlayers = 4251, GuildFull = 4252,
+        JoinInGuild = 4120, JoinGuildFull = 4122, JoinAllianceFull = 4123, JoinCooldown = 4124;
 
     // GuildPlayerUpdated key 9 (SPEC §2.1).
     public const byte KindUpdate = 0, KindAdd = 1, KindKicked = 2, KindLeft = 3, KindRole = 4;
@@ -85,8 +85,35 @@ public sealed partial class Guilds
     /// <summary>The open invitation of <paramref name="invitee"/>; null when none.</summary>
     public GuildInvite? InviteOf(Guid invitee) => _invites.GetValueOrDefault(invitee);
 
-    /// <summary>A and B are in one guild (Pvp.Of's G; alliances do not exist here).</summary>
+    /// <summary>A and B are in one guild (the guildmember spells, a revive; Pvp.Of's G adds the alliance: <see cref="Friends"/>).</summary>
     public bool Same(Guid a, Guid b) => Of(a) is { } g && Of(b) == g;
+
+    /// <summary>Pvp.Of's G (the client's a5g.d_1): one guild, or guilds of one alliance (<see cref="Alliances.Allied"/>).</summary>
+    public bool Friends(Guid a, Guid b) => Same(a, b) || world.Alliances.Allied(a, b);
+
+    /// <summary>An event to every member of <paramref name="g"/> that plays; one that does not gets the full guild at its next arrival.</summary>
+    public void SendToMembers(Guild g, AlbionEvent e) => SendTo(g, e);
+
+    /// <summary>
+    /// Takes <paramref name="a7m"/> from the account of <paramref name="g"/> (an alliance's founding cost), saved at once; the members get
+    /// GuildUpdate kind 2 at the next second. False = too little in it, or the save failed (nothing taken).
+    /// </summary>
+    public bool SpendAccount(Guild g, long a7m, string why)
+    {
+        if (a7m < 0 || g.SilverA7m < a7m) return false;
+        g.SilverA7m -= a7m;
+        try { store?.SaveGuildProgress(g); }
+        catch (Exception ex)
+        {
+            g.SilverA7m += a7m;
+            Log.Warn("guild", $"account of guild '{g.Name}' not saved ({why}): {ex.Message}");
+            return false;
+        }
+        _progressChanged.Remove(g);
+        _accountChanged.Add(g);
+        Log.Info("guild", $"guild '{g.Name}' pays {a7m / 10000} silver from its account: {why} ({g.SilverA7m / 10000} left)");
+        return true;
+    }
 
     private Player? Online(Guid character) => world.Parties.Online(character);
 
@@ -126,7 +153,8 @@ public sealed partial class Guilds
     /// <summary>
     /// GuildUpdate kind 0 (103, ap1; SPEC §2.2, §3.6): 0 id, 1-9 one entry per member, online members first (all nine present and of
     /// one length: the client indexes them by key 1), 4 last seen (now for an online member), 5 roles, 6-8 zeros, 9 the flags
-    /// (PackedEnum byte[]), 10 kind 0 (a zero byte is left out, read as 0), 11/14 the accounts, 15 the name, 16 "" (no alliance),
+    /// (PackedEnum byte[]), 10 kind 0 (a zero byte is left out, read as 0), 11/14 the accounts, 15 the name, 16/17 the alliance's text and Guid
+    /// ("" and left out without one, <see cref="Alliances.PlateOf"/>),
     /// 18 the tutorial popup, 19 {} and 28/32/34/36 "" as official (never null), 20-26 the crest.
     /// </summary>
     public GuildUpdateEvent FullUpdate(Guild g, bool tutorial)
@@ -135,6 +163,7 @@ public sealed partial class Guilds
         var rows = g.Members.Select(m => (m, p: Online(m.Id))).OrderBy(x => x.p is null).ToList();
         var n = rows.Count;
         var logo = g.Logo;
+        var alliance = world.Alliances.OfGuild(g.Id);
         return new GuildUpdateEvent
         {
             cf1 = g.Id,
@@ -146,7 +175,8 @@ public sealed partial class Guilds
             cf7 = new int[n], cf8 = new int[n], cf9 = new int[n],                  // [6-8] (official [0,1,0] / [0,14,0] / [0,0,0]: unknown)
             cga = [.. rows.Select(x => x.p?.Flag ?? (byte)0)],                       // [9] FlaggingStatus[]
             cgc = g.SilverA7m, cgf = TaxOf(g),                                      // [11] [14]
-            cgg = g.Name, cgh = "", cgj = tutorial, cgk = [],                      // [15] [16] [18] [19]
+            cgg = g.Name, cgh = world.Alliances.PlateOf(alliance), cgi = alliance?.Id ?? Guid.Empty, // [15] [16] [17]
+            cgj = tutorial, cgk = [],                                              // [18] [19]
             cgl = logo.Schema, cgm = logo.Symbol, cgn = logo.Color1, cgo = logo.Color2, cgp = logo.SymbolColor, cgq = logo.Scale, cgr = logo.Offset,
             cgt = "", cgx = "", cgz = "", cg1 = "",                                // [28] [32] [34] [36]
         };
@@ -184,14 +214,16 @@ public sealed partial class Guilds
     }
 
     /// <summary>
-    /// GuildMemberWorldUpdate (106, apz; SPEC §2.5) of <paramref name="p"/>: 0 guild, 2 its object id, 3 name, 4-10 crest, 12 and 14 "".
-    /// Without a guild key 0 is empty and key 3 "" (the client's formatter gets no null).
+    /// GuildMemberWorldUpdate (106, apz; SPEC §2.5) of <paramref name="p"/>: 0 guild, 2 its object id, 3 name, 4-10 crest, 11/12 the
+    /// alliance's Guid and text (stageP SPEC §2.3; left out and "" without one), 14 "". Without a guild key 0 is empty and key 3 ""
+    /// (the client's formatter gets no null).
     /// </summary>
-    public static GuildMemberWorldUpdateEvent WorldUpdate(Player p, Guild? g)
+    public static GuildMemberWorldUpdateEvent WorldUpdate(Player p, Guild? g, Alliance? alliance = null, string allianceText = "")
     {
         var e = new GuildMemberWorldUpdateEvent { cfe = p.Id, cff = g?.Name ?? "", cfo = "", cfq = "" };
         if (g is null) return e;
         e.cfc = g.Id;
+        if (alliance is not null) (e.cfn, e.cfo) = (alliance.Id, allianceText);
         (e.cfg, e.cfh, e.cfi, e.cfj, e.cfk, e.cfl, e.cfm) = (g.Logo.Schema, g.Logo.Symbol, g.Logo.Color1, g.Logo.Color2, g.Logo.SymbolColor, g.Logo.Scale, g.Logo.Offset);
         return e;
     }
@@ -199,26 +231,30 @@ public sealed partial class Guilds
     /// <summary>106 of <paramref name="p"/> to itself (its crest) and to every player who sees it (their nameplate and colouring).</summary>
     public void Announce(Player p)
     {
-        var e = WorldUpdate(p, Of(p.Character.Id));
+        var g = Of(p.Character.Id);
+        var a = g is null ? null : world.Alliances.OfGuild(g.Id);
+        var e = WorldUpdate(p, g, a, world.Alliances.PlateOf(a));
         p.Session.Send(e);
         p.SendToObservers(e);
     }
 
-    /// <summary>NewCharacter keys 8 (name), 9 (Guid), 44-50 (crest) and 51 "" (no alliance) of a guild member; nothing without a guild (SPEC §2.7).</summary>
+    /// <summary>NewCharacter keys 8 (name), 9 (Guid), 44-50 (crest), 51/52 the alliance's text and Guid ("" and left out without one) of a guild member; nothing without a guild (SPEC §2.7).</summary>
     public void Apply(NewCharacterEvent e, Guid character)
     {
         if (Of(character) is not { } g) return;
         var l = g.Logo;
-        (e.cv5, e.cv6, e.cxc) = (g.Name, g.Id, "");
+        var a = world.Alliances.OfGuild(g.Id);
+        (e.cv5, e.cv6, e.cxc, e.cxd) = (g.Name, g.Id, world.Alliances.PlateOf(a), a?.Id ?? Guid.Empty);
         (e.cw5, e.cw6, e.cw7, e.cw8, e.cw9, e.cxa, e.cxb) = (l.Schema, l.Symbol, l.Color1, l.Color2, l.SymbolColor, l.Scale, l.Offset);
     }
 
-    /// <summary>Join keys 56 (Guid), 58 (name), 71-77 (crest), 78 (joined), 79 "" (no alliance) of a member; left as they are without a guild.</summary>
+    /// <summary>Join keys 56 (Guid), 58 (name), 71-77 (crest), 78 (joined), 79/80 the alliance's text and Guid ("" and left out without one) of a member; left as they are without a guild.</summary>
     public void Apply(JoinResponse r, Guid character)
     {
         if (Of(character) is not { } g) return;
         var l = g.Logo;
-        (r.a9u, r.a9w, r.bag, r.bah) = (g.Id, g.Name, g.Find(character)!.Joined.Ticks, "");
+        var a = world.Alliances.OfGuild(g.Id);
+        (r.a9u, r.a9w, r.bag, r.bah, r.bai) = (g.Id, g.Name, g.Find(character)!.Joined.Ticks, world.Alliances.PlateOf(a), a?.Id ?? Guid.Empty);
         (r.a99, r.baa, r.bab, r.bac, r.bad, r.bae, r.baf) = (l.Schema, l.Symbol, l.Color1, l.Color2, l.SymbolColor, l.Scale, l.Offset);
     }
 
@@ -292,7 +328,7 @@ public sealed partial class Guilds
 
     /// <summary>
     /// Flow 3.2, InviteToGuild (106) by name: no guild 4241, no INVITE right 4243, the name unknown 4240 or not online 4242, oneself
-    /// 4247, in a guild 4244, invited by this guild already 4245, the guild full 4252, the target's guild change cooldown 4249
+    /// 4247, in a guild 4244, invited by this guild already 4245, the guild full 4252, its alliance at Alliances:MaxPlayers 4251, the target's guild change cooldown 4249
     /// (<paramref name="cooldownEnd"/> = key 1). On 0 the target gets InvitedToGuild {0 guild, 1 inviter, 2 guild name} and may
     /// accept for Guilds:InviteSeconds. <paramref name="targetName"/> = response key 0.
     /// </summary>
@@ -314,6 +350,7 @@ public sealed partial class Guilds
         if (Of(id) is not null) return PlayerInGuild;
         if (InviteOf(id) is { } open && open.Guild == g.Id && open.Expires > world.Clock.Now) return PlayerInvited;
         if (g.Members.Count >= Config.GuildMaxMembers) return GuildFull;
+        if (!world.Alliances.Fits(g)) return AllianceMaxPlayers; // stageP: Alliances:MaxPlayers
         if (CooldownEnd(id) is { } end)
         {
             cooldownEnd = end.Ticks;
@@ -326,7 +363,7 @@ public sealed partial class Guilds
     }
 
     /// <summary>
-    /// Flow 3.2, JoinGuild (103): no open invitation (or expired, or its guild gone) rc 1, in a guild 4120, the guild full 4122, the
+    /// Flow 3.2, JoinGuild (103): no open invitation (or expired, or its guild gone) rc 1, in a guild 4120, the guild full 4122, its alliance full 4123, the
     /// guild change cooldown 4124. On 0 the joiner is a member of Guilds:JoinRole; the response and the events are <see cref="AfterJoin"/>'s.
     /// </summary>
     public short Accept(Player p, out Guild? guild)
@@ -337,6 +374,7 @@ public sealed partial class Guilds
         if (Of(me) is not null) return JoinInGuild;
         if (!_byId.TryGetValue(invite.Guild, out var g)) return Refused;
         if (g.Members.Count >= Config.GuildMaxMembers) return JoinGuildFull;
+        if (!world.Alliances.Fits(g)) return JoinAllianceFull;
         if (CooldownEnd(me) is not null) return JoinCooldown;
         var member = new GuildMember(me, p.Character.Name ?? "", Config.GuildJoinRole, UtcNow);
         g.Members.Add(member);
@@ -422,6 +460,9 @@ public sealed partial class Guilds
     private void Delete(Guild g)
     {
         if (g.Progress.Owed.Count > 0) world.GuildGoals.Deleted(g); // stage I: season-end rewards still owed, given or mailed first
+        world.Alliances.GuildDeleted(g); // stageP: out of its alliance (the founder role passes on), its invitations go
+        world.Territories.GuildDeleted(g); // stageP P5: its castles are unowned
+        world.Hideouts.GuildDeleted(g); // stageP: its hideouts go (players inside put out first)
         _byId.Remove(g.Id);
         foreach (var m in g.Members) _byMember.Remove(m.Id);
         foreach (var invite in _invites.Values.Where(i => i.Guild == g.Id).ToList()) _invites.Remove(invite.Invitee);

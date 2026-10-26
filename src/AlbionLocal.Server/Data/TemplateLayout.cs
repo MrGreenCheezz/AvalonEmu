@@ -35,12 +35,14 @@ internal sealed class TemplateLayout
         "localquestarea", // stageH bosses: the camp quest circles
         "expeditionexit", "expeditionnarrator", "expeditioncheckpoint", // stageH expeditions: the instance objects (SPEC §2.7)
         "islandmanagement", // stageH islands: the island management spot (NewIslandManagement, SPEC §1.5)
+        "hideoutmanagement", // stageP hideouts: the hideout management (NewHideoutManagement 420)
         "namedmarkerpoint", // stageL corrupted: the invader spawn points (InvaderSpawnpoint, SPEC §4.4); stageL hellgates: the objective chest, exit portal, chain exit
         "shrine", // stageN shrines: a buff shrine (NewShrine 396, SPEC §2)
         "hellgateshrine", // stageL hellgates: a Hell Den's hellgate shrine (NewHellgateShrine, SPEC §3.1)
         "arearestrictionsettings", // stageL hellgates phase B: the HellgateFxManager's restricted area (SPEC §2.4)
         "treasurespawnpoint", "mistswispspawn", "unrestrictedpvpzone", // stageL mists phase B: the dungeon's treasures, the wisp spawns, the camps' FFA circles
         "warcamp", // stage N arena: an arena team's camp and its spawn positions (SPEC §3)
+        "orb", // stageP league-pvp: an arena's orb ("runestone") tile with its orbtypes.xml type (SPEC §3.2)
     };
 
     public required string Reference { get; init; }

@@ -458,6 +458,7 @@ public static class SpellEffects
         if (unit.Map is { } map)
             foreach (var end in entry.Subs.Where(s => s.Active && s.DurationMs > 0).Select(entry.EndOf).Distinct())
                 SpellCasts.At(world, map, end, () => Expired(world, unit));
+        if (unit is Player victim && entry.Subs.Any(s => s.Active)) DeathRecaps.Effect(victim, entry, start); // stageP: crowd control and debuffs in the death recap
         if (!entry.Pending) Interrupt(unit, world.GameNow);
         world.Plugins.BuffApplied(unit, entry, isNew, before); // the plugins' Buffs.OnApply / OnStackChange
         return entry;
@@ -619,8 +620,9 @@ public static class SpellEffects
         return 1 / Math.Max(0.01, 1 + sum);
     }
 
-    /// <summary>Heals received × (1 + Σ healmodifier) (MOB_UNDEAD_DECAY); not below 0.</summary>
-    public static double HealFactor(IUnit target, long now) => target.Effects.Idle ? 1 : Math.Max(0, 1 + target.Effects.Sum("healmodifier", now));
+    /// <summary>Heals received × (1 + Σ healmodifier) (MOB_UNDEAD_DECAY) × (1 − Σ healingsicknessmodifier) (HEALINGSICKNESS_n, stageP); neither below 0.</summary>
+    public static double HealFactor(IUnit target, long now) => target.Effects.Idle ? 1
+        : Math.Max(0, 1 + target.Effects.Sum("healmodifier", now)) * Math.Max(0, 1 - target.Effects.Sum("healingsicknessmodifier", now));
 
     /// <summary>A mob's walk speed factor: 0 while stunned or rooted, else max(0, 1 + Σ movespeedbonus) (SPEC §3.1).</summary>
     public static float SpeedFactor(IUnit unit, long now)

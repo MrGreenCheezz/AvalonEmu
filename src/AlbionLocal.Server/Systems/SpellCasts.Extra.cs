@@ -198,6 +198,36 @@ public static partial class SpellCasts
         p.Session.Send(new SpellCooldownUpdateEvent { dy7 = [.. changed], dy8 = [.. ends], dy9 = [.. starts], dza = [.. spans], dzb = new byte[changed.Count] });
     }
 
+    /// <summary>
+    /// The spell cooldowns on entering a cluster (stageP SPEC §2.4, clustertype spellcooldownsonenteringseconds, 15 s in the yellow, red and
+    /// black zones): every gear spell slot (0-5, not the potion and food slots [infer: "spell cooldowns"; capture R6]) whose spell runs no
+    /// longer cooldown is put on <paramref name="seconds"/> from now; SpellCooldownUpdate (249) as <see cref="ResetCooldowns"/> sends it (key 3
+    /// the larger of the recast and the time set). Returns the slots changed.
+    /// </summary>
+    public static int EnterCooldowns(Player p, double seconds)
+    {
+        if (seconds <= 0) return 0;
+        var slots = p.Session.SpellSlots(p.Inventory);
+        var now = p.World.GameNow;
+        var left = Seconds(seconds);
+        List<byte> changed = [];
+        List<long> ends = [], starts = [], spans = [];
+        for (byte slot = 0; slot < Math.Min(6, slots.Length); slot++)
+        {
+            if (p.World.Spells?.Template(slots[slot]) is not { } spell) continue;
+            if (p.Combat.Cooldowns.TryGetValue(spell.Id, out var end) && end >= now + left) continue;
+            p.Combat.Cooldowns[spell.Id] = now + left;
+            var span = Math.Max(Seconds(spell.RecastDelay), left);
+            changed.Add(slot);
+            ends.Add(now + left);
+            starts.Add(now + left - span);
+            spans.Add(span);
+        }
+        if (changed.Count > 0)
+            p.Session.Send(new SpellCooldownUpdateEvent { dy7 = [.. changed], dy8 = [.. ends], dy9 = [.. starts], dza = [.. spans], dzb = new byte[changed.Count] });
+        return changed.Count;
+    }
+
     // ---- threat ----
 
     /// <summary>

@@ -162,7 +162,12 @@ public static class Combat
 
     /// <summary>The item power of <paramref name="item"/> as worn by <paramref name="p"/> (<see cref="StatCalculator.ItemPower"/>: quality, destiny board, wear); items.xml itempower without game data.</summary>
     /// <remarks>An awakened weapon attuned to <paramref name="p"/> adds its TRAIT_ITEM_POWER (<see cref="Passives.TraitItemPower"/>).</remarks>
-    public static double ItemPower(Player p, Item item) => p.World.Plugins.ItemPower(p, item, ItemPowerOf(p, item)); // Formulas.OnCalcItemPower
+    /// <remarks>StageP: under an arena's item power cap (<see cref="Player.ItemPowerCap"/>) the capped figure, after the plugins' hook.</remarks>
+    public static double ItemPower(Player p, Item item)
+    {
+        var ip = p.World.Plugins.ItemPower(p, item, ItemPowerOf(p, item)); // Formulas.OnCalcItemPower
+        return p.ItemPowerCap is { } cap ? cap.Apply(ip) : ip;
+    }
 
     private static double ItemPowerOf(Player p, Item item) =>
         (p.World.StatCalculator is { } calc ? calc.ItemPower(item.ForStats(), p.Progression?.Levels ?? new SortedDictionary<int, int>())
@@ -443,6 +448,7 @@ public static class Combat
             target.Session.Send(e);
             target.SendToObservers(e);
             world.Plugins.HealthChanged(target, health, left, attacker.Id, spell); // Units.OnHealthChange
+            DeathRecaps.Hit(target, attacker, spell, origin, -damage, ticks); // stageP: the death recap's mob rows
         }
         if (reflectable) SpellEffects.Reflect(target, attacker, raw, ticks); // reflectdamageactive (batch 2); not a reflectdamage="never" hit
         if (raw > 0) SpellEffects.EnergyOnDamage(target, ticks); // gainenergyondamage (batch 3), a hit on a shield too
@@ -494,6 +500,7 @@ public static class Combat
         target.Session.Send(e);
         target.SendToObservers(e);
         target.World.Plugins.HealthChanged(target, before, after, caster.Id, spell); // Units.OnHealthChange
+        DeathRecaps.Hit(target, caster, spell, origin, after - before, ticks); // stageP: heals in the death recap
         if (target.World.MobAi && target.Map is { } map) AI.MobAI.Healed(map, caster, target, after - before);
     }
 

@@ -46,29 +46,16 @@
   // guild goals of stage I, Handlers/World/GuildSeasonHandler)
   "GetPvpChallengeData": {},
   "GetShopTilesForCategory": {},
-  "GetMyTerritories": {},
   "GetGuildAccountLogs": {},
-  "GvGSeasonPlayerGuildParticipationDetails": {},
+  // (GvGSeasonPlayerGuildParticipationDetails since the territories' phase P2, Handlers/World/GuildSeasonHandler; GetMyTerritories since
+  // phase P3, Handlers/World/TerritoryHandler)
 
   // PremiumStoreGui.d.d: rc 0 = bought ("@PREMIUM_STORE_BUY_SILVER_RESULT_*" from key 0, though nothing was), 10521 =
   // "@PAYMENT_NOT_ENOUGH_SILVER_PLAYER", 10522 = "@PREMIUM_STORE_OFFER_NO_LONGER_AVAILABLE"; after any answer the store
   // asks for its offers again. Premium cannot be bought here, so the offer is gone.
   "BuyPremium": { "ReturnCode": 10522 },
 
-  // cvs.b.c → ArenaQueueView, ArenaDetailsGui: each ranked category (arena.xml isranked) needs an entry, or
-  // ArenaRankingInfoView.SetRankingInfo and ArenaDetailsGui.FillRewards throw NullReferenceException (the empty response
-  // did, 2026-10-15 20:43 and 23:09). The official answer for a new character: the season, both ranked categories, the
-  // lowest rank, 0 points.
-  "GetArenaRankings": {
-    "SeasonId": 12,         // arenaseason index (b7o id) in the client's region file: Login key 26 "europe" →
-                            // arena_europe.bin (from SEASON_22) → 12 = SEASON_34, 2026-09-12..11-21, as the official
-                            // Europe server sent; arena.xml (West) would be 18, arena_asia.bin (East) 16. Another index
-                            // misses: no rank, points or rewards, and an error line in the client per window
-    "CategoryIds": [1, 2],  // arenacategory index: ranked, ranked_1v1 (the same in all three files)
-    "RankLevels": [0, 0],   // rank index in the season's template, 0 = the lowest (ARENA_IRON_1)
-    "RankPoints": [0, 0],
-    "bnw": [0, 0]           // kept by cfu, not read by the queue view; 0 as sent officially
-  },
+  // GetArenaRankings: since stageP P7 a handler (Handlers/World/ArenaHandler.cs) in the official shape of the former stub.
 
   // ---- never answered by the official server, although the client has a response class (requests / responses in the
   // captures 103829, 114814, 002835; the unhandled default answered them with the empty response)

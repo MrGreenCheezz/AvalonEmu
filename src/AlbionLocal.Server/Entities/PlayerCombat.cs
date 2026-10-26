@@ -47,6 +47,18 @@ public sealed class PlayerCombat
     /// <summary>GameTimeStamp each spell (by id) may be cast again from: cast end + recastdelay × the cooldown factor (SPEC §5b.3).</summary>
     public Dictionary<short, long> Cooldowns { get; } = [];
 
+    /// <summary>What hit it in the death recap window (stageP SPEC §2.1, <see cref="Systems.DeathRecaps"/>), frozen at a knockdown or death.</summary>
+    public Systems.DeathRecaps.Record Recap { get; } = new();
+
+    /// <summary>Healing sickness (stageP SPEC §2.2, <see cref="Systems.PvpDetails"/>): the other players and bots that healed it, by object id, with their last heal's GameTimeStamp.</summary>
+    internal Dictionary<long, long> Healers { get; } = [];
+
+    /// <summary>Resilience (stageP SPEC §2.3): the players and bots whose hits reached it, by object id, with the last hit's GameTimeStamp.</summary>
+    internal Dictionary<long, long> FocusAttackers { get; } = [];
+
+    /// <summary>Resilience in force: the attacker count it was last raised to (2 and more) and the GameTimeStamp it ends at.</summary>
+    internal (int Level, long Until) FocusFire { get; set; }
+
     /// <summary>
     /// The cooldowns per CharacterSpellSlot (stageD consumables SPEC §2.2, the client's a48[30]): so far the potion (12) and food
     /// (13) slots, whose spell changes with the item in them; a swapped potion does not skip the slot's cooldown. Saved with

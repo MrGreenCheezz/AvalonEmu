@@ -22,6 +22,9 @@ public enum BuyJourneyRefusal : short
     /// <summary>The island is being upgraded (stageH islands SPEC §1.3: within 130 s of its level change).</summary>
     IslandUpgrading = 8046,
 
+    /// <summary>The home hideout is being upgraded (@HIDEOUT_ACCESS_CURRENTLY_UPGRADING, stageP hideouts H3).</summary>
+    HideoutUpgrading = 8047,
+
     /// <summary>The character's silver is below the client's price (stage 6).</summary>
     NotEnoughSilver = 8041,
 
@@ -44,7 +47,7 @@ public sealed partial class WorldSession
     /// world.xml travel point (Guid.Empty onto an island: its template's one), by which route, onto which island (stageH islands SPEC §1.3;
     /// null for every other journey).
     /// </summary>
-    private sealed record JourneyPlan(WorldObject From, Guid FromGuid, Guid To, string Cluster, JourneyRoute Route, Game.Island? Island = null);
+    private sealed record JourneyPlan(WorldObject From, Guid FromGuid, Guid To, string Cluster, JourneyRoute Route, Game.Island? Island = null, Game.Hideout? Hideout = null);
 
     /// <summary>
     /// BuyJourney (op 201, client class pz, plaintext, sent by c32.i 0x180a6ec50 from the travel window, ggd.d.f
@@ -91,7 +94,7 @@ public sealed partial class WorldSession
             load.ContinueWith(t => world.Post(() => ResumeJourney(pending, t)), TaskScheduler.Default);
             return null;
         }
-        if ((plan.Island is not null ? target.Travelpoints.FirstOrDefault() : target.Travelpoints.FirstOrDefault(t => t.Guid == plan.To)) is not { SpawnPosition: { } at })
+        if ((plan.Island is not null || plan.Hideout is not null ? target.Travelpoints.FirstOrDefault() : target.Travelpoints.FirstOrDefault(t => t.Guid == plan.To)) is not { SpawnPosition: { } at })
         {
             Log.Warn(Name, $"travel point {Short(plan.To)} of {plan.Cluster} is not in its template or has no spawnpos");
             return RefuseJourney(player, req.df, BuyJourneyRefusal.NotPossible, $"no arrival point in {plan.Cluster}");
@@ -106,12 +109,13 @@ public sealed partial class WorldSession
             $"'{player.Character.Name}' journey {from} -> {plan.Cluster} via {string.Join(" -> ", plan.Route.Clusters)} (cost {plan.Route.Cost:0.##}"
             + $"{(plan.Route.NoLuggage ? ", no luggage" : "")}): the client's price {req.dj / 10000.0:0.##} silver, charged"));
         if (player.Map.TutorialOwner is not null) Systems.TutorialJourney.Departed(player);
-        Commit(player, new Arrival(plan.Cluster, at, player.Facing), plan.Island is { } island ? $"island:{island.Id}" : $"journey:{Short(plan.FromGuid)}");
+        Commit(player, new Arrival(plan.Cluster, at, player.Facing), plan.Island is { } island ? $"island:{island.Id}" : plan.Hideout is { } home ? $"hideout:{home.Id}:journey" : $"journey:{Short(plan.FromGuid)}");
         SendResponse(OperationCodes.BuyJourney, new GenericResponse(), requestId, encrypted);
         // Onto an island (SPEC §1.3, +0.021 s): {0 "@ISLAND@<guid>", 1 the template of its level, 2 the owner's name}, no 255.
         SendResponse(OperationCodes.ChangeCluster, new ChangeClusterResponse
         {
-            anu = TutorialInstances.ClientCluster(player.Character, world), anv = plan.Island is null ? null : target.Id, anw = plan.Island?.OwnerName,
+            anu = TutorialInstances.ClientCluster(player.Character, world), anv = plan.Island is null && plan.Hideout is null ? null : target.Id,
+            anw = plan.Island?.OwnerName ?? (plan.Hideout is { } h ? world.Hideouts.Info(h).GuildName : null),
         }, requestId: null, encrypted: false);
         return null;
     }
@@ -131,6 +135,13 @@ public sealed partial class WorldSession
         if (map.TutorialOwner is not null && !Systems.TutorialJourney.TravelAllowed(player))
             return (null, no, "the tutorial departure objectives have not been completed");
         if (!player.Visibility.Known.Contains(from)) return (null, no, $"travel point {req.df} is not in the player's view");
+        // StageP hideouts (H3): the window's home entry (kind 1) with a home hideout: the Journey Back into it, at its travel point inside.
+        if (req.dh == 1 && world.Hideouts.HomeOf(player.Character.Id) is { } homeHideout)
+        {
+            if (homeHideout.Instance == map.Cluster) return (null, no, "already in the home hideout");
+            if (homeHideout.Upgrading) return (null, BuyJourneyRefusal.HideoutUpgrading, $"{homeHideout} is being upgraded");
+            return (new JourneyPlan(from, from.Spawn.Guid, Guid.Empty, homeHideout.Instance, new JourneyRoute(0, false, [map.Cluster, homeHideout.Instance]), Hideout: homeHideout), default, "");
+        }
         if (req.dh != 0 || req.di != Guid.Empty) return (null, no, $"journey kind {req.dh} (island {req.di}): only travel-point journeys are made");
         var text = req.dg ?? "";
         var at = text.IndexOf('@');

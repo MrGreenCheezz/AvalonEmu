@@ -80,6 +80,8 @@ public sealed partial class WorldSession
         if (_changing is not null)
             return Refuse(player, req.ee, ChangeClusterRefusal.AlreadyEnteringExit, _changing.Journey is null
                 ? $"exit object {_changing.ExitId} is being resolved already" : $"a journey from object {_changing.ExitId} is being resolved");
+        // StageP hideouts: a hideout's surface object or its exit walked into (Handlers/World/HideoutHandler).
+        if (HideoutChange(player, req, out var hideout)) return hideout;
         // StageL roads: a Roads of Avalon portal, NewTunnelExit 448 (Handlers/World/RoadHandler).
         if (RoadChange(player, req, out var road)) return road;
         // StageG dungeons: a random dungeon exit, an exit of a dungeon floor, the dungeon escape {0: 0, 3: true} (Handlers/World/DungeonHandler).

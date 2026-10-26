@@ -97,6 +97,18 @@ public sealed partial class WorldSession
             }
             return null; // accepted: a response would end the client's 2 s bar at once
         }
+        // StageP hideouts: the way into a hideout (its surface object) and out (its exit inside), Handlers/World/HideoutHandler.
+        if (player.Map is { } here && here.Objects.TryGetValue(req.kq, out var ho) && ho is HideoutObject or HideoutExitObject)
+        {
+            if (world.Hideouts.StartChannel(player, ho) is { } no)
+            {
+                Log.Info(Name, $"'{player.Character.Name}' hideout way through object {req.kq} refused: {no}");
+                TellHideout($"The hideout cannot be entered now: {no}.");
+                SendEvent(new ExitEnterCancelEvent { ddn = player.Id });
+                return new GenericResponse();
+            }
+            return null; // accepted: the 4 s bar runs until 255 or 254
+        }
         if (world.Expeditions.StartExit(player, req.kq) is { } why)
         {
             Log.Info(Name, $"'{player.Character.Name}' exit object {req.kq} refused: {why}");
@@ -110,7 +122,8 @@ public sealed partial class WorldSession
     [Handles(OperationCodes.ExitEnterCancel, Status = SessionStatus.InWorld)]
     private AlbionResponse? ExitEnterCancel(ExitEnterCancelRequest req)
     {
-        if (Player is { } player && !world.Dungeons.CancelExit(player, "cancelled by the client")) world.Expeditions.CancelExit(player, "cancelled by the client");
+        if (Player is { } player && !world.Dungeons.CancelExit(player, "cancelled by the client") && !world.Hideouts.CancelChannel(player, "cancelled by the client"))
+            world.Expeditions.CancelExit(player, "cancelled by the client");
         return new GenericResponse();
     }
 

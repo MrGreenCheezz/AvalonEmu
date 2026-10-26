@@ -53,6 +53,8 @@ public sealed class ClusterStore
         public required Retrying<MistsData> Mists;
         public required Retrying<BuffShrineData> BuffShrines;
         public required Retrying<EmoteData> Emotes;
+        public required Retrying<MatchTypeData> MatchTypes;
+        public required Retrying<ArenaData> Arena;
     }
 
     /// <param name="folder">The client's GameData folder; nothing is read before the first cluster is asked for.</param>
@@ -101,6 +103,8 @@ public sealed class ClusterStore
             Mists = new(() => MistsData.Load(GameDataFile.Open(Folder, "mists.bin").Root(), GameDataFile.Open(Folder, "miststemplatemetadata.bin").Root())),
             BuffShrines = new(() => BuffShrineData.Load(GameDataFile.Open(Folder, "buffshrines.bin").Root())),
             Emotes = new(() => EmoteData.Load(GameDataFile.Open(Folder, "emotes.bin").Root())),
+            MatchTypes = new(() => MatchTypeData.Load(GameDataFile.Open(Folder, "matchtypes.bin").Root(), GameDataFile.Open(Folder, "orbtypes.bin").Root())),
+            Arena = new(() => ArenaData.Load(Folder)),
         };
     }
 
@@ -241,6 +245,12 @@ public sealed class ClusterStore
 
     /// <summary>emotes.xml (stageN qol SPEC §1, 6 KB): read with the first player emote, on the world thread.</summary>
     public EmoteData Emotes => _shared.Emotes.Value;
+
+    /// <summary>matchtypes.xml and orbtypes.xml (stageP league-pvp SPEC §2.5, §3.1, 3 KB): read with the first arena match, on the world thread.</summary>
+    public MatchTypeData MatchTypes => _shared.MatchTypes.Value;
+
+    /// <summary>arena_europe.bin (else arena.bin; stageP league-pvp SPEC §3.3, 7 KB): the categories and the season's ranks, read with the first ranked result.</summary>
+    public ArenaData Arena => _shared.Arena.Value;
 
     /// <summary>
     /// A random dungeon floor or a mists zone from its layout (<see cref="ClusterTemplate.FromLayout"/>), not cached here (the dungeon or the

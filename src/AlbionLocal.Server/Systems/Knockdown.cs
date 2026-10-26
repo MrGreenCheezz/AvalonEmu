@@ -34,8 +34,8 @@ namespace AlbionLocal.Server.Systems;
 /// While down, Move gets rc 881 (the official code), AttackStart and CastStart are refused, heals do nothing and no mob
 /// aggroes or hits it; while invulnerable mobs neither aggro nor hit it. Nothing of it is saved: a player who leaves while
 /// down joins again standing at the knockdown spot with full bars (SPEC §5e.3 step 4). Not modelled: the silver drop
-/// (NewSilverObject {3 player, 2 amount, 18 3}: there is no money yet), DeathRecap's damage sources (an empty answer),
-/// durability loss (the SPEC defines none for a PvE knockdown). Touched only under <see cref="World.Sync"/>.
+/// (NewSilverObject {3 player, 2 amount, 18 3}: there is no money yet),
+/// durability loss (the SPEC defines none for a PvE knockdown). The death recap is frozen here (stageP, <see cref="DeathRecaps"/>). Touched only under <see cref="World.Sync"/>.
 /// <para>StageE (analysis/work/stageE/pvp/SPEC.md §2.5, §2.6, §3.5): a <see cref="KnockdownKind"/> picks the get-up. A duel's
 /// (<see cref="KnockdownKind.Duel"/>): knockdowngetuptimeseconds_duel (6 s) with max / 6 as the regeneration, the Respawn keeps the
 /// energy as it is (captured 214/340, 162/265, 110/265) and in the same instant CastSpell DUEL_SPAWN_KNOCKDOWN (996) runs on the
@@ -80,6 +80,7 @@ public static class Knockdown
         Emotes.Stop(p, "knocked down"); // stageN qol: a looping emote ends for the observers
         var dead = kind == KnockdownKind.Dead;
         c.Down = new KnockedDownState(world.Now, killer, kind) { KillerText = killerText };
+        world.Recaps.Freeze(p, ticks); // stageP: the death recap of this knockdown (or death)
         c.BuffDue = null;
         c.InvulnerableUntil = null;
         if (c.Cast is { } cast) SpellCasts.Cancel(p, cast, interrupted: true);
@@ -159,6 +160,7 @@ public static class Knockdown
         }
         var world = p.World;
         c.Down = new KnockedDownState(world.Now, killer, KnockdownKind.Dead) { KillerText = killerText };
+        world.Recaps.Freeze(p, ticks); // stageP: the recap again, with the killing blow
         var now = Math.Max(ticks, p.Health.Stamp);
         if (SpellEffects.Remove(world, p, s => !s.Subs.Any(sub => SpellTemplate.Bool(sub.Node, "persistsafterdeath"))))
         {

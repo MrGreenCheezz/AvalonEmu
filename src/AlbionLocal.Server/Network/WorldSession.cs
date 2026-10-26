@@ -264,6 +264,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         world.Expeditions.Joined(player); // stageH: in an instance 263 kind 7, 260, 261; reward items that wait
         world.Corrupted.Joined(player); // stageL: in a corrupted instance 450 (the tracker), the arrival buff, the chat line
         world.Hellgates.Joined(player); // stageL: in a hellgate 454 and 453 (the tracker)
+        Systems.SpawnBuffs.Joined(player, _arrived, _respawned); // stageP: the zone-entry protection and the spell cooldowns on entering
         world.Arenas.Joined(player); // stage N: in an arena match its arrival (the countdown once all are in)
         world.Mists.Joined(player); // stageL: in a mists zone 521 (the return portal, the border exits' target, the shutdown), the chat line
         world.StaticDungeons.Joined(player); // stageN: 499, the events and values of the dungeon here and of those entered from here

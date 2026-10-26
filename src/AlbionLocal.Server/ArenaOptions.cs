@@ -15,6 +15,7 @@ public sealed record ArenaOptions
     {
         Bots = true, CountdownSeconds = 10, Tickets2v2 = 6, Tickets5v5 = 15, TicketsPerDeath = 1, MatchMinutes = 15, DuelsRated = true,
         WinSilver = 5000, LossSilver = 1500, WinFame = 30000, LossFame = 10000,
+        ItemPowerCap = false, DoubleHealerPenalty = false, EnterBuffs = false, WarcampDefense = false, Psp = false, Orbs = false, CrystalArena = false, RankPoints = false,
     };
 
     /// <summary>Arena:Enabled (true): ArenaRegister and .arena join take players into the queues.</summary>
@@ -60,8 +61,8 @@ public sealed record ArenaOptions
 
     /// <summary>
     /// Arena:Tickets2v2 and Arena:Tickets5v5 (150, matchtypes MATCH_ARENA; the pve preset 6 and 15): a team's tickets in the team modes, each
-    /// death costing Arena:TicketsPerDeath (2, MATCH_ARENA; the pve preset 1). The official orbs' ticket loss is not modelled, so with the
-    /// official figures a match mostly runs to its time limit (1v1: the official 2 rounds, best of three, whatever these say).
+    /// death costing Arena:TicketsPerDeath (2, MATCH_ARENA; the pve preset 1), each runestone claim of the other team 10 more (<see cref="Orbs"/>)
+    /// (1v1: the official 2 rounds, best of three, whatever these say).
     /// </summary>
     public int Tickets2v2 { get; init; } = 150;
 
@@ -90,8 +91,8 @@ public sealed record ArenaOptions
 
     /// <summary>
     /// Arena:WinSilver, Arena:LossSilver, Arena:WinFame, Arena:LossFame (0, official: an arena pays season points and arena.bin's items, no silver
-    /// or fame; the pve preset 5000, 1500, 30000, 10000): a match's silver and fame (× Rates), in place of the official season points (not
-    /// modelled); a draw pays the loss figures.
+    /// or fame; the pve preset 5000, 1500, 30000, 10000): a match's silver and fame (× Rates), the pve preset's stand-in for the official
+    /// season points (<see cref="Psp"/>); a draw pays the loss figures.
     /// </summary>
     public double WinSilver { get; init; }
 
@@ -111,6 +112,93 @@ public sealed record ArenaOptions
 
     /// <summary>Arena:RewardsWithBots (true): a match with bots pays too (false: only matches between players).</summary>
     public bool RewardsWithBots { get; init; } = true;
+
+    /// <summary>
+    /// Arena:ItemPowerCap (true; the pve preset false): the arenacategory item power caps on every worn item during a match (stageP league-pvp
+    /// SPEC §2.5): the unranked team modes a hard cap at 600 (minitempoweraverage 600, "capped at 600 Item Power"), the 1v1 a soft cap at 900
+    /// with 20 % of the power above it ("any IP above reduced by 80 %"): IP' = min(IP, cap) + max(0, IP − cap) × factor [infer: per item].
+    /// </summary>
+    public bool ItemPowerCap { get; init; } = true;
+
+    /// <summary>
+    /// Arena:DoubleHealerPenalty (true; the pve preset false): matchtypes doublehealerpenalty (MATCH_ARENA: DOUBLEHEALER_PENALTY, healmodifier
+    /// −0.35 for 10 s) on every member of a team with more than one healer (a holy or nature staff in the main hand, itemroles ARENA_HEAL),
+    /// refreshed while it lasts [infer: who carries it].
+    /// </summary>
+    public bool DoubleHealerPenalty { get; init; } = true;
+
+    /// <summary>
+    /// Arena:EnterBuffs (true; the pve preset false): the worldsettings ARENA_* spawn buffs on the arrival in a match: ARENA_ENTER (full health
+    /// and energy, cooldowns reset, the cape cooldown removed), ARENA_OVERLOAD_PROTECTION (+99 max load), in the 1v1 ARENA_1V1_ENTER (healing −60 %).
+    /// </summary>
+    public bool EnterBuffs { get; init; } = true;
+
+    /// <summary>
+    /// Arena:WarcampDefense (true; the pve preset false): the matchtype's &lt;warcamp&gt;&lt;defense&gt;: each camp's turret hits the other team
+    /// within 18 m for 10 % of its maximum health every 0.4 s during the fight (lethal in the arena: a ticket), and its own team within 8.7 m has
+    /// ARENA_WARCAMP_INVULNERABILITY (broken by attacking, back after leaving the circle).
+    /// </summary>
+    public bool WarcampDefense { get; init; } = true;
+
+    /// <summary>
+    /// Arena:Psp (true; the pve preset false): arena.bin's personal season points at the result (Seasons.Gain): unranked win 1200 (premium 1500),
+    /// loss or draw 400 (600); the 1v1 its ARENA_IRON_1 figures, win 400 (500), loss 175 (250) (with <see cref="RankPoints"/> those of the player's rank, the Crystal Arena's too). Paid with the other
+    /// rewards (Arena:RewardsWithBots), only while an Adventurer's Challenge season runs.
+    /// </summary>
+    public bool Psp { get; init; } = true;
+
+    /// <summary>
+    /// Arena:Orbs (true; the pve preset false, whose few tickets one claim would end): the map's orbs ("runestones", stageP league-pvp SPEC §3.2):
+    /// ARENA-STANDARD's three ORB_ARENA (a team alone within 9 m for 10 s claims one, 4 s more to take the other team's, a claim costs the other
+    /// team 10 tickets, none in the fight's first 60 s); a channel orb (the crystal types: a player's 7.5 s channel within 8 m, broken by damage
+    /// or moving; each claim −1 and the 120 s round score) where a mode's matchtype has one (the Crystal Arena, <see cref="CrystalArena"/>).
+    /// NewOrbObject, OrbClaimed, OrbReset and ClaimOrbStart / Finished / Cancel go to the client [infer: NewOrbObject key 2 the tile name, key 4
+    /// the owner team; capture R2].
+    /// </summary>
+    public bool Orbs { get; init; } = true;
+
+    /// <summary>
+    /// Arena:OrbRoundLookup (false): MATCH_ARENA's ticketreductionlookup (roundduration 60 s; orb difference 1/2/3/4 → 10/10/20/20) on top of
+    /// the instant score, which the tutorial does not mention [infer: unused officially].
+    /// </summary>
+    public bool OrbRoundLookup { get; init; }
+
+    /// <summary>
+    /// Arena:MatchHud (false in both presets until captures R2/R3 confirm the fields; official true): the match HUD's partly decoded events:
+    /// OrbUpdate (131) on each orb change, MatchUpdate (121) on each ticket change, StartArenaMatchInfos (119) at the first countdown and
+    /// MatchNewCombatRound / MatchEndCombatRound (171/172) at the crystal orbs' 120 s cycles and the 1v1 rounds. False sends none of them (a wrong one may throw in the
+    /// client, as the empty GetArenaRankings did); the score stays in chat.
+    /// </summary>
+    public bool MatchHud { get; init; }
+
+    /// <summary>
+    /// Arena:CrystalArena (true; the pve preset false, which keeps category 1 on the 5v5): the client's category 1 (ranked, the Crystal Arena,
+    /// stageP league-pvp SPEC §3.4) is its own 5v5 queue on CrystalRealm03 with matchtypes MATCH_CRYSTAL_GVG_NONLETHAL: 150 tickets, 6 per death,
+    /// 18 s respawn, 24 min; the map's three channel runestones (a 7.5 s channel, −1 ticket per claim; every 120 s the side holding more orbs
+    /// takes 20/30/40 from the other and its orbs turn neutral, with <see cref="Orbs"/>), the 900 soft cap (× 0.2 above, with
+    /// <see cref="ItemPowerCap"/>), WARCAMP_INVULNERABILITY and the camp turret (non-lethal), and arena.bin's ranked rewards and season points.
+    /// False: category 1 queues for the unranked 5v5 as before (.arena join crystal is refused).
+    /// </summary>
+    public bool CrystalArena { get; init; } = true;
+
+    /// <summary>
+    /// Arena:RankPoints (true; the pve preset false): the ranked categories' rank points (RP) and the season template's 17 ranks (stageP
+    /// league-pvp SPEC §3.3; arena.bin RANKED_BRACKETS_ARENA_S26: ARENA_IRON_1 … ARENA_CRYSTAL, promotion at 150, 300, … 2400 RP, demotion
+    /// below 0, 100, … 2350) for the Crystal Arena (category 1) and the 1v1 (category 2, rankpointfactor 0.5); a new rank's rank-up chest
+    /// (seasonrankrewards) once per season; the rank's win and loss rewards and season points; GetArenaRankings the real rank and RP.
+    /// [H] The rank point formula is not in the client data (capture R3): an Elo-like placeholder from the rated result's Elo change d (the
+    /// ladder's Arena:K): a win gives winrankpointmodifier × max(<see cref="RankPointMinGain"/>, d), plus elowinbooster while the Elo is above
+    /// the rank's expectedelo (<see cref="RankPointBoosters"/>); a loss takes loserankpointmodifier × max(min, −d), plus elolosebooster while
+    /// the Elo is below expectedelo; × the category's rankpointfactor; a draw nothing; never below 0 RP. Only rated results count
+    /// (Arena:Rated, Arena:RateWithBots). False: no RP, the 1v1 pays the unranked items, GetArenaRankings the lowest rank and 0 RP.
+    /// </summary>
+    public bool RankPoints { get; init; } = true;
+
+    /// <summary>Arena:RankPointMinGain (1) [H]: the least Elo change the rank point placeholder counts for a win or a loss.</summary>
+    public double RankPointMinGain { get; init; } = 1;
+
+    /// <summary>Arena:RankPointBoosters (true) [H]: the rank's elowinbooster / elolosebooster on top (see <see cref="RankPoints"/>).</summary>
+    public bool RankPointBoosters { get; init; } = true;
 
     /// <summary>Arena:FallbackCluster (0000): where a player of an arena that is gone (a restart) goes without a saved way back.</summary>
     public string FallbackCluster { get; init; } = "0000";
@@ -160,6 +248,18 @@ public sealed record ArenaOptions
             DailyWins = Int("Arena:DailyWins", d.DailyWins, 0, 1000),
             RewardsWithBots = Flag("Arena:RewardsWithBots", d.RewardsWithBots),
             FallbackCluster = Take("Arena:FallbackCluster")?.Trim() is { Length: > 0 } fb ? fb : d.FallbackCluster,
+            ItemPowerCap = Flag("Arena:ItemPowerCap", d.ItemPowerCap),
+            DoubleHealerPenalty = Flag("Arena:DoubleHealerPenalty", d.DoubleHealerPenalty),
+            EnterBuffs = Flag("Arena:EnterBuffs", d.EnterBuffs),
+            WarcampDefense = Flag("Arena:WarcampDefense", d.WarcampDefense),
+            Psp = Flag("Arena:Psp", d.Psp),
+            Orbs = Flag("Arena:Orbs", d.Orbs),
+            OrbRoundLookup = Flag("Arena:OrbRoundLookup", d.OrbRoundLookup),
+            MatchHud = Flag("Arena:MatchHud", d.MatchHud),
+            CrystalArena = Flag("Arena:CrystalArena", d.CrystalArena),
+            RankPoints = Flag("Arena:RankPoints", d.RankPoints),
+            RankPointMinGain = Number("Arena:RankPointMinGain", d.RankPointMinGain, 0, 1000),
+            RankPointBoosters = Flag("Arena:RankPointBoosters", d.RankPointBoosters),
         };
     }
 }

@@ -240,14 +240,17 @@ public sealed partial class WorldSession
     }
 
     /// <summary>
-    /// DeathRecap (op 492, ro) {0 byte 1}: the knockdown screen asks who did the damage (SPEC §5e.1). Answered with an empty
-    /// recap (aep with its arrays empty; the SPEC accepts it for 5e): the damage sources are not recorded yet (TODO).
+    /// DeathRecap (op 492, ro) {0 byte 1}: the knockdown screen (and the character menu later) asks who did the damage. Answered with
+    /// the player's last recap (stageP league-pvp SPEC §2.1, <see cref="DeathRecaps.Response"/>); none, or DeathRecap:Enabled false: the
+    /// empty recap (aep with its arrays empty).
     /// </summary>
     [Handles(OperationCodes.DeathRecap, Status = SessionStatus.InWorld)]
     private AlbionResponse DeathRecap(DeathRecapRequest req)
     {
-        Log.Debug(Name, $"DeathRecap {req.je}: an empty recap (damage sources are not recorded yet)");
-        return new DeathRecapResponse().FillEmpty();
+        if (Player is not { } player) return new DeathRecapResponse().FillEmpty();
+        var resp = world.Recaps.Response(player);
+        Log.Debug(Name, $"DeathRecap {req.je} of '{player.Character.Name}': {resp.apj?.Length ?? 0} causer(s)");
+        return resp;
     }
 
     /// <summary>

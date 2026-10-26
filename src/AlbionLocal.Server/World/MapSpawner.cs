@@ -114,10 +114,14 @@ public static class MapSpawner
         objects.AddRange(world.Hellgates.Populate(map, template));
         // StageN shrines (SPEC §3): the buff shrines of the active layers (396): a solo dungeon room's, the faction and invisibility shrines.
         objects.AddRange(world.Shrines.Populate(map, template));
+        // StageP territories (SPEC §6 P1): a watchtower territory's monolith (109) and a castle territory's castle (112), unowned.
+        objects.AddRange(world.Territories.Populate(map, template));
         // StageL mists (SPEC §6.4): a mists world cluster's city entrances (527); a zone's border exits, city entrance and open-world exit, its mob level and treasures.
         objects.AddRange(world.Mists.Populate(map, template));
         // StageH islands (SPEC §1.5): an island instance's island management, owned by the island's owner.
         objects.AddRange(world.Islands.Populate(map, template));
+        // StageP hideouts (SPEC §2.5): the hideouts standing in a black zone (419); a hideout instance's management (420) and exit (421).
+        objects.AddRange(world.Hideouts.Populate(map, template));
         // StageG: NewFishingZoneObject, one per fishingzone tile whose zone content/fishing.json knows, full charges (all of
         // them at their template position, as the 15 seen in 0204 and the 16 in Thetford; SPEC §7.1, §12.1).
         foreach (var f in template.FishingZones)

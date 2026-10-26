@@ -21,8 +21,8 @@ public enum Relation : byte
 /// rules (<see cref="ClusterPvp"/>, the archetype of worldsettings.xml), the client's hostility rule between two players
 /// (<see cref="Of"/>, a5g.b 0x18090DDF0 with ctp.aee's duel opponent first), and a player's auto-attack on another player with the
 /// PvP damage factors (<see cref="Swing"/>, <see cref="Damage"/>). The flag (FlaggingStatus) is the character's (saved), changed by
-/// the flag cast of op 354 (<see cref="Flagging"/>, E2) or a GM's .pvp flag. The guild test G is one guild (<see cref="Guilds.Same"/>;
-/// no alliances, stageH guilds SPEC §6.12), and no unrestricted zones (§1.4: U false). E2 (§3.3-§3.5): a Hostile hit on a mounted player goes to its mount bar (at 0
+/// the flag cast of op 354 (<see cref="Flagging"/>, E2) or a GM's .pvp flag. The guild test G is one guild or one alliance (<see cref="Guilds.Friends"/>;
+/// stageP hideouts SPEC §2.3, A.9: the client's a5g.d_1 tests both), and no unrestricted zones (§1.4: U false). E2 (§3.3-§3.5): a Hostile hit on a mounted player goes to its mount bar (at 0
 /// the hostile forced dismount), the crimes cost reputation and implicate (<see cref="Crime"/>), a knockdown outside a duel wears the victim's items
 /// (<see cref="KnockedDown"/>, AliveToKnockedOut) and gives the attacker KillRewardedNoFame. E3 (§4): in a playersarelethal cluster the
 /// hit that takes the health to 0 kills (<see cref="Death.Kill"/>, AliveToDead). StageJ pvp-spells phase 2 (Pvp:Spells): a player's enemy
@@ -65,7 +65,7 @@ public static class Pvp
     /// <summary>
     /// What <paramref name="b"/> is to <paramref name="a"/> on a's map (ctp.aee → a5g.b): the duel opponent is Hostile before
     /// every other rule (in a city, a party, anywhere), oneself Friendly, everything else by <see cref="ModeOf"/> with Pvp:Mode
-    /// (a Hostile guild mate Neutral under Guilds:NoFriendlyFire).
+    /// (a Hostile guild mate Neutral under Guilds:NoFriendlyFire, a Hostile ally under Alliances:NoFriendlyFire).
     /// </summary>
     public static Relation Of(Player a, Player b)
     {
@@ -76,10 +76,13 @@ public static class Pvp
         if (a.World.Arenas.RelationOf(a, b) is { } arena) return arena; // stage N arena: the teams, Hostile only during a fight
         if (a.World.Duels.OpponentOf(a) == b) return Relation.Hostile;
         var guild = a.World.Guilds.Same(a.Character.Id, b.Character.Id);
+        // StageP: G is one guild or one alliance (the client's a5g.d_1), so the server and the client agree on allies.
+        var ally = !guild && a.World.Alliances.Allied(a.Character.Id, b.Character.Id);
         // StageL mists phase B (Pvp:Mode Official only): an active camp's free-for-all circle, guild mates kept apart under NoFriendlyFire.
-        var relation = a.World.Mists.Unrestricted(a, b) ? Relation.Hostile : ModeOf(a.Flag, b.Flag, SameParty(a, b), guild, RulesOf(a.World, a.Map), a.World.Config.PvpMode);
-        // Guilds:NoFriendlyFire (guilds SPEC §10.2): guild mates are never Hostile (the table's case: two factions in one guild).
-        return relation == Relation.Hostile && guild && a.World.Config.GuildNoFriendlyFire ? Relation.Neutral : relation;
+        var relation = a.World.Mists.Unrestricted(a, b) ? Relation.Hostile : ModeOf(a.Flag, b.Flag, SameParty(a, b), guild || ally, RulesOf(a.World, a.Map), a.World.Config.PvpMode);
+        // Guilds:NoFriendlyFire (guilds SPEC §10.2): guild mates are never Hostile (the table's case: two factions in one guild); allies under Alliances:NoFriendlyFire.
+        var noFriendlyFire = guild && a.World.Config.GuildNoFriendlyFire || ally && a.World.Config.AllianceNoFriendlyFire;
+        return relation == Relation.Hostile && noFriendlyFire ? Relation.Neutral : relation;
     }
 
     /// <summary>
@@ -101,8 +104,7 @@ public static class Pvp
 
     /// <summary>
     /// a5g.b's table (SPEC §1.2, verified §6 V2) for viewer flag <paramref name="fa"/> and target flag <paramref name="fb"/>, both
-    /// players, outside unrestricted zones: <paramref name="party"/> = P, <paramref name="guild"/> = G (same guild or alliance,
-    /// one guild here: no alliances).
+    /// players, outside unrestricted zones: <paramref name="party"/> = P, <paramref name="guild"/> = G (same guild or alliance).
     /// </summary>
     public static Relation Of(byte fa, byte fb, bool party, bool guild, ClusterPvp rules)
     {
@@ -431,6 +433,7 @@ public static class Pvp
         if (before <= 0) return;
         var crime = Engage(attacker, target, ticks, origin); // judged before the hit (a knockdown, a flag change)
         if (attacker.IsBot) amount *= world.Config.Bots.DamageFactor * world.Config.Bots.Difficulty * attacker.Bot!.DamageFactor; // stageN botpower: Bots:Difficulty // stage I: Bots:Combat:DamageFactor, the bots' difficulty (stageL: an invader's own)
+        amount *= PvpDetails.Resilience(attacker, target, ticks); // stageP: resilience (focus fire protection) under Pvp:Resilience
         var damage = Math.Max(0, Combat.Rounded(amount * DefenseFactor(target, ticks)));
         damage = Combat.Rounded(world.Plugins.Damage(attacker, null, target, null, AlbionLocal.Plugin.Api.DamageKind.PlayerToPlayer, origin == HitOrigin.OverTime, damage)); // the plugins' Damage
         if (target.Combat.Channel is { Info.DamageCancels: true } && !SpellEffects.NotInterruptible(target, ticks))
@@ -455,6 +458,8 @@ public static class Pvp
             update = Combat.HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
             world.Plugins.HealthChanged(target, health, left, attacker.Id, spell); // Units.OnHealthChange
             Death.Hit(attacker, target, damage);
+            DeathRecaps.Hit(target, attacker, spell, origin, -damage, ticks); // stageP: the death recap's player rows
+            if (damage > 0) world.Arenas.Damaged(target); // stageP: a hit breaks an arena orb channel
             if (target.IsBot) world.Bots.Hurt(target, attacker, damage, ticks); // stage I: the bot's retarget measure
         }
         if (raw > 0) SpellEffects.EnergyOnDamage(target, ticks);

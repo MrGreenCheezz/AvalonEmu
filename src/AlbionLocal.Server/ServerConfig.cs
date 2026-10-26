@@ -539,6 +539,39 @@ public sealed record ServerConfig
     /// rule auto-attacks use (so under the consensual mode only a Red player, a duel opponent, a bot by the zone's flags); false = they
     /// reach mobs only and a CastStart of an enemy spell at a player is refused (auto-attacks unchanged).
     /// </summary>
+
+    /// <summary>
+    /// DeathRecap:Enabled (true in both presets; stageP league-pvp SPEC §2.1): the hits, heals and crowd control on a player are recorded
+    /// and DeathRecap (op 492) answers with the last recap (<see cref="Systems.DeathRecaps"/>); false = nothing recorded, the empty recap.
+    /// </summary>
+    public bool DeathRecapEnabled { get; init; } = true;
+
+    /// <summary>DeathRecap:Seconds (null = gamedata &lt;DeathRecap timeframe&gt;, 180 s, both presets): the recap's window before the knockdown.</summary>
+    public double? DeathRecapSeconds { get; init; }
+
+    /// <summary>
+    /// Pvp:HealingSickness (true in both presets; stageP SPEC §2.2): a player or bot healed by 2 or more distinct other players or bots
+    /// within 10 s gets HEALINGSICKNESS_n (gamedata PlayerHealingSickness), which cuts the heals it receives (<see cref="Systems.PvpDetails"/>).
+    /// </summary>
+    public bool PvpHealingSickness { get; init; } = true;
+
+    /// <summary>
+    /// Pvp:Resilience (true in both presets; stageP SPEC §2.3): a player or bot hit by 2 or more distinct players or bots within 10 s takes
+    /// less damage from players for 5 s (gamedata PlayerFocusFire, focusfireprotectionpenetration; <see cref="Systems.PvpDetails"/>).
+    /// </summary>
+    public bool PvpResilience { get; init; } = true;
+
+    /// <summary>
+    /// Pvp:SpawnBuffs (true in both presets; stageP SPEC §2.4): the worldsettings spawnbuff lists' SPAWN_* buffs (SPAWN_INVULNERABILITY,
+    /// SPAWN_SPEED, SPAWN_BUFFIMMUNITY, …) on a cluster change's arrival and a respawn outside the hellgates (<see cref="Systems.SpawnBuffs"/>).
+    /// </summary>
+    public bool PvpSpawnBuffs { get; init; } = true;
+
+    /// <summary>
+    /// Pvp:EnterSpellCooldowns (true in both presets; stageP SPEC §2.4): the clustertype's spellcooldownsonenteringseconds (15 s in the
+    /// yellow, red and black zones) on every gear spell slot on arriving there.
+    /// </summary>
+    public bool PvpEnterSpellCooldowns { get; init; } = true;
     public bool PvpSpells { get; init; } = true;
 
     /// <summary>
@@ -627,8 +660,11 @@ public sealed record ServerConfig
         GuildBossSeasonPoints = true, GuildSeasonRewards = RuleSource.Content, SeasonRules = RuleSource.Content, ExpeditionsRules = RuleSource.Content,
         WorldBossesExtraSpawns = true, WorldBossesLoot = null,
         Arena = ArenaOptions.PveDefaults,
+        Territories = TerritoryOptions.PveDefaults,
+        Hideouts = HideoutOptions.PveDefaults,
         GuildCreateCost = 100_000, GuildJoinRole = Game.GuildRole.Member, GuildRejoinCooldownMinutes = 0,
         GuildNoFriendlyFire = true, GuildXpShare = 0.1, GuildClearXp = 2000, GuildShareWithoutParty = true, GuildSilverTax = 0.05, GuildContracts = true,
+        AllianceNoFriendlyFire = true,
         IslandsStarterIsland = true, IslandsGrowthSpeed = 4, IslandsWaterFocusFactor = 0, IslandsStarterBuildings = true,
         ChatWorldChannel = true, ChatMergeLanguageChannels = true, MailRewardOverflow = true,
         PremiumMode = PremiumMode.Free, FocusStart = 30_000, LearningPointsStart = 500,
@@ -769,6 +805,49 @@ public sealed record ServerConfig
     public long GuildContractSilver { get; init; } = 100_000;
 
     /// <summary>
+    /// Alliances:Enabled (true): alliances of guilds (analysis/work/stageP/hideouts/SPEC.md §1.2, §4; <see cref="Systems.Alliances"/>). False:
+    /// every alliance request is refused, no alliance key is sent and allies are no longer friends; saved alliances stay.
+    /// </summary>
+    public bool AlliancesEnabled { get; init; } = true;
+
+    /// <summary>Alliances:CreateCost (5000000 silver, gamedata &lt;Alliance cost&gt;): what AllianceCreate takes from the founding guild's account (8320).</summary>
+    public long AllianceCreateCost { get; init; } = 5_000_000;
+
+    /// <summary>Alliances:MaxGuilds (100, gamedata maxguilds): an alliance with this many guilds refuses invitations (8445) and joins (8483).</summary>
+    public int AllianceMaxGuilds { get; init; } = 100;
+
+    /// <summary>
+    /// Alliances:MaxPlayers (30000, gamedata maxplayers): the members of all its guilds together; refuses invitations (8446), joins (8484)
+    /// and guild invitations (4251) and joins (4123) that would pass it.
+    /// </summary>
+    public int AllianceMaxPlayers { get; init; } = 30_000;
+
+    /// <summary>
+    /// Alliances:ChangeCooldownMinutes (10080, gamedata changecooldownminutes): after founding or joining an alliance a guild can found (8330)
+    /// or join (8485) no other for this long, and after leaving one it cannot rejoin that one (8486) for this long [H: same value]; 0 = none.
+    /// </summary>
+    public double AllianceChangeCooldownMinutes { get; init; } = 10_080;
+
+    /// <summary>
+    /// Alliances:LeaveProtectionSeconds (30, gamedata allianceleaveprotectioninsec): a guild that left (or was kicked from, or saw the
+    /// disband of) an alliance stays friendly with it for this long [H: the server refuses the damage, the client draws the new state].
+    /// </summary>
+    public double AllianceLeaveProtectionSeconds { get; init; } = 30;
+
+    /// <summary>Alliances:NoFriendlyFire (false; the pve preset true, as Guilds:NoFriendlyFire): allied players are never Hostile to each other outside a duel.</summary>
+    public bool AllianceNoFriendlyFire { get; init; }
+
+    /// <summary>Alliances:Chat (true): the chat server offers the Alliance channel (ChatChannelType 25) to the members of an alliance's guilds.</summary>
+    public bool AllianceChat { get; init; } = true;
+
+    /// <summary>
+    /// Alliances:PlateText (Name): what the alliance keys of the nameplates and the guild window carry (GuildUpdate 16, Join 79, NewCharacter
+    /// 51, GuildMemberWorldUpdate 12): the alliance's name (the SPEC's reading of the client fields) or its tag (official nameplates show
+    /// "[TAG]"; open until capture R3).
+    /// </summary>
+    public AlliancePlateText AlliancePlateText { get; init; } = AlliancePlateText.Name;
+
+    /// <summary>
     /// Islands:Enabled (true): the personal islands (stageH islands SPEC phase 1, <see cref="Systems.Islands"/>): the merchant lists the
     /// character's islands (GetIslandInfos), the journey there and back, the island instance. False: an empty island list as before,
     /// every island journey refused; a character saved on an island logs in at its city's travel point.
@@ -886,6 +965,12 @@ public sealed record ServerConfig
     /// <summary>Stage N: the cosmetics' drops (Vanity:*, <see cref="VanityOptions"/>).</summary>
     public VanityOptions Vanity { get; init; } = new();
 
+    /// <summary>StageP: the guild territories and castles (Territories:*, Castles:*, <see cref="TerritoryOptions"/>).</summary>
+    public TerritoryOptions Territories { get; init; } = new();
+
+    /// <summary>StageP: the guild hideouts (Hideouts:*, <see cref="HideoutOptions"/>).</summary>
+    public HideoutOptions Hideouts { get; init; } = new();
+
     /// <summary>StageL: the Roads of Avalon (Roads:*, <see cref="RoadsOptions"/>; the pve preset's .roads for every player).</summary>
     public RoadsOptions Roads { get; init; } = new();
 
@@ -993,6 +1078,14 @@ public sealed record ServerConfig
                 : throw new InvalidDataException($"Pvp:FriendlySpells: '{friendly}' is not one of {string.Join(", ", Enum.GetNames<FriendlySpells>())}"),
             PvpDuelIsolation = Flag("Pvp:DuelIsolation", d.PvpDuelIsolation),
             PvpSpells = Flag("Pvp:Spells", d.PvpSpells),
+            PvpHealingSickness = Flag("Pvp:HealingSickness", d.PvpHealingSickness),
+            PvpResilience = Flag("Pvp:Resilience", d.PvpResilience),
+            PvpSpawnBuffs = Flag("Pvp:SpawnBuffs", d.PvpSpawnBuffs),
+            PvpEnterSpellCooldowns = Flag("Pvp:EnterSpellCooldowns", d.PvpEnterSpellCooldowns),
+            DeathRecapEnabled = Flag("DeathRecap:Enabled", d.DeathRecapEnabled),
+            DeathRecapSeconds = Take("DeathRecap:Seconds") is not { } recapSeconds || recapSeconds.Equals("gamedata", StringComparison.OrdinalIgnoreCase) ? d.DeathRecapSeconds
+                : double.TryParse(recapSeconds, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var drs) && drs is > 0 and <= 3600 ? drs
+                : throw new InvalidDataException($"DeathRecap:Seconds: '{recapSeconds}' is not 1..3600 or gamedata"),
             PveKnockdownWear = Number("Pve:KnockdownWear", d.PveKnockdownWear, 0, 1),
             PvePartyRevive = Flag("Pve:PartyRevive", d.PvePartyRevive),
             LoginEndPoint = new IPEndPoint(bind, Port("Network:LoginPort", 5055)),
@@ -1109,6 +1202,17 @@ public sealed record ServerConfig
                 : throw new InvalidDataException($"Guilds:ContractPeriod: '{period}' is not Weekly or Daily"),
             GuildContractXp = (long)Number("Guilds:ContractXp", 20_000, 0, 1e9),
             GuildContractSilver = (long)Number("Guilds:ContractSilver", 100_000, 0, 1e9),
+            AlliancesEnabled = Flag("Alliances:Enabled", true),
+            AllianceCreateCost = (long)Number("Alliances:CreateCost", 5_000_000, 0, 1e10),
+            AllianceMaxGuilds = Int("Alliances:MaxGuilds", 100, 1, 10_000),
+            AllianceMaxPlayers = Int("Alliances:MaxPlayers", 30_000, 1, 1_000_000),
+            AllianceChangeCooldownMinutes = Number("Alliances:ChangeCooldownMinutes", 10_080, 0, 1_000_000),
+            AllianceLeaveProtectionSeconds = Number("Alliances:LeaveProtectionSeconds", 30, 0, 86_400),
+            AllianceNoFriendlyFire = Flag("Alliances:NoFriendlyFire", d.AllianceNoFriendlyFire),
+            AllianceChat = Flag("Alliances:Chat", true),
+            AlliancePlateText = Take("Alliances:PlateText") is not { } plate ? AlliancePlateText.Name
+                : Enum.TryParse<AlliancePlateText>(plate, ignoreCase: true, out var apt) && Enum.IsDefined(apt) ? apt
+                : throw new InvalidDataException($"Alliances:PlateText: '{plate}' is not Name or Tag"),
             IslandsEnabled = Flag("Islands:Enabled", true),
             IslandsStarterIsland = Flag("Islands:StarterIsland", d.IslandsStarterIsland),
             IslandsStarterLevel = Int("Islands:StarterLevel", 0, 0, 5),
@@ -1179,6 +1283,8 @@ public sealed record ServerConfig
             Hellgates = LoadHellgates(values, d.Hellgates),
             Arena = ArenaOptions.Load(values, d.Arena),
             Vanity = VanityOptions.Load(values, d.Vanity),
+            Territories = TerritoryOptions.Load(values, d.Territories),
+            Hideouts = HideoutOptions.Load(values, d.Hideouts),
             Roads = LoadRoads(values, d.Roads),
             Mists = LoadMists(values, d.Mists),
             Companions = LoadCompanions(values, d.Companions),
@@ -1942,6 +2048,13 @@ public enum PvpMode
 
     /// <summary>Only duel opponents are Hostile.</summary>
     Off,
+}
+
+/// <summary>Alliances:PlateText (<see cref="ServerConfig.AlliancePlateText"/>): the alliance's name or tag in the nameplate keys.</summary>
+public enum AlliancePlateText
+{
+    Name,
+    Tag,
 }
 
 /// <summary>Guilds:ContractPeriod (<see cref="ServerConfig.GuildContractPeriod"/>): how often the guild contracts change.</summary>

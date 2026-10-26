@@ -34,7 +34,7 @@ public sealed partial class LoginSession
         r.bde = Each(c => Systems.OpeningTutorial.ClientCluster(c, world)); // [10] client instance id
         r.bdf = Strings();                    // [11] c.d
         r.bdg = Strings();                    // [12] c.e
-        r.bdh = Each(c => world?.Islands.WorldOf(c.Cluster) ?? world?.Expeditions.WorldOf(c.Cluster)
+        r.bdh = Each(c => world?.Islands.WorldOf(c.Cluster) ?? world?.Hideouts.WorldOf(c.Cluster) ?? world?.Expeditions.WorldOf(c.Cluster)
             ?? world?.Corrupted.Find(c.Cluster)?.World ?? world?.Hellgates.WorldOf(c.Cluster) ?? c.Cluster); // [13] base world map
         r.bdi = Each(c => c.Template);        // [14] avatar lookup (creation key 1)
         r.bdj = Ints();                       // [15] c.g  appearance lookup
@@ -96,6 +96,7 @@ public sealed partial class LoginSession
         World?.Mists.ReturnIfClosed(c); // stageL: a mists zone that is gone (closed, or a restart) → the way back
         World?.Roads.ThrowOutIfStale(c); // stageL roads phase B: offline in a road past Roads:ThrowOutAfterMinutes → the respawn city, ThrownOutAvalonRoads
         World?.Islands.ReturnIfGone(c); // stageH islands SPEC §1.6: an island that is gone → its city's travel point
+        World?.Hideouts.ReturnIfGone(c); // stageP hideouts: a hideout that is gone (or without an interior now) → in front of it
         var floor = World?.Dungeons.Floor(c.Cluster);
         Character = c;
         var token = World?.Accounts.Select(_account.Id, c.Id);
@@ -128,6 +129,8 @@ public sealed partial class LoginSession
         if (World?.Mists.Find(c.Cluster) is { } zone) (r.blr, r.bls, r.blt) = (zone.Bytes, zone.Mode.ClusterType, zone.Tier);
         // StageH islands (SPEC §1.6): on an island, key 2 = the template of its level (ciy.a_9 clones it under "@ISLAND@<guid>").
         if (World?.Islands.WorldOf(c.Cluster) is { } island) r.blp = island;
+        // StageP hideouts: in a hideout, key 2 = the world.xml cluster of its level (cloned under "@HIDEOUT@<guid>", as an island).
+        if (World?.Hideouts.WorldOf(c.Cluster) is { } hideout) r.blp = hideout;
         return r;
     }
 

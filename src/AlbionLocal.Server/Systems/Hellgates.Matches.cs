@@ -42,8 +42,7 @@ public sealed partial class Hellgates
         if (i.ChainExit is { } chain && !i.LostBy(p.Character.Id)) p.Session.Send(new ActivateHellgateExitEvent { ddn = p.Id, brq = chain.Position });
         if (i.Area is { } area) p.Session.Send(AreaEvent(p, area));
         if (!arrived || !Options.SpawnBuffs || p.Map?.Template is not { } t) return;
-        var given = t.SpawnBuffs.Where(b => b.Applies(c => c switch { "isclusterchange" => true, "ispvppossible" => i.Versus, _ => false }))
-            .Where(b => Pvp.ApplySpell(p, b.Name, world.GameNow)).Select(b => b.Name).ToList();
+        var given = SpawnBuffs.Give(p, t.SpawnBuffs, c => c switch { "isclusterchange" => true, "ispvppossible" => i.Versus, _ => false }, _ => true);
         _spawnBuffs.UnionWith(given);
         if (given.Count > 0) Log.Info("world", $"'{p.Character.Name}' in {i}: spawn buffs {string.Join(", ", given)}");
     }

@@ -119,6 +119,7 @@ public sealed partial class WorldSession
             Log.Info(Name, $"'{p.Character.Name}' places object {req.x7}: not in the inventory");
             return null;
         }
+        if (Systems.Hideouts.IsKit(stack.Template)) return PlaceHideout(p, map, stack, req); // stageP: the hideout kit (Handlers/World/HideoutHandler)
         if (stack.Template.IsFurniture) return PlaceFurniture(p, map, stack, req);
         var (building, slot, why) = world.Islands.CheckPlant(p, stack.Template, req.x8, req.x9);
         if (building is null)

@@ -27,7 +27,7 @@ public sealed partial class WorldSession
         }
         var sent = 0;
         foreach (var id in ids.Distinct(StringComparer.Ordinal))
-            if (ClusterInfo(info, id, world.StaticDungeons) is { } ev)
+            if (ClusterInfo(info, id, world.StaticDungeons, world.Territories) is { } ev)
             {
                 SendEvent(ev);
                 sent++;
@@ -48,15 +48,18 @@ public sealed partial class WorldSession
     /// of its own client data (no outpost: 19 empty, 27 and 28 left out, as official). Left out (null): 1, 4-18 (the territory
     /// reader indexes them without a null check), 31, 35, 37-39, 41-47 (44-47 the cluster value), 49, 50, 59-64. Null for an id not in world.xml
     /// and for a cluster with territories: there is no official sample of those, and UpdateTerritories 0x181be2e30 would
-    /// index 4-18 per territory.
+    /// index 4-18 per territory. With Territories:WorldMapInfo (stageP territories SPEC §6 P1, off by default in both presets) a territory cluster
+    /// is answered too, keys 4-18 one entry per territory (<see cref="Systems.Territories.FillWorldMap"/>).
     /// </summary>
-    public static ClusterInfoUpdateEvent? ClusterInfo(WorldInfo world, string id, Systems.StaticDungeons? dungeons = null)
+    public static ClusterInfoUpdateEvent? ClusterInfo(WorldInfo world, string id, Systems.StaticDungeons? dungeons = null, Systems.Territories? territories = null)
     {
-        if (world.Find(id) is not { } cluster || cluster.Territories > 0) return null;
+        if (world.Find(id) is not { } cluster) return null;
+        var territory = cluster.Territories > 0;
+        if (territory && territories is null) return null;
         var outposts = cluster.Outposts.Count;
         var entered = dungeons?.EnteredFrom(cluster).ToList() ?? [];
         var running = entered.Select(d => (Dungeon: d, Event: dungeons!.Current(d))).Where(x => x.Event is not null).ToList();
-        return new ClusterInfoUpdateEvent
+        var e = new ClusterInfoUpdateEvent
         {
             bx9 = id, byb = "", byc = "", bzv = "",
             by7 = -1, bzu = -1,
@@ -70,5 +73,6 @@ public sealed partial class WorldSession
             bz4 = [.. running.Select(x => x.Event!.Value.Def.Rarity)],
             bz5 = entered.Count > 0 ? entered.ToDictionary(d => d.Id.ToString(), d => dungeons!.Value(d)) : null, // [68] value per dungeon
         };
+        return !territory || territories!.FillWorldMap(e, cluster) ? e : null;
     }
 }

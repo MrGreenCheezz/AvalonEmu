@@ -228,6 +228,8 @@ public sealed partial class WorldSession
         world.Guilds.Apply(r, c.Id);
         // Keys 81/82 on an island (stageH islands SPEC §1.5): its access point and Guid; elsewhere 81 stays "" (left out) and 82 empty.
         world.Islands.JoinKeys(c, r);
+        // Key 67 (StageP hideouts): the home hideout's instance id (the travel window's home, the management's Make/Leave Home button).
+        world.Hideouts.JoinKeys(c, r);
         // No key 251: the official Join has none, and the client takes the compressed-time base only
         // from Login (ci7.a9 -> ce.e_1).
         return r;

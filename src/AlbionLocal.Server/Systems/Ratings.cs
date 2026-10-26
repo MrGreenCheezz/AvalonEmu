@@ -6,7 +6,8 @@ using AlbionLocal.Server.Persistence;
 namespace AlbionLocal.Server.Systems;
 
 /// <summary>
-/// The duel and arena ladders (analysis/work/stageN/arena/SPEC.md §5): an Elo rating per character and ladder ("duel", "1v1", "2v2", "5v5"),
+/// The duel and arena ladders (analysis/work/stageN/arena/SPEC.md §5): an Elo rating per character and ladder ("duel", "1v1", "2v2", "5v5",
+/// "crystal" the Crystal Arena of stageP P6),
 /// starting at Arena:StartRating (1200, arena.bin startingelo) and moved by Arena:K (20, elok) × (result − expected) per result, a team's
 /// expectation from the average ratings of its players. Kept in memory, read once from the repository (<see cref="IRatingStore"/>, schema v32;
 /// in memory only without one) and written at each result. Under <see cref="World.Sync"/>.
@@ -16,7 +17,7 @@ public sealed class Ratings(World world)
     public const string Duel = "duel";
 
     /// <summary>The ladders in their display order.</summary>
-    public static readonly IReadOnlyList<string> Ladders = [Duel, "1v1", "2v2", "5v5"];
+    public static readonly IReadOnlyList<string> Ladders = [Duel, "1v1", "2v2", "5v5", Arenas.Crystal];
 
     private Dictionary<(Guid, string), RatingRow>? _rows;
 
@@ -109,6 +110,73 @@ public sealed class Ratings(World world)
     {
         if (Find(character, ladder) is not { } mine) return 0;
         return 1 + Rows.Values.Count(r => r.Ladder == ladder && (r.Rating > mine.Rating || r.Rating == mine.Rating && r.Wins > mine.Wins));
+    }
+
+    // ---- the arena ranks (stageP league-pvp SPEC §3.3, phase P7; Arena:RankPoints) ----
+
+    private Dictionary<(Guid, int), RankRow>? _ranks;
+
+    private Dictionary<(Guid, int), RankRow> Ranks
+    {
+        get
+        {
+            if (_ranks is not null) return _ranks;
+            _ranks = [];
+            try
+            {
+                foreach (var r in (world.Characters as IRankStore)?.LoadRanks() ?? []) _ranks[(r.Character, r.Category)] = r;
+            }
+            catch (Exception e) { Log.Warn("arena", $"the arena ranks could not be read: {e.Message}"); }
+            return _ranks;
+        }
+    }
+
+    /// <summary>A character's saved rank in ranked category <paramref name="category"/> (1 the Crystal Arena, 2 the 1v1); null before its first ranked result.</summary>
+    public RankRow? ArenaRank(Guid character, int category) => Ranks.GetValueOrDefault((character, category));
+
+    /// <summary>
+    /// [H] The rank point change of a ranked result (see <see cref="ArenaOptions.RankPoints"/>): <paramref name="eloDelta"/> the result's Elo
+    /// change, <paramref name="elo"/> the Elo after it, <paramref name="score"/> 1 a win, 0 a loss, else a draw (0 RP).
+    /// </summary>
+    public static int RankPointChange(Data.ArenaData.Rank rank, double factor, int eloDelta, int elo, double score, ArenaOptions o)
+    {
+        double rp;
+        if (score == 1)
+            rp = rank.WinModifier * Math.Max(o.RankPointMinGain, eloDelta) + (o.RankPointBoosters && elo > rank.ExpectedElo ? rank.EloWinBooster : 0);
+        else if (score == 0)
+            rp = -(rank.LoseModifier * Math.Max(o.RankPointMinGain, -eloDelta) + (o.RankPointBoosters && elo < rank.ExpectedElo ? rank.EloLoseBooster : 0));
+        else return 0;
+        return (int)Math.Round(rp * factor, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// A ranked result of <paramref name="character"/> in <paramref name="category"/>: its rank points move by <paramref name="change"/>
+    /// (never below 0), then the rank climbs while the points reach its promotion threshold and falls while they are under its demotion
+    /// threshold; saved at once. Returns the row before and after.
+    /// </summary>
+    public (RankRow Before, RankRow After) AddRankPoints(Guid character, int category, Data.ArenaData data, int change)
+    {
+        var before = ArenaRank(character, category) ?? new RankRow(character, category, Data.ArenaData.SeasonIndex, 0, 0, 0, 0);
+        var points = Math.Max(0, before.Points + change);
+        var rank = Math.Clamp(before.Rank, 0, data.Ranks.Count - 1);
+        while (rank < data.Ranks.Count - 1 && points >= data.Ranks[rank].Promotion) rank++;
+        while (rank > 0 && points < data.Ranks[rank].Demotion) rank--;
+        var after = before with { Season = Data.ArenaData.SeasonIndex, Rank = rank, Points = points, Updated = DateTime.UtcNow.Ticks };
+        Save(after);
+        return (before, after);
+    }
+
+    /// <summary>The rank-up chests up to <paramref name="peak"/> were given: the row keeps it (no chest twice for a rank in a season).</summary>
+    public void MarkPeak(Guid character, int category, int peak)
+    {
+        if (ArenaRank(character, category) is { } row && row.Peak < peak) Save(row with { Peak = peak });
+    }
+
+    private void Save(RankRow row)
+    {
+        Ranks[(row.Character, row.Category)] = row;
+        try { (world.Characters as IRankStore)?.SaveRanks([row]); }
+        catch (Exception e) { Log.Warn("arena", $"the arena ranks could not be saved: {e.Message}"); }
     }
 
     /// <summary>The character called <paramref name="name"/> on any ladder (case-insensitive), for .rating &lt;name&gt; of one offline.</summary>

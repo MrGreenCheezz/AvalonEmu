@@ -177,7 +177,7 @@ public static class SpellTargets
         if (a.IsBot || b.IsBot) return Pvp.Of(a, b);
         var world = a.World;
         if (world.Duels.OpponentOf(a) == b) return Relation.Hostile;
-        return Pvp.Of(a.Flag, b.Flag, Pvp.SameParty(a, b), world.Guilds.Same(a.Character.Id, b.Character.Id), Pvp.RulesOf(world, a.Map));
+        return Pvp.Of(a.Flag, b.Flag, Pvp.SameParty(a, b), world.Guilds.Friends(a.Character.Id, b.Character.Id), Pvp.RulesOf(world, a.Map));
     }
 
     /// <summary>

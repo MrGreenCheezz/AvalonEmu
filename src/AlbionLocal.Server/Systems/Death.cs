@@ -414,6 +414,8 @@ public static class Death
         world.Expeditions.DiedOut(p); // Expeditions:CheckpointRespawn off: out of the instance for good (263 kind 3), the city respawn follows
         world.Corrupted.DiedOut(p); // stageL corrupted: out of the run (its owner's early leave), the city respawn follows
         world.Hellgates.DiedOut(p); // stageL hellgates: no member any more (the official preset's lethal modes)
+        // StageP hideouts: the home hideout (Make Home, Hideouts:RespawnAtHome), but a death in a mists zone keeps its own respawn.
+        if (!Data.MistsIds.IsInstance(p.Map.Cluster) && world.Hideouts.RespawnHome(p, why)) return true;
         var cluster = world.Mists.RespawnOf(p) ?? RespawnCluster(p); // stageL mists: a death in a zone respawns in Mists:RespawnCluster (Brecilien)
         void Go(Vector2 spot)
         {

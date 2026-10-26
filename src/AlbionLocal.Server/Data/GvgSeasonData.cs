@@ -16,6 +16,25 @@ public sealed record SeasonBracket(string Name, long Threshold)
     public static int RankOf(string? name) => name is null ? -1 : Order.ToList().IndexOf(name.ToLowerInvariant());
 }
 
+/// <summary>An action of a season event (gvgseasons seasontimes, the client's but.EventType: territoriesclaimable, resetterritories, …) with its attributes.</summary>
+public sealed record SeasonAction(string Type, IReadOnlyDictionary<string, string> Attrs);
+
+/// <summary>
+/// One eventtime of a season's seasontimes (stageP territories SPEC §1, §3.5): its day (1 = the season's first), its UTC time, whether the time is
+/// the cluster's local time (calculateusingclustertimezone: minus the timeregion's timezone), the timeregions of its clusterfilter (null = every
+/// cluster) and its actions in file order. All three region files filter by the same six US_* timeregions, the names world.xml gives every
+/// territory cluster, so a filter only leaves out NOT_USED.
+/// </summary>
+public sealed record SeasonEvent(int Day, TimeSpan Time, bool ClusterTimeZone, IReadOnlyList<string>? TimeRegions, IReadOnlyList<SeasonAction> Actions)
+{
+    /// <summary>When it happens in the season that starts at <paramref name="start"/> for a cluster of timezone <paramref name="timezoneHours"/>.</summary>
+    public DateTime At(DateTime start, double timezoneHours) =>
+        DateTime.SpecifyKind(start.Date, DateTimeKind.Utc).AddDays(Day - 1) + Time - (ClusterTimeZone ? TimeSpan.FromHours(timezoneHours) : TimeSpan.Zero);
+
+    /// <summary>Whether its clusterfilter takes a cluster of <paramref name="timeRegion"/>.</summary>
+    public bool Applies(string timeRegion) => TimeRegions is null || TimeRegions.Contains(timeRegion, StringComparer.Ordinal);
+}
+
 /// <summary>A progression row of a might category (progressiontables.xml): the guild might it starts at (a7m raw, as the client's bq9.a +0x10) and its season points.</summary>
 public sealed record MightLevel(long Might, int SeasonPoints);
 
@@ -59,6 +78,21 @@ public sealed record MightRules(IReadOnlyDictionary<string, MightFameRule> Fame,
 public sealed record GvgSeason(int? Index, string Key, DateTime Start, DateTime End, IReadOnlyList<ChallengeLevel> Levels, IReadOnlyList<SeasonBracket> Brackets)
 {
     public IReadOnlyList<MightCategory> Might { get; init; } = [];
+
+    /// <summary>
+    /// Its seasontimes (stageP territories SPEC §3.5): the territory schedule (claimable windows, resets, scoring, battles) in file order; a local
+    /// season takes the last client season's (SEASON_34's), as the SPEC proposes.
+    /// </summary>
+    public IReadOnlyList<SeasonEvent> Schedule { get; init; } = [];
+
+    /// <summary>
+    /// invadersettings bossinvader mobname when it blocksterritoryclaim (the Tower Guardian, T6_MOB_ARCANE_ELEMENTAL_ELITE_BOSS; null = none): spawned
+    /// at the monoliths by the schedule's spawninvader (stageP territories SPEC §3.1). A local season takes the last client season's.
+    /// </summary>
+    public string? Invader { get; init; }
+
+    /// <summary>The season's territorytypes types (WATCHTOWER, CASTLE): the territories its resetterritories resets (none listed = watchtowers only).</summary>
+    public IReadOnlyList<string> TerritoryTypes { get; init; } = [];
 
     /// <summary>A season of the client data: its windows run (GvgSeasonGui.UpdateData: start &lt; now &lt; end).</summary>
     public bool IsClient => Index is not null;
@@ -139,6 +173,9 @@ public sealed class GvgSeasonData
             last?.Levels is { Count: > 0 } levels ? levels : DefaultLevels, last?.Brackets is { Count: > 0 } brackets ? brackets : DefaultBrackets)
         {
             Might = last?.Might ?? [],
+            Schedule = last?.Schedule ?? [],
+            Invader = last?.Invader,
+            TerritoryTypes = last?.TerritoryTypes ?? [],
         };
     }
 
@@ -181,9 +218,33 @@ public sealed class GvgSeasonData
                 levels.Count > 0 ? levels : DefaultLevels, brackets.Count > 0 ? brackets : DefaultBrackets)
             {
                 Might = templates.GetValueOrDefault(XmlAttr.Str(s, "mightcategorytemplate", DefaultMightTemplate)) ?? [],
+                Schedule = Schedule(s.Element("seasontimes")),
+                Invader = s.Element("invadersettings")?.Elements("bossinvader").FirstOrDefault(b => XmlAttr.Str(b, "blocksterritoryclaim") == "true") is { } boss
+                    ? XmlAttr.Str(boss, "mobname") : null,
+                TerritoryTypes = [.. (s.Element("territorytypes")?.Elements("territorytype") ?? []).Select(t => XmlAttr.Str(t, "type")).Where(t => t.Length > 0).Distinct()],
             });
         }
         return new GvgSeasonData(list) { Might = pvpchallenge is not null ? Rules(pvpchallenge) : MightRules.None };
+    }
+
+    /// <summary>The eventtimes of a seasontimes element (none without one); an unreadable day or time is skipped.</summary>
+    public static IReadOnlyList<SeasonEvent> Schedule(XElement? seasontimes)
+    {
+        var list = new List<SeasonEvent>();
+        foreach (var day in seasontimes?.Elements("day") ?? [])
+        {
+            if (!int.TryParse((string?)day.Attribute("number"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) || n < 1) continue;
+            foreach (var e in day.Elements("eventtime"))
+            {
+                if (!TimeSpan.TryParse(((string?)e.Attribute("utctime") ?? "").TrimEnd('Z', 'z'), CultureInfo.InvariantCulture, out var time)) continue;
+                var filter = e.Element("clusterfilter");
+                list.Add(new SeasonEvent(n, time, (string?)e.Attribute("calculateusingclustertimezone") == "true",
+                    filter is null ? null : [.. filter.Elements("timeregion").Select(t => XmlAttr.Str(t, "name"))],
+                    [.. e.Elements().Where(a => a.Name.LocalName != "clusterfilter")
+                        .Select(a => new SeasonAction(a.Name.LocalName, a.Attributes().ToDictionary(x => x.Name.LocalName, x => x.Value, StringComparer.Ordinal)))]));
+            }
+        }
+        return list;
     }
 
     private static double D(XElement e, string name, double fallback) =>

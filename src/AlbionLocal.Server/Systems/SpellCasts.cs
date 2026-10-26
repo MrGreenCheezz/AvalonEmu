@@ -1176,6 +1176,7 @@ public static partial class SpellCasts
                 GainEnergy(p, Relative(change * c.AbilityPower / 100, p.Energy.At(c.Ticks), p.Energy.Max), spell, c.Ticks, origin, c.Caster.Id);
                 return;
             }
+            if (c.Caster != p) PvpDetails.Healed(c.Caster, p, c.Ticks); // stageP: healing sickness by distinct healers, before this heal
             var amount = Relative(Combat.Heal(change, c.AbilityPower), p.Health.At(c.Ticks), p.Health.Max);
             if (SpellTemplate.Bool(node, "usehealingmodifiers", true)) amount *= Combat.HealBonusFactor(c.Caster, c.Ticks) * SpellEffects.HealFactor(p, c.Ticks);
             var plugins = c.Caster.World.Plugins; // Formulas.OnCalcHeal, Spells.OnDamageEarly / OnDamageLate
@@ -1465,7 +1466,8 @@ public static partial class SpellCasts
                     "friendall" => SpellTargets.Of(c.Caster, unit, c.Ticks).Friend,
                     "groupmember" => unit is Player q && Pvp.SameParty(c.Caster, q),
                     "guildmember" => unit is Player g && c.Caster.World.Guilds.Same(c.Caster.Character.Id, g.Character.Id),
-                    _ => false, // alliancemember: no alliances
+                    "alliancemember" => unit is Player al && c.Caster.World.Alliances.SameAlliance(c.Caster.Character.Id, al.Character.Id),
+                    _ => false,
                 };
             }
             case "IfChance": return c.Map.Random.NextDouble() < SpellTemplate.Float(e, "value", 1);

@@ -43,8 +43,10 @@ public sealed class World : IDisposable
         MobAi = config.MobAi;
         Parties = new Systems.Parties(this);
         Guilds = new Systems.Guilds(this, characters as IGuildStore);
+        Alliances = new Systems.Alliances(this, characters as IAllianceStore);
         GuildGoals = new Systems.GuildGoals(this);
         Duels = new Systems.Duels(this);
+        Recaps = new Systems.DeathRecaps(this);
         Trades = new Systems.Trades(this);
         Dungeons = new Systems.RandomDungeons(this);
         WorldChests = new Systems.WorldChests(this);
@@ -65,10 +67,12 @@ public sealed class World : IDisposable
         FakeCasts = new Systems.FakeSlotCasts(this);
         ExtraBars = new Systems.ExtraBars(this);
         Shrines = new Systems.BuffShrines(this);
+        Territories = new Systems.Territories(this, characters as ITerritoryStore);
         Bounties = new Systems.Bounties(this);
         Hunts = new Systems.Hunts(this);
         Vanity = new Systems.Vanity(this);
         Islands = new Systems.Islands(this, characters as IIslandStore);
+        Hideouts = new Systems.Hideouts(this, characters as IHideoutStore);
         Chat = new Systems.ChatHub(this);
         Social = new Systems.Social(this, characters as ISocialStore);
         Bots = new Bots.BotManager(this);
@@ -155,6 +159,9 @@ public sealed class World : IDisposable
     /// <summary>The guilds and open guild invitations (stageH guilds SPEC), loaded from the character database's guild tables.</summary>
     public Systems.Guilds Guilds { get; }
 
+    /// <summary>StageP: the alliances of guilds and their open invitations (analysis/work/stageP/hideouts/SPEC.md), loaded from the character database.</summary>
+    public Systems.Alliances Alliances { get; }
+
     /// <summary>Stage I: the Guild Challenge, the guild season points and the weekly guild goals (analysis/work/stageI/guild-goals/SPEC.md), kept on the guilds.</summary>
     public Systems.GuildGoals GuildGoals { get; }
 
@@ -166,6 +173,9 @@ public sealed class World : IDisposable
 
     /// <summary>The duels and open challenges (stageE pvp SPEC §2, <see cref="Systems.Duels"/>).</summary>
     public Systems.Duels Duels { get; }
+
+    /// <summary>The players' last death recaps (stageP SPEC §2.1, <see cref="Systems.DeathRecaps"/>).</summary>
+    public Systems.DeathRecaps Recaps { get; }
 
     /// <summary>The player trades, invited or open (stageJ trade SPEC, <see cref="Systems.Trades"/>).</summary>
     public Systems.Trades Trades { get; }
@@ -240,8 +250,14 @@ public sealed class World : IDisposable
     /// <summary>StageN: the buff shrines of the dungeon rooms and open-world clusters (NewShrine, UseShrine; stageN shrines SPEC).</summary>
     public Systems.BuffShrines Shrines { get; }
 
+    /// <summary>StageP: the guild territories and castles (world.xml territories, monoliths, castles, the territory window; stageP territories SPEC).</summary>
+    public Systems.Territories Territories { get; }
+
     /// <summary>The owned islands, their instances and journeys (stageH islands SPEC phase 1), loaded from the character database's island table.</summary>
     public Systems.Islands Islands { get; }
+
+    /// <summary>StageP: the guild hideouts (analysis/work/stageP/hideouts/SPEC.md H1-H4).</summary>
+    public Systems.Hideouts Hideouts { get; }
 
     /// <summary>The chat server's channels, its connections and their lines and whispers (stageJ chat SPEC §2.3).</summary>
     public Systems.ChatHub Chat { get; }
@@ -506,6 +522,8 @@ public sealed class World : IDisposable
         foreach (var map in Maps.Maps) SpawnManager.Update(map, this, now);
         foreach (var map in Maps.Maps) WorldChests.Update(map); // stageH: chests gone and due again, the camp quest circles
         Bosses.Update(); // stageH: world bosses due, despawned ones
+        Territories.Update(); // stageP P5: the castle fights, capture zones, chests and castle season points
+        Hideouts.Update(); // stageP hideouts: construction phases, upgrades, the daily food and tribute
         Events.Update(); // PVE-DESIGN step 7: world events due, their waves, ends and rewards
         // Stage I: the bot populations, walks and brains, guarded so that a fault there never costs the tick its keepalives and saves.
         try { Bots.Update(now); }
@@ -531,11 +549,13 @@ public sealed class World : IDisposable
                 player.Session.UpdateKeepalive(now);
         Parties.Update(now); // party invitations that time out, members whose cluster change never arrived
         Guilds.Update(now); // guild invitations that time out
+        Alliances.Update(now); // stageP: alliance leave protections that end
         GuildGoals.Update(); // stage I: a new guild season told to the members in game
         Social.Update(now); // stageJ: characters whose cluster change never arrived log out for their friends and chat
         Duels.Update(); // challenges that time out, duel starts, areas and ends (stageE pvp SPEC §2)
         Trades.Update(); // stageJ: trade invitations that lapse, trades whose players are apart, offered items that left the bag
         Dungeons.UpdateExits(); // stageM exit: the click-and-channel entries at random dungeon portals (every tick)
+        Hideouts.UpdateChannels(); // stageP hideouts: the 4 s channels into and out of a hideout
         Dungeons.Update(now); // stageG: exit rerolls, despawns and refills, dungeons that close
         Saves.Update(now);
         // The plugins' timers, Tick and storage writes (each call guarded: a plugin's fault never costs the tick).
@@ -658,7 +678,7 @@ public sealed class World : IDisposable
     /// dungeon's variant of its map for its difficulty (stageL corrupted SPEC §4.2 step 4, <see cref="ClusterVariant"/>), a hellgate's world.xml map, an island's
     /// template of its current level (stageH islands SPEC §1.6), else itself.
     /// </summary>
-    private string TemplateOf(string cluster) => Expeditions.WorldOf(cluster) ?? Corrupted.TemplateOf(cluster) ?? Hellgates.WorldOf(cluster) ?? Arenas.WorldOf(cluster) ?? Islands.WorldOf(cluster) ?? cluster;
+    private string TemplateOf(string cluster) => Expeditions.WorldOf(cluster) ?? Corrupted.TemplateOf(cluster) ?? Hellgates.WorldOf(cluster) ?? Arenas.WorldOf(cluster) ?? Islands.WorldOf(cluster) ?? Hideouts.WorldOf(cluster) ?? cluster;
 
     /// <summary>The map's objects from <paramref name="template"/> (once), then the players already on it get theirs.</summary>
     private void Populate(Map map, ClusterTemplate template)

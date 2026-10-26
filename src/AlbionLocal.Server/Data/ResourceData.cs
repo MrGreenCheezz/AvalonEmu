@@ -270,11 +270,15 @@ public sealed class WorldArchetypes
         var poi = new Dictionary<string, int>(StringComparer.Ordinal);
         var spawnBuffs = new Dictionary<string, IReadOnlyList<SpawnBuff>>(StringComparer.Ordinal);
         var tunnels = new Dictionary<string, string>(StringComparer.Ordinal);
+        var entry = new Dictionary<string, (double, bool)>(StringComparer.Ordinal);
         foreach (var e in root.Descendants("clustertype"))
         {
             if ((string?)e.Attribute("name") is not { } n) continue;
             if ((string?)e.Attribute("archetype") is { } a) of.TryAdd(n, a);
             if ((string?)e.Attribute("tunnelpreset") is { Length: > 0 } tunnel) tunnels.TryAdd(n, tunnel); // stageL roads SPEC §1.3
+            // stageP SPEC §2.4: the spell cooldowns on entering and the short spawn buff of the cluster one comes from
+            entry.TryAdd(n, (double.TryParse((string?)e.Attribute("spellcooldownsonenteringseconds"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var cd) ? cd : 0,
+                string.Equals((string?)e.Attribute("hasshortspawnbuffonleave"), "true", StringComparison.OrdinalIgnoreCase)));
             // stageH bosses SPEC §4.2: <lootchestspawns><poilootchestspawnlimit upgradelevelindex="1" op="greaterOrEqual" limit="1"/>
             if (e.Element("lootchestspawns")?.Elements("poilootchestspawnlimit").FirstOrDefault() is { } limit
                 && int.TryParse((string?)limit.Attribute("limit"), out var l)) poi.TryAdd(n, l);
@@ -285,10 +289,24 @@ public sealed class WorldArchetypes
         }
         foreach (var e in root.Descendants("archetype"))
             if ((string?)e.Attribute("name") is { } n) archetypes.TryAdd(n, new XElement(e.Name, e.Attributes()));
-        return new WorldArchetypes(of, archetypes) { _poiLimits = poi, _spawnBuffs = spawnBuffs, _tunnels = tunnels };
+        return new WorldArchetypes(of, archetypes) { _poiLimits = poi, _spawnBuffs = spawnBuffs, _tunnels = tunnels, _entry = entry };
     }
 
     private Dictionary<string, string> _tunnels = [];
+
+    private Dictionary<string, (double Cooldown, bool ShortOnLeave)> _entry = [];
+
+    /// <summary>
+    /// The clustertype's spellcooldownsonenteringseconds of world.xml cluster type <paramref name="clusterType"/> (stageP SPEC §2.4: 15 on the
+    /// yellow, red and black open world, their dungeons and tunnels; 0 elsewhere): every spell slot's cooldown on arriving there.
+    /// </summary>
+    public double EnterCooldownOf(string clusterType) => _entry.GetValueOrDefault(clusterType).Cooldown;
+
+    /// <summary>
+    /// The clustertype's hasshortspawnbuffonleave (true on the dungeons, expeditions and tunnels): one coming from such a cluster has the
+    /// spawnbuff condition fromshortspawnbuffcluster (SPAWN_INVULNERABILITY_SHORT instead of SPAWN_INVULNERABILITY, stageP SPEC §2.4).
+    /// </summary>
+    public bool ShortSpawnBuffOnLeave(string clusterType) => _entry.GetValueOrDefault(clusterType).ShortOnLeave;
 
     /// <summary>
     /// The tunnelpreset of world.xml cluster type <paramref name="clusterType"/> (stageL roads SPEC §1.3: SAFEAREA → SAFEZONE, OPENPVP_BLACK_1 →

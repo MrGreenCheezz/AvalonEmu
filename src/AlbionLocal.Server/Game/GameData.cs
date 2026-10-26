@@ -369,6 +369,9 @@ public sealed class GameData
     /// <summary>The death of a lethal cluster (stageE pvp SPEC §4): its item loss events, loot bag times, respawn and kill fame numbers.</summary>
     [JsonIgnore] public PvpDeathSettings PvpDeath { get; init; } = PvpDeathSettings.Default;
 
+    /// <summary>The PvP details of stageP (SPEC §2): the death recap window, healing sickness and resilience tables.</summary>
+    [JsonIgnore] public PvpDetailSettings PvpDetails { get; init; } = PvpDetailSettings.Default;
+
     /// <summary>
     /// gamedata.xml &lt;AbilityPowerProgression&gt; and &lt;CrowdControlDiminishingReturns&gt;: the buff scaling and crowd
     /// control numbers of the spell effects (stageD effects SPEC §3.1, §3.2). The 345319 values when missing.
@@ -617,6 +620,7 @@ public sealed class GameData
                 ? ReputationSettings.Read(reputation) : ReputationSettings.Default,
             KnockedOutLoss = DurabilityLossRule.Read(gamedata.Descendants("AliveToKnockedOut").FirstOrDefault()) ?? DurabilityLossRule.KnockedOut,
             PvpDeath = PvpDeathSettings.Read(gamedata),
+            PvpDetails = PvpDetailSettings.Read(gamedata),
             AttackDamageTimes = new Dictionary<string, double>(StringComparer.Ordinal)
             {
                 ["melee"] = chars.Num(Attr(dv, "meleeattackdamagetime"), "meleeattackdamagetime", "<DefaultValues>", 0.25),

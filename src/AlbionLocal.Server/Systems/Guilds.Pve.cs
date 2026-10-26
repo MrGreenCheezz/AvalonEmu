@@ -113,7 +113,7 @@ public sealed partial class Guilds
     /// </summary>
     public GuildUpdateEvent AccountUpdate(Guild g) => new()
     {
-        cf1 = g.Id, cgb = 2, cgc = g.SilverA7m, cgf = TaxOf(g), cgg = g.Name, cgh = "", cgt = "", cgx = "", cgz = "", cg1 = "",
+        cf1 = g.Id, cgb = 2, cgc = g.SilverA7m, cgf = TaxOf(g), cgg = g.Name, cgh = world.Alliances.PlateOf(world.Alliances.OfGuild(g.Id)), cgt = "", cgx = "", cgz = "", cg1 = "",
     };
 
     /// <summary>

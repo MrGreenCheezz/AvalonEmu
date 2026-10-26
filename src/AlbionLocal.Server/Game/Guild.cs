@@ -133,6 +133,9 @@ public static class GuildRoles
     /// <summary>GuildPermission ACCESS_GUILD_MAIL (SPEC §0; stageJ mail SPEC §1.5): the guild's mailbox and mail to its members (the guild master and The Right Hand).</summary>
     public const long AccessGuildMail = 65536;
 
+    /// <summary>GuildPermission ALLIANCE_MANAGEMENT (stageP hideouts SPEC §1.1): found, leave, invite to, kick from and disband the guild's alliance, answer invitations.</summary>
+    public const long AllianceManagement = 131072;
+
     /// <summary>All 36 permission flags (the GUILDMASTER tag).</summary>
     public const long All = 0xFFFFFFFFF;
 

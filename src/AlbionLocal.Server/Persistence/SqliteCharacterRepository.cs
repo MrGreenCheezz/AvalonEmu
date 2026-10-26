@@ -472,6 +472,100 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         """
         ALTER TABLE characters ADD COLUMN tutorial_opening TEXT;
         """,
+        // v38 (analysis/work/stageP/hideouts/SPEC.md §7 A1/A2): the alliances, their guilds (a guild's row goes with the guild), the open
+        // invitations (the kind-2 mail in the invited guild's mailbox) and each guild's alliance history (the change and rejoin cooldowns).
+        """
+        CREATE TABLE IF NOT EXISTS alliances (
+            id            TEXT PRIMARY KEY,                 -- Guid (GuildUpdate key 17)
+            name          TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            tag           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            founder       TEXT NOT NULL,                    -- the founder guild's Guid (AllianceGetMemberInfos key 0)
+            created       INTEGER NOT NULL                  -- UTC ticks
+        );
+        CREATE TABLE IF NOT EXISTS alliance_guilds (
+            guild         TEXT PRIMARY KEY REFERENCES guilds (id) ON DELETE CASCADE,
+            alliance      TEXT NOT NULL REFERENCES alliances (id) ON DELETE CASCADE,
+            joined        INTEGER NOT NULL,                 -- UTC ticks ("Member since")
+            position      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS alliance_guilds_alliance ON alliance_guilds (alliance, position);
+        CREATE TABLE IF NOT EXISTS alliance_invites (
+            alliance      TEXT NOT NULL REFERENCES alliances (id) ON DELETE CASCADE,
+            guild         TEXT NOT NULL REFERENCES guilds (id) ON DELETE CASCADE,
+            mail          INTEGER NOT NULL,                 -- the invitation mail's id (AllianceAnswerInvitation key 0); 0 = none
+            invited       INTEGER NOT NULL,                 -- UTC ticks
+            PRIMARY KEY (alliance, guild)
+        );
+        CREATE TABLE IF NOT EXISTS alliance_history (
+            guild         TEXT PRIMARY KEY REFERENCES guilds (id) ON DELETE CASCADE,
+            changed       INTEGER NOT NULL,                 -- UTC ticks of the last found or join
+            last_alliance TEXT,                             -- the alliance it last left; NULL = none
+            left_at       INTEGER                           -- UTC ticks; NULL = never left one
+        );
+        """,
+        // v39 (analysis/work/stageP/territories/SPEC.md P5): the owners of the castles and castle outposts (and later the watchtower
+        // territories), one row per owned world.xml territory; a guild's rows go with the guild.
+        """
+        CREATE TABLE IF NOT EXISTS territory_owners (
+            territory     TEXT PRIMARY KEY,                 -- world.xml territory Guid (NewCastleObject key 3)
+            guild         TEXT NOT NULL REFERENCES guilds (id) ON DELETE CASCADE,
+            since         INTEGER NOT NULL                  -- UTC ticks of the capture
+        );
+        """,
+        // v40 (analysis/work/stageP/hideouts/SPEC.md H1-H4): the guild hideouts (a guild's rows go with the guild) and the characters whose
+        // home is a hideout (Make Home; the row goes with the character or the hideout).
+        """
+        CREATE TABLE IF NOT EXISTS hideouts (
+            id              TEXT PRIMARY KEY,                 -- Guid (NewHideoutObject key 1, the instance "@HIDEOUT@<id>")
+            guild           TEXT NOT NULL REFERENCES guilds (id) ON DELETE CASCADE,
+            cluster         TEXT NOT NULL,                    -- the surface cluster (world.xml id)
+            x               REAL NOT NULL,
+            z               REAL NOT NULL,
+            rotation        REAL NOT NULL DEFAULT 0,
+            placed          INTEGER NOT NULL,                 -- GameTimeStamp
+            phase           INTEGER NOT NULL DEFAULT 0,       -- construction phase index; -1 = built
+            phase_ends      INTEGER NOT NULL DEFAULT 0,       -- GameTimeStamp
+            level           INTEGER NOT NULL DEFAULT 0,       -- 0 = HIDEOUT-0001a … 2 = c
+            upgrade_started INTEGER NOT NULL DEFAULT 0,       -- GameTimeStamp; 0 = no upgrade running
+            nutrition       REAL NOT NULL DEFAULT 0,          -- whole nutrition stored
+            shields         INTEGER NOT NULL DEFAULT 0,
+            last_upkeep     INTEGER NOT NULL DEFAULT 0,       -- GameTimeStamp of the last daily upkeep
+            tribute         INTEGER NOT NULL DEFAULT 0,       -- a7m per day
+            access          INTEGER NOT NULL DEFAULT 1        -- preset: 0 closed, 1 private, 2 public
+        );
+        CREATE INDEX IF NOT EXISTS hideouts_guild ON hideouts (guild);
+        CREATE TABLE IF NOT EXISTS hideout_homes (
+            character       TEXT PRIMARY KEY REFERENCES characters (id) ON DELETE CASCADE,
+            hideout         TEXT NOT NULL REFERENCES hideouts (id) ON DELETE CASCADE
+        );
+        """,
+        // v41 (analysis/work/stageP/territories/SPEC.md P3/P4): a claimed watchtower territory's food, access and tower power points, one row
+        // per owner row (it goes with it). IF NOT EXISTS: safe at whichever position the merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS territory_state (
+            territory     TEXT PRIMARY KEY REFERENCES territory_owners (territory) ON DELETE CASCADE,
+            nutrition     REAL NOT NULL DEFAULT 0,          -- whole nutrition at fed_at
+            fed_at        INTEGER NOT NULL DEFAULT 0,       -- UTC ticks
+            access        INTEGER NOT NULL DEFAULT 0,       -- ChangeTerritoryAccessRights key 1
+            power         REAL NOT NULL DEFAULT 0,          -- tower power points at power_at
+            power_at      INTEGER NOT NULL DEFAULT 0        -- UTC ticks
+        );
+        """,
+        // v42 (analysis/work/stageP/league-pvp/SPEC.md §3.3, P7): the arena ranks of the ranked categories (1 the Crystal Arena, 2 the 1v1), one
+        // row per character and category: the season, the rank index (0 = ARENA_IRON_1 … 16 = ARENA_CRYSTAL), the rank points and the highest
+        // rank whose rank-up chest was given. IF NOT EXISTS: safe at whichever position the merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS arena_ranks (
+            character_id TEXT NOT NULL,                     -- Character.Id
+            category     INTEGER NOT NULL,                  -- arena.bin arenacategory index
+            season       INTEGER NOT NULL DEFAULT 0,        -- arenaseason index
+            rank         INTEGER NOT NULL DEFAULT 0,
+            points       INTEGER NOT NULL DEFAULT 0,
+            peak         INTEGER NOT NULL DEFAULT 0,
+            updated      INTEGER NOT NULL DEFAULT 0,        -- UTC ticks of the last result
+            PRIMARY KEY (character_id, category)
+        );
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";

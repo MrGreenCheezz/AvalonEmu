@@ -16,7 +16,8 @@ namespace AlbionLocal.Server.Systems;
 /// session's Area and Guild offers are kept in step with the game (<see cref="Refresh"/>: at the register, every Join, a map left, a
 /// guild change), always LeftChatChannel 207 and RemovedChatChannel 208 of the old id before the 205 of the new one, and never a 206 for
 /// a type the session joined under another id (the client's t.Add would throw). Party chat stays on the game server (Say key 2);
-/// Faction, FactionArea and Alliance are not offered (no faction warfare, no alliances, §2.4). Touched only under <see cref="World.Sync"/>
+/// Faction and FactionArea are not offered (no faction warfare, §2.4); Alliance (25) is, like Guild, one channel per alliance to the members
+/// of its guilds (stageP hideouts SPEC §2.3, A.8; Alliances:Chat). Touched only under <see cref="World.Sync"/>
 /// (the chat listener shares the lock).
 /// </summary>
 public sealed class ChatHub
@@ -27,6 +28,7 @@ public sealed class ChatHub
     private readonly Dictionary<int, ChatChannel> _byId = [];
     private readonly Dictionary<string, ChatChannel> _areas = new(StringComparer.Ordinal);
     private readonly Dictionary<Guid, ChatChannel> _guilds = [];
+    private readonly Dictionary<Guid, ChatChannel> _alliances = [];
     private readonly Dictionary<Guid, ChatSession> _sessions = []; // by character
     private readonly Dictionary<(Guid, ChatChannelType), TimeSpan> _lastLine = [];
     private readonly Dictionary<Guid, TimeSpan> _lastWhisper = [];
@@ -78,6 +80,9 @@ public sealed class ChatHub
 
     /// <summary>The Guild channel of <paramref name="guild"/>, made at its first use.</summary>
     public ChatChannel GuildOf(Guid guild) => _guilds.TryGetValue(guild, out var c) ? c : _guilds[guild] = New(ChatChannelType.Guild, guild.ToString());
+
+    /// <summary>The Alliance channel of <paramref name="alliance"/>, made at its first use.</summary>
+    public ChatChannel AllianceOf(Guid alliance) => _alliances.TryGetValue(alliance, out var c) ? c : _alliances[alliance] = New(ChatChannelType.Alliance, alliance.ToString());
 
     private ChatChannel New(ChatChannelType type, string scope)
     {
@@ -173,14 +178,15 @@ public sealed class ChatHub
     }
 
     /// <summary>
-    /// The session's Area and Guild offers as the game has them now: Area = the map of the character's joined player (none while it
-    /// changes cluster or is logged out), Guild = its guild. A changed one goes (207 + 208), then the new one is offered (205).
+    /// The session's Area, Guild and Alliance offers as the game has them now: Area = the map of the character's joined player (none while it
+    /// changes cluster or is logged out), Guild = its guild, Alliance = its guild's alliance (Alliances:Chat). A changed one goes (207 + 208), then the new one is offered (205).
     /// </summary>
     private void Refresh(ChatSession s)
     {
         var map = world.Parties.Online(s.CharacterId)?.Map;
         SetOffer(s, ChatChannelType.Area, map is null ? null : AreaOf(map.Cluster));
         SetOffer(s, ChatChannelType.Guild, world.Guilds.Of(s.CharacterId) is { } g ? GuildOf(g.Id) : null);
+        SetOffer(s, ChatChannelType.Alliance, Config.AllianceChat && world.Alliances.Of(s.CharacterId) is { } a ? AllianceOf(a.Id) : null);
     }
 
     private static void SetOffer(ChatSession s, ChatChannelType type, ChatChannel? wanted)
@@ -229,7 +235,7 @@ public sealed class ChatHub
         s.Joined.Clear();
     }
 
-    /// <summary>The character's guild changed (created, joined, left, kicked, disbanded; Guilds): its Guild channel follows.</summary>
+    /// <summary>The character's guild or its guild's alliance changed (created, joined, left, kicked, disbanded; Guilds, Alliances): its Guild and Alliance channels follow.</summary>
     public void GuildChanged(Guid character)
     {
         if (SessionOf(character) is { } s) Refresh(s);

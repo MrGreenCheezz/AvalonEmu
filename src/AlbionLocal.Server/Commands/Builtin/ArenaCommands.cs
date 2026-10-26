@@ -11,8 +11,8 @@ namespace AlbionLocal.Server.Commands.Builtin;
 /// </summary>
 public static class ArenaCommands
 {
-    /// <summary>.arena join &lt;1v1|2v2|5v5&gt; [group]: into the queue (with the party's online members when "group").</summary>
-    [Command("arena join", Level = AccountLevel.Player, Help = "joins the arena queue: 1v1, 2v2 or 5v5; add 'group' to queue with your party")]
+    /// <summary>.arena join &lt;1v1|2v2|5v5|crystal&gt; [group]: into the queue (with the party's online members when "group").</summary>
+    [Command("arena join", Level = AccountLevel.Player, Help = "joins the arena queue: 1v1, 2v2, 5v5 or crystal (the Crystal Arena); add 'group' to queue with your party")]
     public static void Join(CommandContext ctx, string mode, string group = "")
     {
         var player = ctx.RequirePlayer();
@@ -43,7 +43,7 @@ public static class ArenaCommands
     public static void Status(CommandContext ctx)
     {
         var lines = ctx.World.Arenas.Describe().ToList();
-        ctx.Reply(lines.Count == 0 ? "the arena is empty (.arena join 1v1|2v2|5v5)" : "arena:\n" + string.Join("\n", lines));
+        ctx.Reply(lines.Count == 0 ? "the arena is empty (.arena join 1v1|2v2|5v5|crystal)" : "arena:\n" + string.Join("\n", lines));
     }
 
     /// <summary>.arena end &lt;blue|red|draw&gt; [player]: a GM ends the match of the player (or the one here) with that result.</summary>
@@ -54,8 +54,8 @@ public static class ArenaCommands
         if (ctx.World.Arenas.Finish(ctx.RequirePlayer(), team) is { } why) throw new CommandError(why);
     }
 
-    /// <summary>.ladder [duel|1v1|2v2|5v5] [n]: the best n (10) of a ladder (duel by default).</summary>
-    [Command("ladder", Level = AccountLevel.Player, Help = "shows the best players of a ladder: duel, 1v1, 2v2 or 5v5 [count]")]
+    /// <summary>.ladder [duel|1v1|2v2|5v5|crystal] [n]: the best n (10) of a ladder (duel by default).</summary>
+    [Command("ladder", Level = AccountLevel.Player, Help = "shows the best players of a ladder: duel, 1v1, 2v2, 5v5 or crystal [count]")]
     public static void Ladder(CommandContext ctx, string ladder = "duel", int count = 10)
     {
         if (Ratings.LadderOf(ladder) is not { } l) throw new CommandError($"{ladder}: one of {string.Join(", ", Ratings.Ladders)}");

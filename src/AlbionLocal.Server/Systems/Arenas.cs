@@ -28,6 +28,24 @@ public static class ArenaIds
 /// </summary>
 public sealed record ArenaMode(string Name, int TeamSize, string Cluster, int Category, bool Rounds, double Minutes)
 {
+    /// <summary>The arenacategory's matchtype (matchtypes.xml: its warcamp defense, double-healer penalty, orbs; stageP league-pvp SPEC §3.1).</summary>
+    public string MatchType { get; init; } = "MATCH_ARENA";
+
+    /// <summary>The arenacategory's item power cap (Arena:ItemPowerCap, stageP SPEC §2.5): unranked 600 hard, the 1v1 900 soft (× 0.2 above).</summary>
+    public ItemPowerCap ItemPowerCap { get; init; } = new(600, 0);
+
+    /// <summary>arena.bin's personal season points (Arena:Psp, stageP SPEC §3.3): a win and a loss, each without and with premium.</summary>
+    public (int Win, int WinPremium, int Loss, int LossPremium) Psp { get; init; } = (1200, 1500, 400, 600);
+
+    /// <summary>
+    /// StageP P6: the tickets, the loss per death and the respawn delay come from the matchtype (ticketdefault, ticketreductionbydeath,
+    /// respawndelay; these figures when matchtypes.bin is missing) instead of Arena:Tickets5v5 / TicketsPerDeath / RespawnSeconds.
+    /// </summary>
+    public (int Tickets, int PerDeath, double Respawn)? MatchTypeFigures { get; init; }
+
+    /// <summary>The arena.bin category name whose rank-template rewards the mode pays ("ranked", "ranked_1v1"); null = the unranked items.</summary>
+    public string? RankedCategory { get; init; }
+
     public override string ToString() => Name;
 }
 
@@ -103,6 +121,29 @@ public sealed class ArenaMatch
     /// <summary>The camps' spawn positions per team (the template's warcamps), set at the start.</summary>
     public Vector2[][] Spawns { get; set; } = [[], []];
 
+    /// <summary>StageP: the camps' own positions per team (the warcamp tiles; the turret's and the invulnerability circle's centre).</summary>
+    public Vector2[] Camps { get; set; } = [];
+
+    /// <summary>StageP: the next turret volley (Arena:WarcampDefense) and the next double-healer check (Arena:DoubleHealerPenalty).</summary>
+    public TimeSpan TurretDue { get; set; }
+    public TimeSpan HealersDue { get; set; }
+
+    /// <summary>StageP: when each member last got the double-healer penalty.</summary>
+    public Dictionary<Player, TimeSpan> Penalized { get; } = [];
+
+    /// <summary>StageP orbs (Arenas.Orbs.cs): the teams' Guids (OrbClaimed key 1), the map's orbs, the players' orb channels, the last orb tick, the next round score.</summary>
+    public Guid[] TeamGuids { get; } = [Guid.NewGuid(), Guid.NewGuid()];
+    public List<ArenaOrb> Orbs { get; } = [];
+    public Dictionary<Player, OrbChannel> Channels { get; } = [];
+    public TimeSpan? OrbsAt { get; set; }
+    public TimeSpan? RoundAt { get; set; }
+
+    /// <summary>StageP P7: each member's rank index at the result, whose rewards it gets (before the result's rank points).</summary>
+    public Dictionary<Guid, int> RewardRank { get; } = [];
+
+    /// <summary>StageP P6: the orb scoring cycles begun (MatchNewCombatRound key 2 with Arena:MatchHud).</summary>
+    public int CombatRound { get; set; }
+
     /// <summary>The winning team (0, 1), -1 for a draw, null before the end.</summary>
     public int? Winner { get; set; }
 
@@ -125,10 +166,13 @@ public sealed class ArenaMatch
 /// a fight runs. A player at 0 health is knocked down without wear or loss (never killed, whatever the zone's lethality) and costs its team a
 /// ticket; the 1v1 is the official best of three rounds (2 tickets, a reset after each), the team modes respawn the fallen at their camp after
 /// Arena:RespawnSeconds until a team's tickets are gone or the time is up. Then the rewards, the ladder (<see cref="Ratings"/>) and the way back.
-/// The match HUD's events (StartArenaMatchInfos 119, MatchUpdate 121, EndArenaMatch 120) are not sent (SPEC §1.3): the score is in chat.
+/// The match HUD's events (StartArenaMatchInfos 119, EndArenaMatch 120) are not sent (SPEC §1.3): the score is in chat; MatchUpdate 121 only
+/// under Arena:MatchHud (Arenas.Orbs.cs). StageP (league-pvp SPEC §2.5, §3.3; Arenas.Rules.cs): the official arena rules: item power caps, the
+/// double-healer penalty, the ARENA_* entry buffs, the camps' turret and invulnerability, personal season points; the orbs and their ticket
+/// loss (§3.2, Arenas.Orbs.cs).
 /// <see cref="World.Update"/> runs <see cref="Update"/>. Under <see cref="World.Sync"/>.
 /// </summary>
-public sealed class Arenas(World world)
+public sealed partial class Arenas(World world)
 {
     /// <summary>The ArenaRegistrationInfo statuses (a6q) the client's dg9.r(g7s, short) reads (SPEC §1.2).</summary>
     public const int StatusCounts = 2, StatusSignedUp = 3, StatusOut = 4, StatusQueued = 5, StatusReady = 7, StatusAccepted = 8, StatusCleared = 9;
@@ -136,17 +180,34 @@ public sealed class Arenas(World world)
     /// <summary>The modes (SPEC §2): the 1v1 on its own map, the team modes on the standard arena.</summary>
     public static readonly IReadOnlyList<ArenaMode> Modes =
     [
-        new("1v1", 1, "ARENA-1v1-01", 2, Rounds: true, Minutes: 10),
+        new("1v1", 1, "ARENA-1v1-01", 2, Rounds: true, Minutes: 10)
+        {
+            MatchType = "MATCH_1V1_ARENA", ItemPowerCap = new(900, 0.2), Psp = (400, 500, 175, 250), // RANKED_BRACKETS_ARENA_S26 ARENA_IRON_1 ranked_1v1
+            RankedCategory = "ranked_1v1",
+        },
         new("2v2", 2, "ARENA-STANDARD", 0, Rounds: false, Minutes: 0),
         new("5v5", 5, "ARENA-STANDARD", 0, Rounds: false, Minutes: 0),
+        // StageP P6: the Crystal Arena (arena.bin "ranked": CrystalRealm03, MATCH_CRYSTAL_GVG_NONLETHAL 24 min, 150 tickets, 6 per death, 18 s).
+        new(Crystal, 5, "CrystalRealm03", 1, Rounds: false, Minutes: 24)
+        {
+            MatchType = "MATCH_CRYSTAL_GVG_NONLETHAL", ItemPowerCap = new(900, 0.2), Psp = (1200, 1500, 500, 750), // ARENA_IRON_1 ranked
+            MatchTypeFigures = (150, 6, 18), RankedCategory = "ranked",
+        },
     ];
+
+    /// <summary>The Crystal Arena's mode and ladder name (Arena:CrystalArena).</summary>
+    public const string Crystal = "crystal";
 
     /// <summary>The mode of a name ("1v1", "2v2", "5v5"; "1", "2", "5" too), else null.</summary>
     public static ArenaMode? ModeOf(string name) =>
         Modes.FirstOrDefault(m => m.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase) || m.TeamSize.ToString(CultureInfo.InvariantCulture) == name.Trim());
 
-    /// <summary>The mode of the client's arena category (ArenaRegister key 1): 2 ranked_1v1 → 1v1, 0 unranked and 1 ranked → 5v5; else null.</summary>
-    public static ArenaMode? ModeOfCategory(int category) => category switch { 2 => Modes[0], 0 or 1 => Modes[2], _ => null };
+    /// <summary>
+    /// The mode of the client's arena category (ArenaRegister key 1): 2 ranked_1v1 → 1v1, 0 unranked → 5v5, 1 ranked → the Crystal Arena
+    /// with <paramref name="crystal"/> (Arena:CrystalArena), else the 5v5 as before stageP; else null.
+    /// </summary>
+    public static ArenaMode? ModeOfCategory(int category, bool crystal = true) =>
+        category switch { 2 => Modes[0], 0 => Modes[2], 1 => crystal ? Modes[3] : Modes[2], _ => null };
 
     private readonly List<ArenaEntry> _queue = [];
     private readonly Dictionary<string, ArenaMatch> _matches = new(StringComparer.Ordinal);
@@ -224,6 +285,7 @@ public sealed class Arenas(World world)
     public string? Register(Player p, ArenaMode mode, bool group, int? category = null, int[]? roles = null)
     {
         if (!Options.Enabled) return "the arena is closed on this server";
+        if (mode.Name == Crystal && !Options.CrystalArena) return "the Crystal Arena is off on this server (Arena:CrystalArena)";
         var members = new List<Player> { p };
         if (group && world.Parties.Of(p.Character.Id) is { } party)
             foreach (var id in party.Members.Select(m => m.Id).Where(id => id != p.Character.Id))
@@ -427,7 +489,8 @@ public sealed class Arenas(World world)
         for (var t = 0; t < 2; t++) m.BotSlots[t] = BotsAvailable ? Math.Max(0, target - humans[t]) : 0;
         m.HadBots = m.BotSlots.Sum() > 0;
         m.Spawns = SpawnsOf(template);
-        var tickets = m.Mode.Rounds ? 2 : m.Mode.TeamSize >= 5 ? Options.Tickets5v5 : Options.Tickets2v2;
+        m.Camps = template.Warcamps.Count >= 2 ? [template.Warcamps[0].Position, template.Warcamps[1].Position] : [m.Spawns[0][0], m.Spawns[1][0]];
+        var tickets = TicketsOf(m);
         (m.Tickets[0], m.Tickets[1]) = (tickets, tickets);
         m.State = ArenaState.Arriving;
         m.Due = world.Now + TimeSpan.FromSeconds(Options.ArrivalSeconds);
@@ -485,9 +548,10 @@ public sealed class Arenas(World world)
             Expeditions.Tell(p, $"You are watching {m} (not a member).");
             return;
         }
-        m.Arriving.Remove(p.Character.Id);
+        var arrived = m.Arriving.Remove(p.Character.Id);
+        Entered(p, m, arrived);
         Expeditions.Tell(p, string.Create(CultureInfo.InvariantCulture,
-            $"Arena {m.Mode.Name}: you are on team {(team == 0 ? "blue" : "red")}. {(m.Mode.Rounds ? "Best of three rounds" : $"{m.Tickets[team]} tickets: each defeat costs {Options.TicketsPerDeath}")}; .arena leave forfeits."));
+            $"Arena {m.Mode.Name}: you are on team {(team == 0 ? "blue" : "red")}. {(m.Mode.Rounds ? "Best of three rounds" : $"{m.Tickets[team]} tickets: each defeat costs {PerDeath(m)}")}; .arena leave forfeits."));
         if (m.State == ArenaState.Arriving && m.Arriving.Count == 0) Begin(m);
     }
 
@@ -505,6 +569,8 @@ public sealed class Arenas(World world)
             Close(m, "nobody arrived");
             return;
         }
+        if (world.Maps.Find(m.Id) is { } map) PlaceOrbs(m, map);
+        HudStart(m);
         Countdown(m);
         // A team with neither a player nor a bot (none could be made): no fight and no reward for the other side.
         for (var t = 0; t < 2; t++)
@@ -563,6 +629,7 @@ public sealed class Arenas(World world)
         if (world.Bots.Spawn(map, BotRole.Arena, BotTier(m), at, facing, healthFactor: Options.BotHealthFactor, damageFactor: Options.BotDamageFactor) is not { } bot)
             return false;
         m.Bots[bot] = team;
+        Entered(bot, m, arrived: true);
         Log.Info("arena", $"{m}: bot '{bot.Character.Name}' T{bot.Bot!.Tier} for team {team}");
         return true;
     }
@@ -607,25 +674,30 @@ public sealed class Arenas(World world)
     /// A member at 0 health in a fight (Pvp.Damage, instead of the knockdown's wear and penalties and of a lethal zone's death): the
     /// HealthUpdate, the plain knockdown, the team's ticket. False when <paramref name="target"/> is in no arena match.
     /// </summary>
-    public bool Down(Player attacker, Player target, AlbionEvent update, long ticks)
+    public bool Down(Player attacker, Player target, AlbionEvent update, long ticks) => Down(attacker.Id, attacker.Character.Name, target, update, ticks);
+
+    /// <summary><see cref="Down(Player, Player, AlbionEvent, long)"/> by a causer that is no player (a camp's turret: the target itself, as GM damage).</summary>
+    private bool Down(long causer, string causerName, Player target, AlbionEvent update, long ticks)
     {
         if (Find(target.Map?.Cluster) is not { } m || !m.Team.TryGetValue(target.Character.Id, out var team)) return false;
         target.SendAround(update);
-        Knockdown.Start(target, attacker.Id, attacker.Character.Name, ticks, KnockdownKind.Pvp);
-        Scored(m, team, attacker.Character.Name, target.Character.Name);
-        if (m.State == ArenaState.Fight && !m.Mode.Rounds) m.RespawnAt[target.Character.Id] = world.Now + TimeSpan.FromSeconds(Options.RespawnSeconds);
+        Knockdown.Start(target, causer, causerName, ticks, KnockdownKind.Pvp);
+        Scored(m, team, causerName, target.Character.Name);
+        if (m.State == ArenaState.Fight && !m.Mode.Rounds) m.RespawnAt[target.Character.Id] = world.Now + TimeSpan.FromSeconds(RespawnOf(m));
         return true;
     }
 
     /// <summary>An arena bot at 0 health (Pvp.Damage, instead of the bots' defeat: no loot, no rewards): it leaves, its team pays a ticket, a new one comes later.</summary>
-    public bool BotDown(Player attacker, Player bot, AlbionEvent update)
+    public bool BotDown(Player attacker, Player bot, AlbionEvent update) => BotDown(attacker.Character.Name, bot, update);
+
+    private bool BotDown(string causerName, Player bot, AlbionEvent update)
     {
         if (Find(bot.Map?.Cluster) is not { } m || !m.Bots.TryGetValue(bot, out var team)) return false;
         bot.SendAround(update);
         m.Bots.Remove(bot);
         world.Bots.Despawn(bot, "defeated in the arena", BotRefill.Now);
-        Scored(m, team, attacker.Character.Name, bot.Character.Name);
-        if (m.State == ArenaState.Fight && !m.Mode.Rounds) m.BotRespawns.Add((team, world.Now + TimeSpan.FromSeconds(Options.RespawnSeconds)));
+        Scored(m, team, causerName, bot.Character.Name);
+        if (m.State == ArenaState.Fight && !m.Mode.Rounds) m.BotRespawns.Add((team, world.Now + TimeSpan.FromSeconds(RespawnOf(m))));
         return true;
     }
 
@@ -633,9 +705,10 @@ public sealed class Arenas(World world)
     private void Scored(ArenaMatch m, int team, string killer, string victim)
     {
         if (m.State != ArenaState.Fight) return;
-        m.Tickets[team] = Math.Max(0, m.Tickets[team] - (m.Mode.Rounds ? 1 : Options.TicketsPerDeath));
+        m.Tickets[team] = Math.Max(0, m.Tickets[team] - (m.Mode.Rounds ? 1 : PerDeath(m)));
         m.Kills[1 - team]++;
         TellAll(m, $"Arena: {killer} defeats {victim} ({Score(m)}).");
+        HudScore(m);
         if (m.Tickets[team] == 0) End(m, 1 - team, $"{(team == 0 ? "blue" : "red")} has no tickets left");
         else if (m.Mode.Rounds)
         {
@@ -657,15 +730,18 @@ public sealed class Arenas(World world)
         var changes = rated
             ? world.Ratings.Record(m.Mode.Name, [.. m.TeamOf(0).Select(id => (id, m.Names[id]))], [.. m.TeamOf(1).Select(id => (id, m.Names[id]))], winner < 0 ? 0.5 : winner == 0 ? 1 : 0)
             : [];
+        foreach (var id in m.Team.Keys) m.RewardRank[id] = RankIndexOf(id, m);
+        var ranks = RankPointsAt(m, changes, winner);
         foreach (var id in m.Team.Keys)
         {
             var won = winner >= 0 && m.Team[id] == winner;
             if (Online(id) is { } p)
             {
-                var given = !m.HadBots || Options.RewardsWithBots ? Reward(p, won, m) : "no reward (bots)";
+                var given = !m.HadBots || Options.RewardsWithBots ? Reward(p, won, m) + SeasonPoints(p, won, m) : "no reward (bots)";
                 if (won) world.Vanity.ArenaWon(p, m.Mode.Name); // stageN vanity
                 Expeditions.Tell(p, $"Arena {m.Mode.Name}: {(winner < 0 ? "draw" : won ? "victory" : "defeat")}. {given}."
                     + (changes.TryGetValue(id, out var d) ? string.Create(CultureInfo.InvariantCulture, $" {m.Mode.Name} rating {world.Ratings.RatingOf(id, m.Mode.Name)} ({d:+0;-0;0}).") : "")
+                    + ranks.GetValueOrDefault(id, "")
                     + string.Create(CultureInfo.InvariantCulture, $" Back in {Options.EndSeconds:0} s (or .arena leave)."));
             }
         }
@@ -692,26 +768,45 @@ public sealed class Arenas(World world)
         {
             var premium = Premium.Is(p);
             var items = new List<(string Name, int Count)>();
+            // The daily limited win reward (rewardsperday 3, dailylimitcategory "unranked" shared by the three queues).
+            var limited = false;
             if (won)
             {
-                items.Add((premium ? "T3_LOOTBAG_ARENA_WIN_PREMIUM_0" : "T2_LOOTBAG_ARENA_WIN_BASIC_0", 1));
                 var today = DateOnly.FromDateTime(DateTime.UtcNow);
                 var (day, wins) = _dailyWins.GetValueOrDefault(p.Character.Id);
                 wins = day == today ? wins : 0;
-                if (wins < Options.DailyWins) items.Add(("T4_LOOTBAG_EXPEDITION_ROYAL_SIGIL", 1));
+                limited = wins < Options.DailyWins;
                 _dailyWins[p.Character.Id] = (today, wins + 1);
             }
-            else items.Add(("T2_SKILLBOOK_NONTRADABLE", premium ? 7 : 5));
-            foreach (var (name, count) in items)
+            if (RankedLines(p, won, m) is { } lines)
             {
-                if (world.Items.Find(name) is not { CanCreate: true } type) continue;
-                if (WorldSession.Fits(p.Inventory.Bag, [(type, count)])) p.Session.GiveItem(p, type, count);
-                else if (!Mailer.Overflow(world, p.Character, [new InventoryItem(type.Name, count)], $"the arena ({m.Mode.Name})")) continue;
-                given.Add(count == 1 ? type.Name : $"{type.Name} x{count}");
+                items.AddRange(lines.Where(l => l.Item.Length > 0).Select(l => (l.Item, l.Count)));
+                if (limited) items.AddRange(RankFor(p, m)!.Limited.Where(l => l.Item.Length > 0).Select(l => (l.Item, l.Count)));
             }
+            else if (won)
+            {
+                items.Add((premium ? "T3_LOOTBAG_ARENA_WIN_PREMIUM_0" : "T2_LOOTBAG_ARENA_WIN_BASIC_0", 1));
+                if (limited) items.Add(("T4_LOOTBAG_EXPEDITION_ROYAL_SIGIL", 1));
+            }
+            else items.Add(("T2_SKILLBOOK_NONTRADABLE", premium ? 7 : 5));
+            given.AddRange(GiveItems(p, items, $"the arena ({m.Mode.Name})"));
         }
         world.Saves.MarkChanged(p.Character);
         return given.Count == 0 ? "No reward" : "Reward: " + string.Join(", ", given);
+    }
+
+    /// <summary>Gives <paramref name="items"/> to <paramref name="p"/> (the bag, else the mail); the given ones' names for the chat line.</summary>
+    private List<string> GiveItems(Player p, IEnumerable<(string Name, int Count)> items, string why)
+    {
+        var given = new List<string>();
+        foreach (var (name, count) in items)
+        {
+            if (world.Items.Find(name) is not { CanCreate: true } type) continue;
+            if (WorldSession.Fits(p.Inventory.Bag, [(type, count)])) p.Session.GiveItem(p, type, count);
+            else if (!Mailer.Overflow(world, p.Character, [new InventoryItem(type.Name, count)], why)) continue;
+            given.Add(count == 1 ? type.Name : $"{type.Name} x{count}");
+        }
+        return given;
     }
 
     // ---- leaving and closing ----
@@ -752,6 +847,7 @@ public sealed class Arenas(World world)
     {
         if (m.Closed) return;
         m.Closed = true;
+        m.Channels.Clear();
         foreach (var bot in m.Bots.Keys.Where(b => b.Map is not null).ToList()) world.Bots.Despawn(bot, $"the arena closes ({why})", BotRefill.Now);
         m.Bots.Clear();
         if (world.Maps.Find(m.Id) is { } map)
@@ -806,9 +902,11 @@ public sealed class Arenas(World world)
                     if (now >= m.Due) Begin(m);
                     break;
                 case ArenaState.Countdown:
+                    Rules(m, now);
                     if (now >= m.Due)
                     {
                         m.State = ArenaState.Fight;
+                        if (m.FightSince is null || m.Mode.Rounds) HudRound(m, m.Mode.Rounds ? m.Round : 1);
                         m.FightSince ??= now;
                         TellAll(m, "Arena: fight!");
                     }
@@ -817,7 +915,9 @@ public sealed class Arenas(World world)
                     if (now >= m.Due) Countdown(m);
                     break;
                 case ArenaState.Fight:
-                    Fight(m, now);
+                    Rules(m, now);
+                    if (m.State == ArenaState.Fight) OrbTick(m, now);
+                    if (m.State == ArenaState.Fight) Fight(m, now);
                     break;
                 case ArenaState.Ended:
                     if (now >= m.Due) Close(m, "finished");

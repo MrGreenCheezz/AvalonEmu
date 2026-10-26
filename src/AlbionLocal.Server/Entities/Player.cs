@@ -387,7 +387,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
     public CharacterStats ComputeStats()
     {
         var s = World.StatCalculator is { } calculator && Progression is { } progression
-            ? calculator.Compute(Inventory.EquippedItems(), progression.Levels)
+            ? calculator.Compute(Inventory.EquippedItems(), progression.Levels, ItemPowerCap)
             : CharacterStats.Naked;
         if (Effects.Idle) return s;
         var now = World.GameNow;
@@ -407,8 +407,11 @@ public sealed class Player(WorldSession session, World world, long id, Character
     /// </summary>
     public DefenseStats ComputeDefense() =>
         World.StatCalculator is { } calculator
-            ? calculator.Defense(Inventory.EquippedItems(), Progression?.Levels ?? NoLevels, World.Config.GearArmor)
+            ? calculator.Defense(Inventory.EquippedItems(), Progression?.Levels ?? NoLevels, World.Config.GearArmor, ItemPowerCap)
             : DefenseStats.None;
+
+    /// <summary>The item power cap the player's items are under now (an arena match's, Arena:ItemPowerCap); null = none.</summary>
+    public ItemPowerCap? ItemPowerCap => Map is not null ? World.Arenas.ItemPowerCapOf(this) : null;
 
     private static readonly IReadOnlyDictionary<int, int> NoLevels = new Dictionary<int, int>();
 

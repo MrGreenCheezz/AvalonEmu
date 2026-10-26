@@ -30,6 +30,7 @@ public static class GuildGoalTest
         ("guild goals: a boss kill's points split between two guilds with 432, 151 by points (18 keys, equal lengths), 447 by activity", Ranking),
         ("guild goals: the season's end pays the bracket once (account, items, journal), an offline member at its login after a restart", SeasonEnd),
         ("guild goals: might from kill fame and a corrupted objective, two PVE levels with their points and 68 popups, 450 and 449", Might),
+        ("guild goals: season history 153 (past seasons, rank, points), member history 154, participation 504 (echo, rank, share), the full 351 with SEASON_33's winner", History),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -122,6 +123,57 @@ public static class GuildGoalTest
             Check(w.Guilds.Invite(a.Player, b.Player.Character.Name, out _, out _) == 0 && w.Guilds.Accept(b.Player, out _) == 0, "B joins");
         }
         return w.Guilds.Of(a.Player.Character.Id)!;
+    }
+
+    /// <summary>StageP territories P2: SEASON_33 (index 10) won by Lone Pines with 5000 points, then this season's answers.</summary>
+    private static void History()
+    {
+        using var town = new Town(ServerPreset.Official);
+        var (a, b) = (town.Join("Pia"), town.Join("Quin"));
+        var g = Found(town, a, b);
+        var w = town.World;
+        var s33 = Europe.Seasons[10];
+        lock (w.Sync)
+        {
+            var old = GuildGoals.StateOf(g, s33);
+            (old.Points, old.PointsAt, old.Closed) = (5000, 42, true);
+            old.Members[a.Player.Character.Id] = 700;
+            w.GuildGoals.AddChallenge(g, a.Player.Character.Id, 1000); // this season: only A gives
+            w.GuildGoals.GrantPoints(g, 50);
+        }
+        var h = Send(town, b, new GetGvgSeasonHistoryRankingsRequest { nr = "Lone Pines" });
+        Check(h is { ReturnCode: 0 } && Convert.ToInt64(h.Parameters[0]) == 42 && h.Parameters[1] is int[] seasons && seasons.SequenceEqual([10])
+              && h.Parameters[2] is int[] ranks && ranks.SequenceEqual([1]) && h.Parameters[3] is long[] pts && pts.SequenceEqual([5000L]),
+              "153 Lone Pines: one past season (10 = SEASON_33), rank 1, 5000 points; not the current season");
+        var none = Send(town, b, new GetGvgSeasonHistoryRankingsRequest { nr = "Nobody Here" });
+        Check(none is { ReturnCode: 0 } && none.Parameters[1] is int[] { Length: 1 }, "153 for an unknown name: the requester's guild");
+        var m = Send(town, a, new GetGvgSeasonGuildMemberHistoryRequest { nq = 10 });
+        var lengths = Enumerable.Range(0, 12).Select(k => m?.Parameters.GetValueOrDefault((byte)k) is Array arr ? arr.Length / (k == 0 ? 16 : 1) : -1).ToList();
+        Check(m is { ReturnCode: 0 } && m.Parameters[1] is string[] names && names.SequenceEqual(["Pia", "Quin"]) && m.Parameters[2] is long[] given
+              && given.SequenceEqual([700L, 0]) && lengths.All(n => n == 2),
+              $"154 season 10: both members by challenge points (Pia 700, Quin 0), 12 arrays of 2 (got {string.Join("/", lengths)})");
+        Guid Echo(OperationResponse r) => new((byte[])r.Parameters[0]!);
+        var pa = Send(town, a, new GvGSeasonPlayerGuildParticipationDetailsRequest { pu = 11, pv = a.Player.Character.Id });
+        var pb = Send(town, b, new GvGSeasonPlayerGuildParticipationDetailsRequest { pu = 11, pv = b.Player.Character.Id });
+        var season = Europe.ClientSeason(Saturday)!;
+        var required = (long)((season.End - season.Start).Ticks * 0.51);
+        Check(pa is { ReturnCode: 0 } && Echo(pa) == a.Player.Character.Id && Convert.ToInt32(pa.Parameters[1]) == 11 && pa.Parameters[2] is "Lone Pines"
+              && Convert.ToInt32(pa.Parameters[12]) == 1 && Convert.ToInt64(pa.Parameters[10]) == GuildGoals.Peek(g, season)!.Points
+              && Convert.ToInt64(pa.Parameters[13]) == required && pa.Parameters[14] is true
+              && pb is { ReturnCode: 0 } && Echo(pb) == b.Player.Character.Id && !pb.Parameters.ContainsKey(13) && !pb.Parameters.ContainsKey(14),
+              "504: 0/1 echo the requester and season, 2 the guild, 10 its points, 12 rank 1, 13 the full required time and 14 true for the giver, 0 / false for the other");
+        Check(Send(town, a, new GvGSeasonPlayerGuildParticipationDetailsRequest { pu = 40, pv = a.Player.Character.Id }) is null,
+              "504 for a season the client lacks: no answer (c21.a would throw)");
+        AlbionLocal.Photon.Serialization.EventData ev;
+        lock (w.Sync) ev = AlbionSerializer.BuildEvent(w.GuildGoals.SeasonUpdate(11));
+        var p = ev.Parameters;
+        Check(Convert.ToInt32(p[0]) == 11 && Convert.ToInt32(p[1]) == 10 && p[2] is byte[] id && new Guid(id) == g.Id && p[3] is "Lone Pines"
+              && !p.ContainsKey(4) && p[5] is "" && p[6] is "" && Convert.ToInt32(p[11]) == GuildLogo.Default.SymbolColor && Convert.ToSingle(p[12]) == 1f
+              && Convert.ToInt64(p[14]) == 5000 && Convert.ToInt32(p[15]) == 1,
+              "351: 0 season 11, 1 10, 2/3 SEASON_33's winner, 5/6 \"\" (no alliance), 11 the symbol colour, 12 the scale, 14 its 5000 points, 15 one win");
+        var rex = town.Join("Rex");
+        var sent = rex.Peer.Events.LastOrDefault(e => Convert.ToInt32(e.Parameters.GetValueOrDefault(ReservedKeys.EventCode)) == (int)EventCodes.GvgSeasonUpdate);
+        Check(sent is not null && sent.Parameters[3] is "Lone Pines", "the 351 after a Join carries the winner");
     }
 
     private static void Data()
