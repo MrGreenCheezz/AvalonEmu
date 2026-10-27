@@ -22,7 +22,7 @@ public sealed partial class WorldSession
     /// player, so one clock for every observer and no client offset to correct), before the visibility pass, so a player
     /// who walks out of view gets this last sample and then the Leave, one who walks into view the NewCharacter built from it.
     /// Stage 5e: a knocked-down player does not move (rc 881, the official answer, <see cref="Knockdown"/>); a Move that walks
-    /// ends the get-up's invulnerability. StageD (effects SPEC §3.2): a stunned or rooted player's Move that walks is ignored (the
+    /// preserves the get-up protection, whose authored effects do not break on movement. StageD (effects SPEC §3.2): a stunned or rooted player's Move that walks is ignored (the
     /// client blocks its own input from its list; nothing is relayed); its stop or turn on the spot as the CC lands is taken.
     /// During its own dash (ForcedMovement, effects SPEC §5.3) every Move is ignored until the first one whose key 6 is the
     /// ForcedMovement's key 2 (the client's echo) or 300 ms after its end; a Move that walks ends a channel with allowmovement="false".
@@ -37,7 +37,6 @@ public sealed partial class WorldSession
         if (walks && (SpellEffects.Stunned(player, world.GameNow) || SpellEffects.Rooted(player, world.GameNow))) return null;
         if (!SpellMovement.AcceptMove(player, req.wb, world.GameNow, req.v6 is [var ex, var ey] ? new Vector2(ex, ey) : null)) return null; // on a dash: only its key-6 echo ends the lock
         if (walks && player.Combat.Channel is { Info.AllowMovement: false }) SpellCasts.EndChannel(player, SpellCasts.ChannelEnd.Cancelled);
-        if (walks) Knockdown.Acted(player, "walks");
         if (walks) Emotes.Stop(player, "walks"); // stageN qol: a looping emote ends for the observers (the client has left it)
         if (walks) Revive.Interrupt(player, "walks", interrupted: false); // stageN: PLAYER_BLEEDOUT_REVIVE has keepmovingaftercast false (the client has left it)
         if (player.Movement is null)

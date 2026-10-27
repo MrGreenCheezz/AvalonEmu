@@ -125,6 +125,18 @@ public static class Destiny
         var c = p.Character;
         var budget = LearningBudget(p);
         var steps = board.Apply(progression, gain, ctx, budget);
+        // Several nodes can receive the same gain. Prefer activity-specific nodes over general fame,
+        // then retain the board's ascending processing order. Completed nodes cannot display another level.
+        var latest = steps.Where(s => !s.Finished && board.InProgress(progression, s.Node))
+            .OrderBy(s => board.Nodes[s.Node].Mission == "fameearned" ? 0 : 1)
+            .Select(s => (int?)s.Node).LastOrDefault();
+        if (latest is null && progression.Tracked is { } previous && board.InProgress(progression, previous)) latest = previous;
+        if (latest != progression.Tracked)
+        {
+            progression.Tracked = latest;
+            p.World.Saves.MarkChanged(c);
+            p.Session.Send(Tracked(p.Id, progression, board));
+        }
         if (budget is { Spent: > 0 })
         {
             (spent, extra) = (budget.Spent, budget.Extra);
@@ -200,6 +212,13 @@ public static class Destiny
 
     /// <summary>FinishedAchievement (151, aow): 0 player, 1 node, 2 the level just completed (0 for a plain node).</summary>
     public static FinishedAchievementEvent Finished(Player p, DestinyBoard.Step s) => new() { cac = p.Id, cad = s.Node, cae = s.Level };
+
+    /// <summary>FullTrackedAchievementInfo (154): the selected HUD node, also restored after every Join.</summary>
+    public static FullTrackedAchievementInfoEvent Tracked(long playerId, Progression progression, DestinyBoard? board) => new()
+    {
+        ddn = playerId,
+        cdr = progression.Tracked is { } id && board?.InProgress(progression, id) == true ? [id] : [],
+    };
 
     /// <summary>
     /// AchievementProgressInfo (152, akj): 0 player, 1 node, 2 its level (left out at 0, as official; the client ignores it),

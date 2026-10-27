@@ -353,6 +353,7 @@ public sealed class VisibilityTracker(Player player)
 
     private void Enter(WorldObject o)
     {
+        if (o is Building { IsInitiallyVisible: false }) return;
         if (!_known.Add(o)) return;
         if (o is Harvestable { Listed: true } h) // an enchanted resource node comes as its own event 40
         {

@@ -435,7 +435,7 @@ public static class AllianceTest
             {
                 c.Open();
                 using var cmd = c.CreateCommand();
-                cmd.CommandText = "DROP TABLE alliance_history; DROP TABLE alliance_invites; DROP TABLE alliance_guilds; DROP TABLE alliances; PRAGMA user_version=37;";
+                cmd.CommandText = "ALTER TABLE progression DROP COLUMN tracked; DROP TABLE alliance_history; DROP TABLE alliance_invites; DROP TABLE alliance_guilds; DROP TABLE alliances; PRAGMA user_version=37;";
                 cmd.ExecuteNonQuery();
             }
             using (var migrated = new SqliteCharacterRepository(path))
@@ -445,7 +445,7 @@ public static class AllianceTest
                 c.Open();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "PRAGMA user_version";
-                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 42, "schema version 42 (v38 alliances, v39 territory owners, v40 hideouts)");
+                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 43, "schema version 43 (including Destiny Board tracking)");
             }
         }
         finally { Directory.Delete(dir, true); }

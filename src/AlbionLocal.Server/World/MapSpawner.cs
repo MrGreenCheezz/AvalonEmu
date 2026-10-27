@@ -86,7 +86,7 @@ public static class MapSpawner
             else Skip("expedition agent not in expeditionagents.xml");
         }
         foreach (var m in template.LocationMarkers) objects.Add(new LocationMarker(Next(), m));
-        if (map.TutorialOwner is not null)
+        if (world.OpeningTutorial is not null && TutorialInstances.IsTutorialCluster(map.Cluster))
             foreach (var b in template.TutorialBlockers) objects.Add(new TutorialBlocker(Next(), b));
         if (world.OpeningTutorial is { } opening && TutorialInstances.IsTutorialCluster(map.Cluster))
             foreach (var npc in template.Critical.Where(m => m.Type == "questgiverobject" && m.Guid is not null))

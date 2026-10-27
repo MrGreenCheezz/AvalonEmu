@@ -22,6 +22,7 @@ public static class MountsTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
+        ("mounts: health damage cancels full mount and remount, shield absorption preserves the cast, and cancelled timers cannot mount later", DamageCancelsMount),
         ("mounts: full mount (no answer, 30 key 3, 211 to the observer), 1252 + 1253 and Mounted {2, 4 1262, 5 19.13, 7, 9, 10 -1} at 3 s; dismount (311 at 1.5 m on the 145° side, 30, 1445, Mounted {7, 8, 10}); remount 0.5 s {7, 8} + Leave; key 3 far away: 3 s", MountAndDismount),
         ("mounts: a walk-off and op 200 cancel (212 to both, no Mounted); wrong key 1 / no mount: rc only; slot 7 locked while mounted; the unequipped mount takes its object and 1253, the next mount casts both", CancelsAndRefusals),
         ("mounts: mob hits go to the mount bar (96 without 5/15, 312 {3 1262 - dmg}, no 6); its death: FORCE_DISMOUNTED, Mounted {9, 10 -1}, no 311, 313 t + 30 s, Mount refused", MountBar),
@@ -35,6 +36,54 @@ public static class MountsTest
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
 
     private const string Ox = "T5_MOUNT_OX";
+
+    private static void DamageCancelsMount()
+    {
+        using var arena = new Arena();
+        var world = arena.World;
+        var (session, peer, me) = Join(arena, "MountInterrupted");
+        var (_, observer, _) = Join(arena, "MountObserver", ox: false);
+        var mob = arena.Spawn("T4_MOB_ROAMING_UNDEAD_GHOUL", new Vector2(2, 0));
+        Ride(session, me);
+        arena.Run(0.1);
+        var mark = peer.Events.Count;
+        var observed = observer.Events.Count;
+        Combat.DamagePlayer(mob, me, 10, EffectType.Physical, HitOrigin.MeleeAutoAttack, -1, world.GameNow);
+        Check(me.Mount is { State: MountState.None, Pending: null }
+            && Since(peer, mark).Count(e => e.Code == EventCodes.MountCancel) == 1
+            && Since(observer, observed).Count(e => e.Code == EventCodes.MountCancel) == 1,
+            "damage reaching health cancels mounting once for the rider and observer");
+        arena.Run(3.1);
+        Check(!me.IsMounted && !Since(peer, mark).Any(e => e.Code == EventCodes.Mounted),
+            "the cancelled full mount timer never completes");
+
+        Ride(session, me);
+        arena.Run(3.1);
+        Off(session, me);
+        Ride(session, me, remount: true);
+        Check(me.Mount.Pending is { Remount: true }, "the next cast is a quick remount");
+        Combat.DamagePlayer(mob, me, 10, EffectType.Magic, HitOrigin.OverTime, -1, world.GameNow);
+        arena.Run(0.6);
+        Check(!me.IsMounted && me.Mount.Pending is null, "a damage-over-time tick cancels a quick remount too");
+
+        var shield = world.Spells!.Template("ENERGY_BARRIER")!;
+        var now = world.GameNow;
+        SpellCasts.Execute(new SpellCasts.SpellContext(me, me.Map!, shield, 0, 100, null,
+            me.PositionAt(DateTime.UtcNow), now), shield);
+        Ride(session, me);
+        mark = peer.Events.Count;
+        var health = me.Health.At(now);
+        Combat.DamagePlayer(mob, me, 100, EffectType.Physical, HitOrigin.MeleeAutoAttack, -1, now);
+        Check(me.Mount.State == MountState.Mounting && me.Health.At(now) == health
+            && !Since(peer, mark).Any(e => e.Code == EventCodes.MountCancel),
+            "a fully absorbed hit preserves the mount cast");
+        Combat.DamagePlayer(mob, me, 1000, EffectType.Physical, HitOrigin.MeleeAutoAttack, -1, now);
+        Check(me.Mount is { State: MountState.None, Pending: null }
+            && Since(peer, mark).Count(e => e.Code == EventCodes.MountCancel) == 1,
+            "damage spilling through the shield cancels the cast");
+        arena.Run(3.1);
+        Check(!me.IsMounted, "the shield-break cancellation also invalidates its completion timer");
+    }
 
     /// <summary>
     /// A starter character on the arena's stand (or in <paramref name="cluster"/> at <paramref name="at"/>) with a sword and, unless not, the

@@ -18,13 +18,14 @@ namespace AlbionLocal.SelfTest;
 /// soldier veteran hits a player to 0: the lethal HealthUpdate without key 3, the knockdown regeneration (max / 600),
 /// InCombatStateUpdate {}, KnockedDown with the mob, the mob's reset, then max / 18 once the fight is over; while down Move
 /// gets 881, AttackStart and CastStart are refused and no mob swings at it; 18 s later Respawn in place with full bars, 3 s
-/// later the SPAWN_KNOCKDOWN_INVULNERABILITY buff (995), gone at the first walk. .kill, .heal and a rejoin while down.
+/// later the SPAWN_KNOCKDOWN_INVULNERABILITY buff (995), allowing walking until an attack or expiry. .kill, .heal and a rejoin while down.
 /// </summary>
 public static class PlayerKnockdownTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
-        ("knockdown: a soldier knocks the player down (HealthUpdate without k3, regen max/600, KnockedDown, the mob resets, max/18), Move 881, no casts, Respawn in place after 18 s, buff 995 until the first walk", MobKnockdown),
+        ("knockdown: a soldier knocks the player down, Respawn after 18 s, buff 995 permits walking and ends on attack", MobKnockdown),
+        ("knockdown: get-up animation and walking protection prevent immediate mob focus and damage, then expire", GetUpProtection),
         ("knockdown: .kill and .heal on oneself, .damage; leaving while down and joining again stands at the spot with full bars", CommandsAndRejoin),
         ("knockdown: the player's DoT and a bolt in flight do nothing once it is down (no combat, no regen 0), an early walk keeps the buff, no harvest or loot while down", EffectsAfterKnockdown),
     ];
@@ -127,13 +128,53 @@ public static class PlayerKnockdownTest
         // Invulnerable: the soldier (home again, the player inside its aggroradius) leaves it alone.
         arena.Run(2);
         Check(soldier.TargetId != me.Id && !soldier.Threat.ContainsKey(me), $"invulnerable: no aggro on it ({soldier.AI.Describe()})");
-        // 4. The first walk ends it: the empty list.
+        // 4. The authored buff permits walking; an attack still ends it.
         mark = peer.Events.Count;
         here = me.PositionAt(DateTime.UtcNow);
         Send(session, new MoveRequest { wf = world.GameNow, v6 = [here.X, here.Y], v7 = 90, v8 = [here.X + 20, here.Y], v9 = 5.5f });
+        Check(me.Combat.InvulnerableUntil is not null && me.Combat.Untouchable
+            && !Since(peer, mark).Any(e => e.Code == EventCodes.ActiveSpellEffectsUpdate && L(e.P, 0) == me.Id),
+            "walking preserves the protection and does not clear its effects");
+        Knockdown.Acted(me, "attacks");
         var cleared = Since(peer, mark).Where(e => e.Code == EventCodes.ActiveSpellEffectsUpdate && L(e.P, 0) == me.Id).Select(e => e.P).ToList();
         Check(cleared is [var c] && c[3] is float[] { Length: 0 } && c[7] is byte[] and [0] && me.Combat.InvulnerableUntil is null && !me.Combat.Untouchable,
-              "the first Move that walks: the buff ends, the empty ActiveSpellEffectsUpdate");
+              "attacking ends the buff with the empty ActiveSpellEffectsUpdate");
+    }
+
+    private static void GetUpProtection()
+    {
+        using var arena = new Arena(ai: true, spells: true);
+        var (session, peer, me) = arena.Join("ProtectedGetUp", new InventoryItem("T4_MAIN_SWORD"));
+        var world = arena.World;
+        var map = me.Map!;
+        foreach (var mob in map.Objects.Values.OfType<Mob>().ToList())
+            SpawnManager.Despawn(mob, world, respawn: false);
+        var soldier = arena.Spawn(Soldier, new Vector2(1, 0));
+        Knockdown.DamageSelf(me, me.Health.Max + 1);
+        Knockdown.GetUp(me);
+        var health = me.Health.At(world.GameNow);
+        Check(me.Combat.Down is null && me.Combat.BuffDue is not null && me.Combat.Untouchable,
+            "PvE get-up is protected before the visual buff arrives");
+        var mark = peer.Events.Count;
+        arena.Run(2.9);
+        Check(soldier.TargetId != me.Id && !soldier.Threat.ContainsKey(me) && me.Health.At(world.GameNow) >= health,
+            "a nearby mob neither focuses nor damages the player during the get-up animation");
+        arena.Run(0.15);
+        Check(me.Combat.InvulnerableUntil is not null, "the usual 15-second buff arrives after the animation");
+        var here = me.PositionAt(DateTime.UtcNow);
+        Send(session, new MoveRequest { wf = world.GameNow, v6 = [here.X, here.Y], v7 = 0,
+            v8 = [here.X, here.Y + 0.5f], v9 = 5.5f });
+        arena.Run(1);
+        Check(me.Combat.InvulnerableUntil is not null && soldier.TargetId != me.Id && !soldier.Threat.ContainsKey(me)
+            && !Since(peer, mark).Any(e => e.Code == EventCodes.HealthUpdate && L(e.P, 0) == me.Id && F(e.P, 2) < 0),
+            "walking beside the mob preserves protection and takes no hits");
+        // Do not prolong protection every time the player moves.
+        me.Teleport(arena.Stand, 0, DateTime.UtcNow);
+        arena.Run(15);
+        Check(me.Combat.InvulnerableUntil is null && !me.Combat.Untouchable,
+            "protection expires normally after its authored duration");
+        Check(soldier.TargetId == me.Id || soldier.Threat.ContainsKey(me),
+            "the mob may focus the nearby player again once protection expires");
     }
 
     private static void CommandsAndRejoin()

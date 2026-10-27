@@ -299,7 +299,7 @@ public sealed partial class WorldSession
     /// partly when there is less (the efficiency bonus 0.59 × the share covered goes into the return bonus), key 2 = −used; without
     /// focus key 2 is left out, as captured. At a
     /// crafting station a batch uses <see cref="Pricing.CraftDuration"/>: silver and resources go at the start, each craft's
-    /// output (and its returned resources) comes on a timer with a CraftItemFinished, the last with the rest of the burst; a
+    /// output and returned resources arrive together when the batch timer ends, with one CraftItemFinished; a
     /// cancel gives back the silver and resources of the crafts not done. Equipment gets a rolled quality
     /// (<see cref="RollQuality"/>). Fame is granted once for the completed output when the batch finishes or is cancelled;
     /// shop purchases and dontgivefameoncraft items none. The nutrition fee is 0: ownerless stations send no fee data
@@ -374,16 +374,24 @@ public sealed partial class WorldSession
             $"'{player.Character.Name}' crafts {output} x {item.Name} ({crafts} craft(s), recipe {req.v}) at {building.Template.Name} for {req.r / 10000.0:0.####} silver{(focusUsed > 0 ? $", {focusUsed:0} focus" : "")}{(returns > 0 ? $", {returns * 100:0.#} % of the resources back" : "")}{(instant ? "" : $", {Pricing.CraftDuration(recipe, crafts, timeReduction).TotalSeconds:0.####} s")}"));
         var fames = !building.Template.IsShop && item.Attrs.GetValueOrDefault("dontgivefameoncraft") != "true";
         var done = 0;
-        var fameAwarded = false;
-        void SettleFame()
+        var outputSettled = false;
+        void SettleOutput()
         {
-            if (!fames || fameAwarded || done == 0) return;
-            fameAwarded = true;
-            AwardCraftFame(player, item, checked(done * recipe.AmountCrafted));
+            if (outputSettled || done == 0) return;
+            outputSettled = true;
+            var made = new List<Item>();
+            for (var n = 0; n < (item.IsEquipment ? done * recipe.AmountCrafted : 1); n++)
+                made.AddRange(GiveItem(player, item, item.IsEquipment ? 1 : done * recipe.AmountCrafted,
+                    item.IsEquipment ? RollQuality(world.CraftRandom, world.Economy.QualityWeights, qualityBonus) : 1));
+            if (returns > 0) GiveReturns(player, recipe, done, returns);
+            if (fames) AwardCraftFame(player, item, checked(done * recipe.AmountCrafted));
+            var finished = new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] };
+            SendEvent(finished);
+            if (!instant) player.SendToObservers(finished);
         }
         action.OnCancel = () =>
         {
-            SettleFame();
+            SettleOutput();
             var left = crafts - done;
             if (left <= 0) return;
             foreach (var r in recipe.Resources)
@@ -394,21 +402,8 @@ public sealed partial class WorldSession
         void Craft()
         {
             if (action.Over || player.Action != action || player != Player) return;
-            var batch = instant ? crafts : 1;
-            done += batch;
-            var made = new List<Item>();
-            for (var n = 0; n < (item.IsEquipment ? batch * recipe.AmountCrafted : 1); n++)
-                made.AddRange(GiveItem(player, item, item.IsEquipment ? 1 : batch * recipe.AmountCrafted, item.IsEquipment ? RollQuality(world.CraftRandom, world.Economy.QualityWeights, qualityBonus) : 1));
-            if (returns > 0) GiveReturns(player, recipe, batch, returns);
-            if (done == crafts) SettleFame();
-            SendEvent(new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] }); // 6.
-            if (!instant) player.SendToObservers(new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] });
-            if (done < crafts)
-            {
-                player.Map!.Timers.At(world.ClockAt(Due(done + 1)), Craft);
-                player.SaveItems();
-                return;
-            }
+            done = crafts;
+            SettleOutput();
             action.Over = true;
             player.Action = null;
             SendEvent(new CraftBuildingInfoEvent { ddn = building.Id }.FillEmpty());             // 7. {0 building, 6 [], 7 []}
@@ -420,10 +415,11 @@ public sealed partial class WorldSession
         {
             // A move can arrive after the client's bar ends but before the next world tick.
             // Produce the elapsed portion first; if all units are due, this is a finish, not a cancel.
-            while (!action.Over && player == Player && player.Action == action && done < crafts && world.GameNow >= Due(done + 1)) Craft();
+            while (done < crafts && world.GameNow >= Due(done + 1)) done++;
+            if (done == crafts) Craft();
         };
         if (instant) Craft();
-        else player.Map!.Timers.At(world.ClockAt(Due(1)), Craft);
+        else player.Map!.Timers.At(world.ClockAt(Due(crafts)), Craft);
         return null;
     }
 

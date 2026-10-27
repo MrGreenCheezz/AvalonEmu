@@ -38,7 +38,55 @@ public static class OpeningTutorialTest
         ("opening tutorial: real gathering updates both objectives, persists and permits one explicit delivery", Gathering),
         ("opening tutorial: forge unlock, real crafting, inventory, equipment, spell and shield reward", FirstCraft),
         ("opening tutorial: gathering delivery clears its hint, repairs old saves and preserves crafting hints", GatheringHint),
+        ("opening tutorial: bridge heretic responds to damage on the actual bridge navigation grid", BridgeCombat),
     ];
+    private static void BridgeCombat()
+    {
+        foreach (var name in new[] { "T1_MOB_HERETIC_THIEF", "T1_MOB_HERETIC_SCAVENGER_TUTORIAL" })
+        foreach (var spawn in Enumerable.Range(0, name == "T1_MOB_HERETIC_THIEF" ? 1 : 3))
+        foreach (var request in new[] { false, true })
+        {
+            using var lab = new Lab();
+            var world = lab.World;
+            var player = lab.Player;
+            var map = player.Map!;
+            var mob = map.Objects.Values.OfType<Mob>().Where(m => m.Template.Name == name).ElementAt(spawn);
+            foreach (var other in map.Objects.Values.OfType<Mob>().Where(m => m != mob).ToList())
+                SpawnManager.Despawn(other, world, respawn: false);
+            var grid = WalkGrid.Build(map.Template!);
+            AlbionLocal.Server.AI.MobNav.Use(map, grid);
+            player.Teleport(mob.Position + SpellMovement.Facing(mob.Direction) * 2, 0, DateTime.UtcNow);
+            player.Visibility.Refresh(player.PositionAt(DateTime.UtcNow));
+            var mark = lab.Peer.Events.Count;
+            var start = world.GameNow;
+            if (request)
+            {
+                var sword = Client.Items.Find("T1_MAIN_SWORD")!;
+                player.Inventory.Equipment.Put(0, new Item(world.ObjectIds.Next(), sword, 1, 1, sword.FullDurabilityRaw, [], []));
+                player.RecalculateStats(start);
+                CombatTest.Send(lab.Session, new AttackStartRequest { wf = start, co = mob.Id, cp = 0 });
+            }
+            else
+            {
+                Combat.Damage(player, mob, 1, EffectType.Physical, HitOrigin.MeleeAutoAttack, -1, start);
+                Check(mob.AI.State == AlbionLocal.Server.AI.MobState.Combat, $"{name} #{spawn} engages on the first damaging hit");
+            }
+            for (var i = 0; i < 60; i++)
+            {
+                lab.Clock.Advance(TimeSpan.FromMilliseconds(50));
+                if (!request && i is 9 or 19 or 29)
+                    Combat.Damage(player, mob, 1, EffectType.Physical, HitOrigin.MeleeAutoAttack, -1, world.GameNow);
+                world.Update();
+            }
+            var events = CombatTest.Since(lab.Peer, mark);
+            Check(events.Any(e => e.Code == EventCodes.HealthUpdate && CombatTest.L(e.P, 0) == mob.Id && CombatTest.F(e.P, 2) < 0),
+                $"{name} #{spawn} receives damage from the first attack (request={request})");
+            Check(events.Any(e => e.Code == EventCodes.HealthUpdate && CombatTest.L(e.P, 0) == player.Id && CombatTest.F(e.P, 2) < 0),
+                $"{name} #{spawn} hits back within three seconds (request={request}); "
+                + $"sees={grid.Sight(mob.Position, player.PositionAt(DateTime.UtcNow))}, AI={mob.AI.Describe()}");
+        }
+    }
+
     private sealed class Lab : IDisposable
     {
         public readonly string Dir = NewDir();
@@ -629,7 +677,7 @@ public static class OpeningTutorialTest
                 Check(repository.Find("PersistOpening")!.Tutorial == progress with { Stage = 8 }, "restart preserves immutable route and quest instance");
             using (var c = new SqliteConnection($"Data Source={path};Pooling=False"))
             {
-                c.Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "ALTER TABLE characters DROP COLUMN tutorial_opening; PRAGMA user_version=36;"; cmd.ExecuteNonQuery();
+                c.Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "ALTER TABLE progression DROP COLUMN tracked; ALTER TABLE characters DROP COLUMN tutorial_opening; PRAGMA user_version=36;"; cmd.ExecuteNonQuery();
             }
             using var migrated = new SqliteCharacterRepository(path);
             Check(migrated.Find("PersistOpening") is { Tutorial: null, Cluster: "0000" }, "schema30 migration leaves old characters outside tutorial");

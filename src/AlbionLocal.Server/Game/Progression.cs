@@ -28,6 +28,9 @@ public sealed class Progression
     /// </summary>
     public SortedDictionary<int, long> Progress { get => _progress; set => _progress = value ?? []; }
 
+    /// <summary>The last fame-fed node selected for the Destiny Board HUD; null until a gain selects one.</summary>
+    public int? Tracked { get; set; }
+
     /// <summary>
     /// Everything unlocked: the 30 plain achievements finished and every template achievement at its base
     /// level count (100 for all 674 in this build), as analysis/work/unlocks/payload_unlock_all.json.
@@ -52,13 +55,13 @@ public sealed class Progression
 
     public void SetLevel(int id, int level) => Levels[id] = level;
 
-    public Progression Clone() => new() { Completed = [.. Completed], Levels = new(Levels), Progress = new(Progress) };
+    public Progression Clone() => new() { Completed = [.. Completed], Levels = new(Levels), Progress = new(Progress), Tracked = Tracked };
 
     /// <summary>
-    /// Keys 1-5 of FullAchievementInfo; key 4 (the tracked flag, a38+0x28) all false, key 5 (the auto-learn flag, cs7+0x29) true for the
+    /// Keys 1-5 of FullAchievementInfo; key 4 (the tracked flag, a38+0x28) selects the HUD node, key 5 (the auto-learn flag, cs7+0x29) true for the
     /// in-progress ids in <paramref name="autoLearn"/> (stageJ focus-lp SPEC §5.3; null = none).
     /// </summary>
     public FullAchievementArrays BuildFullAchievementInfo(IReadOnlyCollection<int>? autoLearn = null) =>
-        new([.. Completed], [.. Levels.Keys], [.. Levels.Values], new bool[Levels.Count],
+        new([.. Completed], [.. Levels.Keys], [.. Levels.Values], [.. Levels.Keys.Select(id => id == Tracked)],
             [.. Levels.Keys.Select(id => autoLearn?.Contains(id) == true)]);
 }

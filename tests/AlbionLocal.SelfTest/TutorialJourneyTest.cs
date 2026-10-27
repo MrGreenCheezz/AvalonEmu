@@ -316,19 +316,18 @@ public static class TutorialJourneyTest
     private static void ShipRepair()
     {
         using var lab = new Lab("1011", "L", 4);
+        lab.Player.Character.PlayedMilliseconds = 60_000;
         foreach (var (name, count) in new[] { ("T2_PLANKS", 6), ("T2_METALBAR", 6), ("T2_CLOTH", 4) }) lab.Give(name, count);
         Check(lab.Act("SHIP_REPAIRMAN", 0) == 0 && lab.State.JourneyTask == 4, "conversation alone cannot pay ship resources");
         Check(lab.Act("SHIP_REPAIRMAN", 2) != 0 && lab.Player.Inventory.Bag.Items.Sum(i => i.Count) == 16,
             "incomplete trade refuses without consuming any stack");
         lab.Give("T2_LEATHER", 4);
-        Check(lab.Act("SHIP_REPAIRMAN", 2) == 0 && lab.State.JourneyTask == 5 && !lab.Player.Inventory.Bag.Items.Any(),
-            "accepted trade removes exact authored materials and advances");
+        Check(lab.Act("SHIP_REPAIRMAN", 2) == 0 && lab.State.JourneyTask == 6 && !lab.Player.Inventory.Bag.Items.Any(),
+            "accepted trade removes the materials and immediately reaches the captain objective");
+        var captain = lab.Player.Map!.Objects.Values.OfType<TutorialQuestGiver>().Single(n => n.Reference == "CAPTAIN_TIA");
+        Check(TutorialJourney.NpcInfo(lab.Player, captain).dr5, "captain delivery marker is active before the next world tick");
         Check(lab.Act("SHIP_REPAIRMAN", 2) != 0, "repeated trade cannot pay or advance twice");
-        lab.Rejoin(); Check(lab.State.JourneyTask == 5 && !lab.Player.Inventory.Bag.Items.Any(), "trade checkpoint and consumption persist together");
-        OpeningTutorial.Update(lab.Player); lab.Clock.Advance(TimeSpan.FromSeconds(9)); OpeningTutorial.Update(lab.Player);
-        Check(lab.State.JourneyTask == 5, "ship repair does not skip its ten-second online wait");
-        lab.Clock.Advance(TimeSpan.FromSeconds(1)); OpeningTutorial.Update(lab.Player);
-        Check(lab.State.JourneyTask == 6, "ship repair wait completes online");
+        lab.Rejoin(); Check(lab.State.JourneyTask == 6 && !lab.Player.Inventory.Bag.Items.Any(), "captain objective and consumption persist together");
     }
     private static void Rewards()
     {

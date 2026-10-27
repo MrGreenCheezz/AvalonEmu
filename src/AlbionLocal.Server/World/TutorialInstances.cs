@@ -4,16 +4,16 @@ using AlbionLocal.Server.Game;
 
 namespace AlbionLocal.Server;
 
-/// <summary>Private tutorial identity. Authored cluster ids remain the keys of all game data and saves.</summary>
+/// <summary>Private Lighthouse identity; the remaining tutorial maps are shared. Saves keep authored cluster ids.</summary>
 public static class TutorialInstances
 {
     public static bool IsTutorialCluster(string cluster) => cluster is "1008" or "1009" or "1010" or "1011";
 
     public static bool Owns(Character character, World? world) => world?.Config.TutorialOpening == true
         && world.OpeningTutorial is not null && character.Tutorial is { Version: 1 }
-        && IsTutorialCluster(character.Cluster);
+        && character.Cluster == "1008";
 
-    // Keep the original Lighthouse identifier stable; a character's other maps get independent identities.
+    // Keep the Lighthouse identifier and legacy island keys stable; new island entries use their shared cluster id.
     public static string Key(string cluster, Guid owner) => "@TUTORIALSINGLE@" +
         (cluster == "1008" ? owner : new Guid(MD5.HashData(Encoding.UTF8.GetBytes($"albionlocal:tutorial:{owner:D}:{cluster}")))).ToString("D");
 

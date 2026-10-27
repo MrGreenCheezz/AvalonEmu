@@ -6,6 +6,14 @@ namespace AlbionLocal.Server.Systems;
 
 public static class TutorialWorld
 {
+    public static bool BlockedFor(Player player, TutorialBlocker blocker)
+    {
+        if (player.Character.Tutorial is not { Version: 1 } state) return blocker.Blocked;
+        if (blocker.BlockerId == "BLOCKFORGE" && state.Stage >= 20) return false;
+        return (JsonSerializer.Deserialize<Dictionary<string, int>>(state.JourneyBlockers) ?? [])
+            .TryGetValue(blocker.BlockerId, out var value) ? value != 0 : blocker.Blocked;
+    }
+
     /// <summary>Apply saved obstacle state before visibility announces a populated private map.</summary>
     public static void Prepare(Map map, Character character)
     {
@@ -18,14 +26,18 @@ public static class TutorialWorld
 
     public static void SetBlocker(Player player, string id, int state)
     {
-        if (player.Map is not { TutorialOwner: { } owner } map || owner != player.Character.Id) return;
+        if (player.Map is not { } map || !TutorialInstances.IsTutorialCluster(map.Cluster)) return;
         foreach (var blocker in map.Objects.Values.OfType<TutorialBlocker>().Where(b => b.BlockerId == id))
         {
             var blocked = state != 0;
-            if (blocker.Blocked == blocked) continue;
-            blocker.Blocked = blocked;
+            if (map.TutorialOwner == player.Character.Id) blocker.Blocked = blocked;
             // The client upserts this object and applies its new navmesh restriction.
-            if (player.Visibility.Known.Contains(blocker)) player.Session.Send(blocker.State());
+            if (player.Visibility.Known.Contains(blocker))
+            {
+                var update = blocker.State(player);
+                update.dcq = blocked;
+                player.Session.Send(update);
+            }
         }
     }
 

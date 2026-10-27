@@ -694,12 +694,13 @@ public static class AlbionTests
         SkipLoginLists(client);
         int Code(Dictionary<byte, object?> p) => Convert.ToInt32(p.GetValueOrDefault(ReservedKeys.EventCode));
         var fai = events.FindIndex(p => Code(p) == (int)EventCodes.FullAchievementInfo);
-        // Unlock-all has no fame inside a level, so no 153: 150, the minimal 155 (no learning points), JoinFinished.
+        // Unlock-all has no fame inside a level, so no 153: 150, empty tracking (154), minimal auto-learn (155).
         // Then MountCooldownUpdate, sent at every Join (stageD mounts SPEC §4.8).
-        Check(fai >= 0 && fai == events.Count - 4 && Code(events[^3]) == (int)EventCodes.FullAutoLearnAchievementInfo
+        Check(fai >= 0 && fai == events.Count - 5 && Code(events[^4]) == (int)EventCodes.FullTrackedAchievementInfo
+              && events[^4].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^3]) == (int)EventCodes.FullAutoLearnAchievementInfo
               && events[^3].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^2]) == (int)EventCodes.MountCooldownUpdate
               && Code(events[^1]) == (int)EventCodes.JoinFinished,
-              "FullAchievementInfo, then an empty FullAutoLearnAchievementInfo and MountCooldownUpdate, right before JoinFinished");
+              "FullAchievementInfo, empty tracking and auto-learn lists, then MountCooldownUpdate before JoinFinished");
         var ach = new FullAchievementInfoEvent();
         AlbionSerializer.FillFields(ach, events[fai]);
         Check(ach.ddn == jr.a8a && ach.ccy?.Length == 30 && ach.ccz?.Length == 674 && ach.cc0 is { Length: 674 } lv && lv.All(l => l == 100)

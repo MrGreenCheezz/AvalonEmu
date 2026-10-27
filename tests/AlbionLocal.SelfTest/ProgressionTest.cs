@@ -24,9 +24,55 @@ public static class ProgressionTest
         ("progression: board tables (fame per level, elite rows, neighbours) and the level rule of PROGRESSION.md §3 (node 49 + tome)", Rules),
         ("progression: a kill feeds the sword's node (152), .fame add completes its level 0 (151, 152 at level 1), T4 swords become equippable, saved", KillLevelUp),
         ("progression: FairStart: config, kit equippable on an empty board, CreateCharacter, .progress mode/set/show, START and COMBAT_TRAINEE by .fame add", FairStart),
+        ("progression: latest fame activity selects the HUD node, completion clears it, tracking survives SQLite and Join", Tracking),
     ];
 
     private static DestinyBoard Board => Client.GameData!.Board!;
+
+    private static void Tracking()
+    {
+        using var arena = new Arena();
+        var (session, peer, me) = arena.Join("Tracker", new InventoryItem("T2_MAIN_SWORD"),
+            ("START", 0), ("COMBAT_SWORDS", 0), ("CRAFT_TRAINEE", 0), ("GATHER_FIBER_T4", 0));
+        var p = me.Character.Progression!;
+        var swords = Board.Find("COMBAT_SWORDS")!.Id;
+        var craft = Board.Find("CRAFT_TRAINEE")!.Id;
+        var craftedItem = Client.Items.Find(Board.Nodes[craft].Items[0])!;
+        Check(p.Tracked is null && peer.Events.Any(e => Code(e) == (int)EventCodes.FullTrackedAchievementInfo),
+            "Join sends an explicit empty tracking list before any fame gain");
+        lock (arena.World.Sync) Destiny.Award(me, 10_000, Destiny.Kill(me, 3), guild: false);
+        Check(p.Tracked == swords, "combat selects its activity node ahead of general START fame");
+        lock (arena.World.Sync) Destiny.Award(me, 10_000, Destiny.Harvest(Client.Items.Find("T4_FIBER")!), guild: false);
+        Check(p.Tracked == Board.Find("GATHER_FIBER_T4")!.Id, "harvesting replaces combat with the matching gathering node");
+        lock (arena.World.Sync) Destiny.Award(me, 10_000, Destiny.Craft(craftedItem), guild: false);
+        var tracking = Since(peer, 0).Last(e => e.Code == EventCodes.FullTrackedAchievementInfo);
+        Check(p.Tracked == craft && ((int[])tracking.P[1]!).SequenceEqual([craft]) && L(tracking.P, 0) == me.Id,
+            "craft fame replaces combat tracking and sends the full list for this player");
+        var mark = peer.Events.Count;
+        lock (arena.World.Sync) Destiny.Award(me, 0, Destiny.Craft(craftedItem), guild: false);
+        Check(p.Tracked == craft && !Since(peer, mark).Any(e => e.Code == EventCodes.FullTrackedAchievementInfo),
+            "zero fame does not switch or resend tracking");
+        lock (arena.World.Sync) arena.World.Saves.SaveAll();
+        arena.World.Saves.Flush();
+        var saved = arena.Characters.Find(me.Character.Id)!.Progression!;
+        Check(saved.Tracked == craft && saved.Clone().Tracked == craft, "SQLite and save snapshots retain the selected node");
+        var info = saved.BuildFullAchievementInfo();
+        Check(info.Flags4[Array.IndexOf(info.Ids, craft)] && info.Flags4.Count(x => x) == 1,
+            "Join achievement flags agree with the tracked-node list");
+        lock (arena.World.Sync) peer.Disconnect();
+        arena.World.Saves.Flush();
+        var again = new FakePeer();
+        var restoredSession = new WorldSession(again, arena.World);
+        again.Disconnected = restoredSession.OnDisconnected;
+        restoredSession.OnRequest(Request(new JoinRequest { ss = me.Character.Id }, 1), encrypted: false);
+        me = restoredSession.Player!;
+        p = me.Character.Progression!;
+        Check(p.Tracked == craft && ((int[])Since(again, 0).Single(e => e.Code == EventCodes.FullTrackedAchievementInfo).P[1]!).SequenceEqual([craft]),
+            "a real disconnect and Join restore the saved tracking list");
+        lock (arena.World.Sync) Destiny.Advance(me, Board.LevelFame(craft, 0), new FameContext(FameSource.Craft, 2, [], craft), out _, out _);
+        Check(p.Completed.Contains(craft) && p.Tracked is null && Destiny.Tracked(me.Id, p, Board).cdr!.Length == 0,
+            "finishing the selected plain node clears the HUD instead of leaving an invalid bar");
+    }
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
 

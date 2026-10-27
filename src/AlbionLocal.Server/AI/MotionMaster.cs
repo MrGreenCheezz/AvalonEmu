@@ -86,15 +86,15 @@ public sealed class MotionMaster(Mob me)
     /// <summary>
     /// Stands where the mob is now (an arrival, the attack range reached, a reset), facing <paramref name="direction"/> (null:
     /// as it walked): a stop sample (pos = target) to the observers; nothing when it stands already and the facing is the same,
-    /// nor on a forced path.
+    /// nor on a forced path. A reset can force a new stop sample even when already stationary.
     /// </summary>
-    public void Stop(float? direction = null)
+    public void Stop(float? direction = null, bool force = false)
     {
         if (Systems.SpellMovement.Moving(me, me.GameNow)) return;
         _legs.Clear();
         var m = me.Movement;
         var face = direction ?? m.Direction;
-        if (!Moving && m.From == m.Target && Math.Abs(face - m.Direction) < 0.01f) return;
+        if (!force && !Moving && m.From == m.Target && Math.Abs(face - m.Direction) < 0.01f) return;
         var here = me.Position;
         Moving = false;
         Set(new MovementState(here, here, 0, me.Time) { Direction = face, Stamp = me.NextStamp() });

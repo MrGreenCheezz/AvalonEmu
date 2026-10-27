@@ -16,9 +16,9 @@ public static class TutorialWorldTest
     private static void Check(bool condition, string message) => AlbionTests.Check(condition, message);
     public static IEnumerable<(string, Action)> All =>
     [
-        ("tutorial world: private identity survives authored exits, revisit and reconnect across every island map", MapTravel),
+        ("tutorial world: private opening leads to shared island maps, with revisit and reconnect", MapTravel),
         ("tutorial world: deferred map resolution restores obstacles before visibility and preserves transfer identity", DeferredTravel),
-        ("tutorial world: private market charges, fetches once and rejects insufficient funds without cross-player stock", Market),
+        ("tutorial world: shared tutorial merchant shows one renewable item, charges and fetches once", Market),
     ];
     private sealed class Lab : IDisposable
     {
@@ -66,15 +66,15 @@ public static class TutorialWorldTest
         Check(peer.Responses.Count == responses && player.Map is not null, "a pending template cannot detach or answer the character early");
         pending.SetResult(Client.Clusters!.Get("1011"));
         Check(SpinWait.SpinUntil(() => { lab.World.Update(); return session.Status == SessionStatus.Transferring; }, 5000), "deferred change commits when its data arrives");
-        Check(Equals(peer.Responses.Last().Parameters[0], TutorialInstances.Key("1011", player.Character.Id)), "deferred response uses the same private identity as cached transfer");
+        Check(Equals(peer.Responses.Last().Parameters[0], "1011"), "deferred response selects the shared island identity");
         player.Character.Tutorial = player.Character.Tutorial! with { JourneyBlockers = "{\"BLOCKNPCS\":0,\"FIXSHIP\":0}" };
         lab.World.Saves.SaveNow(player.Character);
         var joined = lab.Join(player.Character.Id);
         var restored = joined.Player.Map!.Objects.Values.OfType<TutorialBlocker>().Where(b => b.BlockerId is "BLOCKNPCS" or "FIXSHIP").ToArray();
         Check(restored.Length > 0, "authored shipyard obstacles are present in the resolved map");
         foreach (var obstacle in restored)
-            Check(!obstacle.Blocked, "late map population restores saved obstacle state before its visibility pass");
-        Check(joined.Player.Map.InstanceKey == TutorialInstances.Key("1011", player.Character.Id), "asynchronous rejoin reaches the character's own map");
+            Check(!TutorialWorld.BlockedFor(joined.Player, obstacle), "late map population restores the viewer's saved obstacle state");
+        Check(joined.Player.Map.InstanceKey == "1011", "asynchronous rejoin reaches the shared island");
     }
     private static void MapTravel()
     {
@@ -88,11 +88,12 @@ public static class TutorialWorldTest
             player.Teleport(exit.Position, 0, DateTime.UtcNow);
             session.OnRequest(Request(new ChangeClusterRequest { ee = exit.Id }, 20), false);
             var response = peer.Responses.Last();
-            Check(response.ReturnCode == 0 && Equals(response.Parameters[0], TutorialInstances.Key(destination, character.Id))
-                && Equals(response.Parameters[1], destination), "transfer response has private identity and authored base map");
+            var identity = destination == "1008" ? TutorialInstances.Key(destination, character.Id) : destination;
+            Check(response.ReturnCode == 0 && Equals(response.Parameters[0], identity)
+                && (destination != "1008" || Equals(response.Parameters[1], destination)), "transfer response selects the private opening or shared island");
             (session, peer, player) = lab.Join(character.Id);
-            Check(player.Map!.Cluster == destination && player.Map.TutorialOwner == character.Id
-                && player.Map.InstanceKey == TutorialInstances.ClientCluster(player.Character, lab.World), "new Join uses selected private map");
+            Check(player.Map!.Cluster == destination && player.Map.TutorialOwner == (destination == "1008" ? character.Id : (Guid?)null)
+                && player.Map.InstanceKey == TutorialInstances.ClientCluster(player.Character, lab.World), "new Join uses the selected map identity");
             Check(player.Map != from, "a different logical map cannot collide with the previous private instance");
             foreach (var npc in player.Map.Objects.Values.OfType<TutorialQuestGiver>())
             {
@@ -105,7 +106,18 @@ public static class TutorialWorldTest
         Check(ReferenceEquals(player.Map, firstMap), "revisit recovers the original private scenery instead of replacing it");
         var other = lab.Create("IslandNeighbour", "1008").Player;
         Check(other.Map != firstMap && !player.Observers.Contains(other), "another character has independent scenery and visibility");
-        Check(lab.World.Maps.Maps.Count(m => m.TutorialOwner == character.Id) == 4, "all four authored maps coexist for one owner");
+        Check(lab.World.Maps.Maps.Count(m => m.TutorialOwner == character.Id) == 1, "only the opening remains private");
+        var island = lab.Create("SharedTraveller", "1011").Player;
+        var neighbour = lab.Create("SharedNeighbour", "1011").Player;
+        Check(ReferenceEquals(island.Map, neighbour.Map), "characters share the captain's island map");
+        neighbour.Teleport(island.PositionAt(DateTime.UtcNow), 0, DateTime.UtcNow);
+        island.Visibility.Refresh(island.PositionAt(DateTime.UtcNow));
+        neighbour.Visibility.Refresh(neighbour.PositionAt(DateTime.UtcNow));
+        Check(island.Observers.Contains(neighbour) && neighbour.Observers.Contains(island), "nearby island players see one another");
+        var blocker = island.Map!.Objects.Values.OfType<TutorialBlocker>().First(b => b.BlockerId == "FIXSHIP");
+        island.Character.Tutorial = island.Character.Tutorial! with { JourneyBlockers = "{\"FIXSHIP\":0}" };
+        neighbour.Character.Tutorial = neighbour.Character.Tutorial! with { JourneyBlockers = "{\"FIXSHIP\":1}" };
+        Check(!blocker.State(island).dcq && blocker.State(neighbour).dcq, "shared scenery retains per-player quest obstacles");
     }
     private static void Market()
     {
@@ -116,6 +128,7 @@ public static class TutorialWorldTest
         player.Visibility.Refresh(market.Position);
         var mule = Client.Items.Find("T2_MOUNT_MULE")!;
         var orderId = TutorialMerchant.FirstId + mule.Index;
+        Check(TutorialMerchant.Order(player, orderId, player.Map.InstanceKey)?.Amount == 1, "NPC stock displays one item");
         void Buy() => session.OnRequest(Request(new AuctionBuyOfferRequest { bqs = market.Id, bn2 = 1, bn3 = orderId }, 21), false);
         Buy();
         Check(peer.Responses.Last().ReturnCode != 0 && lab.World.Market!.FinishedOf(player.Character.Id).Count == 0,
@@ -126,6 +139,7 @@ public static class TutorialWorldTest
             && !player.Inventory.Bag.Items.Any(i => i.Template == mule)
             && lab.World.Market!.FinishedOf(player.Character.Id).Single().ItemName == mule.Name,
             "successful purchase charges exactly once and requires actual collection");
+        Check(TutorialMerchant.Order(player, orderId, player.Map.InstanceKey)?.Amount == 1, "a purchased NPC offer remains available");
         session.OnRequest(Request(new AuctionGetFinishedAuctionsRequest { bqs = market.Id }, 22), false);
         var pendingDtos = (string[])peer.Responses.Last().Parameters[0]!;
         using var pendingDto = JsonDocument.Parse(pendingDtos.Single());
@@ -158,7 +172,7 @@ public static class TutorialWorldTest
             "firestaff branch also has its authored offhand book available");
         Check(!TutorialMerchant.Orders(player, "0000", MarketOrder.Offer).Any(), "normal cities receive no tutorial offers");
         var other = lab.Create("PrivateOtherBuyer", "1011").Player;
-        Check(TutorialMerchant.Orders(other, other.Map!.InstanceKey, MarketOrder.Offer).Any()
-            && !TutorialMerchant.Orders(other, player.Map.InstanceKey, MarketOrder.Offer).Any(), "each private market has independent stock access");
+        Check(other.Map == player.Map && TutorialMerchant.Orders(other, player.Map.InstanceKey, MarketOrder.Offer).Any(),
+            "both players can access the renewable merchant on the shared island");
     }
 }

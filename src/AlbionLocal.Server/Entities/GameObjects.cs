@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Xml.Linq;
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Protocol;
 
@@ -37,6 +38,17 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     public override AnnounceRange Range => IsQuestGiver ? AnnounceRange.Cluster : AnnounceRange.Window;
     public override bool LeaveOnRange => true;
 
+    private XElement? InitialBehaviourState => Template.Kind == "simplebehaviourbuilding"
+        ? Template.Element.Elements("triggerablestate").FirstOrDefault(s => (bool?)s.Attribute("default") == true)
+        : null;
+
+    /// <summary>
+    /// Hidden default states do not announce a client object. The journal NPC's HIDDEN
+    /// state has no animator actions; instantiating its view and applying that state
+    /// makes the client enumerate a null action list. Journal activation is separate.
+    /// </summary>
+    public bool IsInitiallyVisible => (bool?)InitialBehaviourState?.Attribute("visible") != false;
+
     /// <summary>
     /// Key 8, the stamp of the durability bar (key 7). Official: a stamp that stays with the building (2024–2026 in the
     /// captures); here the map's creation time, fixed while the map lives.
@@ -71,13 +83,12 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     /// </summary>
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
+        if (!IsInitiallyVisible) yield break;
         yield return NewBuilding();
         // cpm starts with an empty state; SimpleBehaviourObjectView requires event 645 even
         // for the authored default. Initialize each viewer on every announcement, without
         // storing per-character state on the shared map's building. Journal transitions are separate.
-        if (Template.Kind == "simplebehaviourbuilding"
-            && (string?)Template.Element.Elements("triggerablestate")
-                .FirstOrDefault(s => (bool?)s.Attribute("default") == true)?.Attribute("name") is { Length: > 0 } state)
+        if ((string?)InitialBehaviourState?.Attribute("name") is { Length: > 0 } state)
             yield return new SimpleBehaviourBuildingStateUpdateEvent { ddn = Id, dyl = state };
         if (Spawn.QuestGiver is { } giver)
             // coz.ajv → cmh.r 0x180b641c0 reads keys 3 (a7m) and 4 (stamp) into the quest-giver bar and bools 5/6; it ignores

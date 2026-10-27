@@ -35,6 +35,7 @@ public static class EconomyTest
         ("economy: trait value reroll (ACT 8 sub 4): attunement and silver charged, event 552 old -> new (never lower), soul re-sent; an attuned TRAIT_HITPOINTS_MAX adds hitpointsmax", TraitReroll),
         ("economy: crafting: refine 10 T3 planks at the carpenter, craft a T4 sword at the forge (quality, returns, crafting fame into CRAFT_REFINE_WOOD_T4 / CRAFT_SWORDS)", Crafting),
         ("economy: crafting batch fame settles only completed units on cancellation and logout", CraftBatchCancellation),
+        ("economy: accepted crafting dismounts a rider before starting production", MountedCraft),
         ("economy: crafting uses client recipe time and a move after the deadline finishes the batch before the world tick", CraftTiming),
         ("economy: content/spawns of the royal cities and Caerleon: 12 stations and a stable each on RealEstate plot centres, Martlock refines hide at its own +40 % bonus", CityStations),
         ("economy: a T3 horse crafted at a stable from a grown T3 horse + 20 T3 leather (the horse never returned)", StableCraft),
@@ -321,14 +322,14 @@ public static class EconomyTest
         Check(Answers(peer, answers) is [{ ReturnCode: WorldSession.StationComponentError } none] && L(none.Parameters, 1) == 1 && L(none.Parameters, 2) == 4 && L(none.Parameters, 3) == 8
               && peer.Events.Count == mark && me.Character.Silver == silver, "no ore: {.., 1 ACT 1, 2 counter 4, 3 NotEnoughResources 8}, no event, no money change");
 
-        // A timed batch: 10 bars from 20 ore + 10 T3 bars, one CraftItemFinished per craft, part of the resources back (Thetford ore).
+        // A timed batch: 10 bars together, one CraftItemFinished and the returned resources (Thetford ore).
         mark = peer.Events.Count;
         Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = smelter.Id, p = 1, q = 5, u = bar.Index, w = 10 });
         Check(me.Action is { Over: false } && Since(peer, mark).Count(e => e.Code == EventCodes.CraftItemFinished) == 0, "the batch runs (event 64 only to others)");
         town.Run(4.5);
         var crafted = Since(peer, mark);
         var bag = me.Inventory.Bag;
-        Check(crafted.Count(e => e.Code == EventCodes.CraftItemFinished) == 10 && crafted[^1].Code == EventCodes.ActionOnBuildingFinished && me.Action is null
+        Check(crafted.Count(e => e.Code == EventCodes.CraftItemFinished) == 1 && crafted[^1].Code == EventCodes.ActionOnBuildingFinished && me.Action is null
               && bag.Items.Where(i => i.Template == bar).Sum(i => i.Count) == 10 && bag.Items.Where(i => i.Template.Name == "T4_ORE").Sum(i => i.Count) is 7,
               $"10 completed crafts: 10 x T4_METALBAR, 7 of the 20 ore back (36.7 %), 66 last (got {Show(crafted.Where(e => e.Code != EventCodes.NewSimpleItem))})");
     }
@@ -611,15 +612,16 @@ public static class EconomyTest
         var mark = peer.Events.Count;
         Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = town.Station("T8_CARPENTERSWORKSHOP").Id, p = 1, q = 1, u = planks.Index, w = 10 });
         town.Run(0.1);
-        Check(Count("T3_PLANKS") == 3 && me.Character.Fame == 0 && !Since(peer, mark).Any(e => e.Code == EventCodes.UpdateFame),
-              "three completed planks retain their output while fame waits for the batch settlement");
+        Check(Count("T3_PLANKS") == 0 && me.Character.Fame == 0
+              && !Since(peer, mark).Any(e => e.Code is EventCodes.UpdateFame or EventCodes.CraftItemFinished),
+              "items and fame wait together until the entire batch ends");
         town.Run(0.3);
         var refined = Since(peer, mark);
         var back = Pricing.ReturnFraction(Client.Crafting.Bonus("0000", "wood"));
         var progress = refined.Where(e => e.Code == EventCodes.AchievementProgressInfo).ToList();
         Check(Answers(peer, answers).Count == 0 && me.Action is null && Count("T3_PLANKS") == 10
               && Count("T3_WOOD") == (int)Math.Floor(20 * back + 1e-9) && Count("T2_PLANKS") == (int)Math.Floor(10 * back + 1e-9)
-              && refined.Count(e => e.Code == EventCodes.CraftItemFinished) == 10 && refined.Count(e => e.Code == EventCodes.UpdateFame) == 1
+              && refined.Count(e => e.Code == EventCodes.CraftItemFinished) == 1 && refined.Count(e => e.Code == EventCodes.UpdateFame) == 1
               && L(refined.Single(e => e.Code == EventCodes.UpdateFame).P, 2) == 120 * Pricing.A7m
               && progress.All(e => L(e.P, 1) == refine) && progress.Count == 1 && L(progress[^1].P, 0) == me.Id
               && (string?)progress[^1].P[4] == "[[1200000]]" && me.Character.Fame == 120 * Pricing.A7m && progression.Progress.GetValueOrDefault(refine) == 120 * Pricing.A7m,
@@ -654,7 +656,8 @@ public static class EconomyTest
             { wf = town.World.GameNow, o = town.Station("T8_CARPENTERSWORKSHOP").Id, p = 1, q = 1,
                 u = Catalog.Find("T3_PLANKS")!.Index, w = 10 }, 7), false);
             town.Run(made == 0 ? 0 : 0.1);
-            Check(me.Character.Fame == 0, "batch fame is not granted before settlement");
+            Check(me.Character.Fame == 0 && !me.Inventory.Bag.Items.Any(i => i.Template.Name == "T3_PLANKS"),
+                "batch output and fame are not granted before settlement");
             void Move() => session.OnRequest(Request(new MoveRequest { wf = town.World.GameNow,
                 v6 = [0f, 0f], v8 = [1f, 0f], v9 = 5.5f }, null), false);
             lock (town.World.Sync)
@@ -682,6 +685,27 @@ public static class EconomyTest
         }
     }
 
+    private static void MountedCraft()
+    {
+        using var town = new Town();
+        var (session, peer, me) = town.Join("MountedCrafter", 0, new InventoryItem("T2_WOOD", 2));
+        var type = Catalog.Find("T2_MOUNT_MULE")!;
+        var mule = new Item(town.World.ObjectIds.Next(), type, 1, 1, type.FullDurabilityRaw, [], []);
+        me.Inventory.Equipment.Put(Mounts.MountSlot, mule);
+        Send(session, new MountRequest { wf = town.World.GameNow, v3 = mule.Id, v4 = true });
+        town.Run(3.2);
+        Check(me.IsMounted, "the crafter is riding a mule before using the station");
+        var mark = peer.Events.Count;
+        Send(session, new ActionOnBuildingStartRequest { wf = town.World.GameNow,
+            o = town.Station("T8_CARPENTERSWORKSHOP").Id, p = 1, q = 1, u = Catalog.Find("T2_PLANKS")!.Index, w = 2 });
+        var events = Since(peer, mark);
+        Check(!me.IsMounted && me.Action is not null && events.Any(e => e.Code == EventCodes.Mounted),
+            "an accepted craft dismounts immediately, before its timer finishes");
+        town.Run(1);
+        Check(me.Inventory.Bag.Items.Where(i => i.Template.Name == "T2_PLANKS").Sum(i => i.Count) == 2,
+            "the dismounted craft delivers its whole batch");
+    }
+
     private static void CraftTiming()
     {
         var recipe = Catalog.Find("T2_PLANKS")!.Recipes[0];
@@ -705,14 +729,14 @@ public static class EconomyTest
         int Count(string name) => me.Inventory.Bag.Items.Where(i => i.Template.Name == name).Sum(i => i.Count);
         var events = Since(peer, mark);
         Check(me.Action is null && Count("T2_PLANKS") == 48 && Count("T2_WOOD") == 0
-            && events.Count(e => e.Code == EventCodes.CraftItemFinished) == 48
+            && events.Count(e => e.Code == EventCodes.CraftItemFinished) == 1
             && events.Count(e => e.Code == EventCodes.ActionOnBuildingFinished) == 1
             && !events.Any(e => e.Code == EventCodes.ActionOnBuildingCancel)
             && events.Count(e => e.Code == EventCodes.UpdateFame) == 1 && me.Character.Fame == 192 * Pricing.A7m,
             "movement after the client deadline finishes every due plank and one fame award instead of refunding wood");
         town.Run(1);
         Check(Count("T2_PLANKS") == 48 && me.Character.Fame == 192 * Pricing.A7m
-            && Since(peer, mark).Count(e => e.Code == EventCodes.CraftItemFinished) == 48,
+            && Since(peer, mark).Count(e => e.Code == EventCodes.CraftItemFinished) == 1,
             "old timer callbacks cannot duplicate settled output or fame");
     }
 

@@ -22,6 +22,7 @@ public static class CharacterEntryTest
         ("character entry: bald and beardless previews use empty mesh ids without changing saved appearance", EmptyMeshes),
         ("character entry: online time counts once across snapshots and disconnect, not while offline", OnlineTime),
         ("character entry: schema v35 keeps characters and initializes unknown historic playtime to zero", Migration),
+        ("character entry: schema v42 upgrades tracking without changing character progress or arena ranks", TrackingMigration),
     ];
 
     private static void Check(bool value, string why) => AlbionTests.Check(value, why);
@@ -209,23 +210,66 @@ public static class CharacterEntryTest
         finally { Directory.Delete(dir, true); }
     }
 
+    private static void TrackingMigration()
+    {
+        var dir = NewDir();
+        try
+        {
+            var path = Path.Combine(dir, "tracking-upgrade.db");
+            var legacy = StarterKit.Default.NewCharacter("TrackingUpgrade");
+            legacy.Progression = new Progression { Levels = new() { [123] = 2 }, Tracked = 123 };
+            using (var repository = new SqliteCharacterRepository(path))
+            {
+                Check(repository.Create(legacy), "legacy character created");
+                repository.SaveRanks([new RankRow(legacy.Id, 1, 12, 3, 470, 3, 1)]);
+            }
+            using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
+            {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "ALTER TABLE progression DROP COLUMN tracked; PRAGMA user_version=42;";
+                command.ExecuteNonQuery();
+            }
+            using (var migrated = new SqliteCharacterRepository(path))
+            {
+                var restored = migrated.Find("TrackingUpgrade")!;
+                Check(restored.Id == legacy.Id && restored.Progression is { Tracked: null } progress && progress.Levels[123] == 2,
+                    "v42 preserves the character and board without inventing a tracked node");
+                Check(migrated.LoadRanks() is [{ Character: var id, Rank: 3, Points: 470 }] && id == legacy.Id,
+                    "v42 arena ranks survive the tracking migration");
+                restored.Progression!.Tracked = 123;
+                migrated.Save(restored);
+            }
+            using (var reopened = new SqliteCharacterRepository(path))
+                Check(reopened.Find("TrackingUpgrade")!.Progression!.Tracked == 123,
+                    "the new tracked node persists after reopening the migrated save");
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     private static void Migration()
     {
         var dir = NewDir();
         try
         {
             var path = Path.Combine(dir, "legacy.db");
-            using (var repository = new SqliteCharacterRepository(path)) repository.Create(StarterKit.Default.NewCharacter("LegacyProbe"));
+            using (var repository = new SqliteCharacterRepository(path))
+            {
+                var legacy = StarterKit.Default.NewCharacter("LegacyProbe");
+                legacy.Progression = Client.GameData!.Board!.FairStart();
+                repository.Create(legacy);
+            }
             using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
             {
                 connection.Open();
                 using var command = connection.CreateCommand();
-                command.CommandText = "ALTER TABLE characters DROP COLUMN tutorial_opening; ALTER TABLE characters DROP COLUMN played_ms; PRAGMA user_version=35;";
+                command.CommandText = "ALTER TABLE progression DROP COLUMN tracked; ALTER TABLE characters DROP COLUMN tutorial_opening; ALTER TABLE characters DROP COLUMN played_ms; PRAGMA user_version=35;";
                 command.ExecuteNonQuery();
             }
             using var migrated = new SqliteCharacterRepository(path);
             Check(migrated.Find("LegacyProbe") is { PlayedMilliseconds: 0, Cluster: "0000" } c
-                && c.Equipment[0]?.Name == "T4_MAIN_SWORD", "legacy position and equipment preserved; duration is not invented from creation date");
+                && c.Equipment[0]?.Name == "T4_MAIN_SWORD" && c.Progression is { Tracked: null, Levels.Count: 1 },
+                "legacy position, equipment and board preserved; duration and tracked node are not invented");
         }
         finally { Directory.Delete(dir, true); }
     }

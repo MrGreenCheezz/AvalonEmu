@@ -433,6 +433,7 @@ public static class Combat
         var health = target.Health.At(ticks);
         var left = (float)SpellEffects.Clamp(world, target, health, Math.Max(0, health - damage), ticks); // clamphitpoints: not below its min
         if (left > Math.Max(0, health - damage)) damage = health - left;
+        if (damage > 0) Mounts.Cancel(target, "damage"); // absorbed or immune hits do not interrupt mounting
         if (damage > 0 || raw <= 0) // a hit of 0 still goes out; one all on a shield does not
         {
             target.Health.Set(left, Math.Max(ticks, target.Health.Stamp));

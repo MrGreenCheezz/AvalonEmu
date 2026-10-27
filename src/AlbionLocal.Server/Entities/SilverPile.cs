@@ -72,8 +72,9 @@ public sealed class SilverPile(long id, ClusterObject spawn, Vector2 position, l
 
     /// <summary>
     /// NewSilverObject (44, auv; the killer's own piles of 103829): 0 id, 1 position, 2 amount, 3 the dead mob's object id,
-    /// 4 true, 5 creation ticks, 6 [the owner's Guid], 12 true only for the owner (absent on the piles of other players'
-    /// kills), 17 byte 0 (FlaggingStatus), 18 byte 0 (a mob's; 3 is non-mob silver, a dead player's). 17 and 18 go out also as 0, as official.
+    /// 4 true, 5 creation ticks, 6 [the owner's Guid], 12 the premium appearance for an eligible premium viewer,
+    /// 17 byte 0 (FlaggingStatus), 18 byte 0 (a mob's; 3 is non-mob silver, a dead player's). The client's SilverDropSettings
+    /// selects prefab/premiumprefab from key 12; the captured owner's true value was not an ownership flag.
     /// </summary>
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
@@ -86,7 +87,7 @@ public sealed class SilverPile(long id, ClusterObject spawn, Vector2 position, l
             c98 = true,                                // [4]
             c99 = CreatedTicks,                        // [5]
             daa = [Owner],                             // [6]
-            dag = viewer.Character.Id == Owner,        // [12]
+            dag = MayTake(viewer) && Systems.Premium.Is(viewer), // [12] premium graphics; ownership is carried separately
             Extra = new() { [17] = (byte)0, [18] = SourceKind },
         };
     }

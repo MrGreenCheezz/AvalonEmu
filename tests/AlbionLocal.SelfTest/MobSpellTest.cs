@@ -22,6 +22,11 @@ public static class MobSpellTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
+        ("mob spells: heretic champion crush hits its animated cone, misses sidesteps and rear, and stops hitting when the cone closes", HereticCrush),
+        ("mob spells: tutorial ballista nested projectile hits inside its path, misses outside and expires; mage ground damage", TutorialProjectiles),
+        ("mob spells: tutorial ballista AI casts and damages a stationary player using its inherited behaviour", TutorialBallistaAi),
+        ("mob spells: tutorial mortar detects within 5 m, stays idle outside, and retaliates with its 30 m ground spell", TutorialMortarRanges),
+        ("spell area geometry: nested transforms, compact lifetime curves, animated rectangles and conservative reach", NestedGeometry),
         ("mob spells: ghoul bite below 70 % (CastStart/EnergyUpdate/CastFinished/CastSpell keys, CastHits then HealthUpdates, stand 1.3 s, recast 7 s)", Ghoul),
         ("mob spells: wolf HOWL in the entry tick (1.5 s, slot 1, energy -19), origin-3 damage within 7 m only", Wolf),
         ("mob spells: soldier frenzy after 3 s (ground cast, channel ticks with CastHits, the arc area, pulses in front only, ChannelingEnded and Leave, next Attack +2.5 s)", Soldier),
@@ -37,6 +42,175 @@ public static class MobSpellTest
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
 
+    private static void HereticCrush()
+    {
+        using var arena0 = new Arena(spells: true);
+        var (_, peer, side) = arena0.Join("CrushSidestep", new InventoryItem("T2_MAIN_SWORD"));
+        var (_, _, front) = arena0.Join("CrushFront", new InventoryItem("T2_MAIN_SWORD"));
+        var (_, _, rear) = arena0.Join("CrushRear", new InventoryItem("T2_MAIN_SWORD"));
+        var (_, _, late) = arena0.Join("CrushLate", new InventoryItem("T2_MAIN_SWORD"));
+        var (arena, map) = Quiet(arena0);
+        var mob = arena.Spawn("T3_MOB_ROAMING_HERETIC_TANK_CHAMPION", new Vector2(0, -3));
+        var spell = T("HERETIC_TANK_CRUSH");
+        var start = arena.World.GameNow;
+        var aim = mob.Position + new Vector2(0, 3);
+        MobCasts.Start(arena.World, map, new MobCast
+        {
+            Caster = mob, Spell = spell, Counter = 1, Point = aim,
+            Start = start, End = start + SpellCasts.Seconds(spell.CastingTime), Ap = 10,
+        });
+        // Dodge after the cast has selected its ground aim, while remaining inside its radius.
+        side.Teleport(mob.Position + new Vector2(3, 0), 0, DateTime.UtcNow);
+        front.Teleport(aim, 0, DateTime.UtcNow);
+        rear.Teleport(mob.Position - new Vector2(0, 3), 0, DateTime.UtcNow);
+        late.Teleport(mob.Position + new Vector2(10, 10), 0, DateTime.UtcNow);
+        var sideHealth = side.Health.At(start);
+        var rearHealth = rear.Health.At(start);
+        var frontHealth = front.Health.At(start);
+        arena.Run(spell.CastingTime + 0.05);
+        var now = arena.World.GameNow;
+        Check(front.Health.At(now) < frontHealth && SpellEffects.Stunned(front, now),
+            "the charged crush damages and stuns a player still in front");
+        Check(side.Health.At(now) >= sideHealth && !SpellEffects.Stunned(side, now)
+            && rear.Health.At(now) >= rearHealth && !SpellEffects.Stunned(rear, now),
+            "sidestepping and standing behind avoid both the damage and stun within five metres");
+        var area = map.Objects.Values.OfType<MobArea>().Single(a => a.Holder == spell);
+        var arc = area.Shapes.Single(n => n.Kind == "arc");
+        Check(arc.AnimatedOpening!.At(0) == 60 && arc.AnimatedOpening.At(0.11) == 0,
+            $"the installed crush cone closes at 110 ms rather than defaulting to 360 degrees (start {arc.AnimatedOpening.At(0)}, end {arc.AnimatedOpening.At(0.11)})");
+        Check(!SpellAreas.Inside(area.Shapes, area.Reach, area.Origin, area.Yaw, area.Start,
+            aim, 0.3f, area.Start + SpellCasts.Seconds(0.11), zeroOff: true),
+            "a closed cone no longer hits even on its forward axis");
+        arena.Run(0.2);
+        var lateHealth = late.Health.At(arena.World.GameNow);
+        late.Teleport(aim, 0, DateTime.UtcNow);
+        arena.Run(0.1);
+        Check(late.Health.At(arena.World.GameNow) >= lateHealth && !SpellEffects.Stunned(late, arena.World.GameNow),
+            "entering the lingering VFX after the cone closes does not apply a late stun");
+    }
+
+    private static void NestedGeometry()
+    {
+        var nodes = SpellAreas.Nodes(T("MOB_HERETIC_BALLISTA_LINE").Effects.Single()).ToList();
+        var shape = nodes.Single();
+        var (center, yaw) = shape.Frame(Vector2.Zero, 90, 1);
+        var expected = SpellMovement.Facing(121) * 1.6f + SpellMovement.Facing(87.5f) * 19.5f;
+        Check(Vector2.Distance(center, expected) < 0.001f && Math.Abs(yaw - 87.5) < 0.001,
+            "each nested offset uses the cumulative parent rotation");
+        Check(shape.Distance.At(0) == 1 && shape.Distance.At(1) == 19.5 && shape.Distance.At(2) == 38,
+            "compact 1-38 distance spans the two-second flight");
+        Check(SpellAreas.Curve.Of("AS0:0;1.7:4", 10).At(1.7) == 4
+            && SpellAreas.Curve.Of("-2--4", 2).At(1) == -3
+            && SpellAreas.Curve.Of("1e-2", 2).At(1) == 0.01,
+            "explicit second keys, negative endpoints and scientific constants retain their meaning");
+        var rectangle = XElement.Parse("<spelleffectarea time='2'><area><shape><node distance='3'><rectangle width='0-4' height='2'/></node></shape></area></spelleffectarea>");
+        var rect = SpellAreas.Nodes(rectangle).ToList();
+        Check(!SpellAreas.Inside(rect, rect[0].Reach, Vector2.Zero, 0, 0, new Vector2(0, 3), 0.3f, 0, zeroOff: true)
+            && SpellAreas.Inside(rect, rect[0].Reach, Vector2.Zero, 0, 0, new Vector2(1.5f, 3), 0, SpellCasts.Seconds(2), zeroOff: true),
+            "a zero-width rectangle is inactive and its width grows over the area lifetime");
+        Check(Math.Abs(rect[0].Reach - (3 + Math.Sqrt(20) / 2)) < 0.001,
+            "reach includes the offset and maximum rectangle dimensions");
+    }
+
+    private static void TutorialBallistaAi()
+    {
+        using var arena0 = new Arena(ai: true, spells: true);
+        var (_, peer, me) = arena0.Join("BallistaAiTarget", new InventoryItem("T2_MAIN_SWORD"));
+        var (arena, _) = Quiet(arena0);
+        var mob = arena.Spawn("T2_MOB_HERETIC_BALLISTA_TUTORIAL", new Vector2(0, -8));
+        Check(mob.AI is BehaviourAI && new[] { "1009", "1010" }.Any(id => Store.Get(id).MobSpawnPoints.Any(p => p.Mob == mob.Template.Name)),
+            "the tutorial places this ballista and it inherits the reference AI");
+        var events = new List<Timed>();
+        Engage(arena, peer, mob, [me], events);
+        events.AddRange(Record(arena, peer, 4, [me]));
+        Check(events.Any(e => e.Code == EventCodes.CastStart && Is(e.P, mob.Id) && Convert.ToInt16(e.P[5]) == T("MOB_HERETIC_BALLISTA_LINE").Id),
+            "the ballista AI starts its line shot");
+        Check(events.Any(e => e.Code == EventCodes.HealthUpdate && Is(e.P, me.Id)
+            && Convert.ToInt16(e.P[7]) == T("MOB_HERETIC_BALLISTA_KNOCKBACK_EFFECT").Id && F(e.P, 2) < 0),
+            "the AI's shot damages the stationary player");
+    }
+
+    private static void TutorialMortarRanges()
+    {
+        foreach (var distance in new[] { 4.9f, 5.1f, 20f })
+        {
+            using var arena0 = new Arena(ai: true, spells: true);
+            var (_, peer, me) = arena0.Join("MortarRangeTarget", new InventoryItem("T2_MAIN_SWORD"));
+            var (arena, _) = Quiet(arena0);
+            var mob = arena.Spawn("T2_MOB_HERETIC_MORTAR", new Vector2(0, -distance));
+            var spellIds = new[] { "A", "B", "C", "D", "E" }.Select(s => T("MOB_HERETIC_MORTAR_CONE_" + s)).ToList();
+            Check(mob.Template is { AggroRadius: 5, AggroConeLength: 0, MoveSpeed: 0, AttackMoveSpeed: 0 }
+                  && mob.AI is BehaviourAI && spellIds.All(s => s.CastRange == 30),
+                "installed mortar has separate detection and ground-cast ranges, no frontal extension or movement");
+            var events = Record(arena, peer, 8, [me]); // past the five-second spawn delay
+            bool Shot(IEnumerable<Timed> list) => list.Any(e => e.Code == EventCodes.CastStart && Is(e.P, mob.Id)
+                && spellIds.Any(s => s.Id == Convert.ToInt16(e.P[5])));
+            if (distance < 5)
+                Check(mob.AI.State == MobState.Combat && Shot(events), "mortar detects and fires at 4.9 m without being hit");
+            else
+            {
+                Check(mob.AI.State == MobState.Idle && !Shot(events), $"mortar stays idle at {distance} m without a threat");
+                lock (arena.World.Sync) Combat.Damage(me, mob, 1, EffectType.Physical, HitOrigin.Direct, -1, arena.World.GameNow);
+                events = Record(arena, peer, 4, [me]);
+                Check(mob.AI.State == MobState.Combat && Shot(events), $"first damage starts retaliation at {distance} m, beyond detection range");
+            }
+        }
+    }
+
+    private static void TutorialProjectiles()
+    {
+        using var arena0 = new Arena(spells: true);
+        var (_, peer, me) = arena0.Join("BallistaTarget", new InventoryItem("T2_MAIN_SWORD"));
+        var (arena, map) = Quiet(arena0);
+        var world = arena.World;
+        var mob = arena.Spawn("T2_MOB_HERETIC_BALLISTA_TUTORIAL", new Vector2(0, -8));
+        var spell = T("MOB_HERETIC_BALLISTA_LINE");
+        var effect = T("MOB_HERETIC_BALLISTA_KNOCKBACK_EFFECT");
+        var node = spell.Effects.Single(e => e.Name.LocalName == "spelleffectarea");
+        var shapes = SpellAreas.Nodes(node).ToList();
+        Check(shapes.Count == 1 && shapes[0].Kind == "circle" && shapes[0].Reach > 38,
+            "the nested ballista projectile has a circle and its full travel reach");
+        var start = world.GameNow;
+        Check(!SpellAreas.Inside(shapes, shapes[0].Reach, Vector2.Zero, 0, start, new Vector2(0, 10), 0.33f, start),
+            "the projectile does not hit ten metres ahead before travelling there");
+
+        var mark = peer.Events.Count;
+        lock (world.Sync)
+            MobCasts.Start(world, map, new MobCast { Caster = mob, Spell = spell, Point = arena.Stand, Start = start,
+                End = start + SpellCasts.Seconds(spell.CastingTime), Ap = mob.Template.AbilityPower, Counter = 1 });
+        arena.Run(0.75);
+        Check(!Since(peer, mark).Any(e => e.Code == EventCodes.HealthUpdate && Convert.ToInt16(e.P[7]) == effect.Id),
+            "no damage while the projectile has not reached the player");
+        arena.Run(1.7);
+        var hits = Since(peer, mark).Where(e => e.Code == EventCodes.HealthUpdate && Is(e.P, me.Id) && Convert.ToInt16(e.P[7]) == effect.Id).ToList();
+        Check(hits.Count == 1 && F(hits[0].P, 2) < 0, "the moving ballista projectile deals damage exactly once");
+        Check(!map.Objects.Values.OfType<MobArea>().Any(a => a.Owner == mob), "the first collision removes the ballista projectile");
+
+        // A perpendicular shot must not hit the same player, and must leave when its flight ends.
+        mark = peer.Events.Count;
+        start = world.GameNow;
+        lock (world.Sync)
+            MobCasts.Execute(new MobCasts.MobHit(mob, map, spell, 2, mob.Template.AbilityPower, null,
+                mob.Position + new Vector2(20, 0), start), spell);
+        arena.Run(2.2);
+        Check(!Since(peer, mark).Any(e => e.Code == EventCodes.HealthUpdate && Convert.ToInt16(e.P[7]) == effect.Id)
+            && !map.Objects.Values.OfType<MobArea>().Any(a => a.Owner == mob), "a missed projectile deals no damage and expires");
+
+        var mage = arena.Spawn("T2_MOB_HERETIC_MAGE", new Vector2(0, -5));
+        var fire = T("HERETIC_MAGE_AOE");
+        start = world.GameNow;
+        var point = me.PositionAt(DateTime.UtcNow);
+        mark = peer.Events.Count;
+        lock (world.Sync)
+            MobCasts.Start(world, map, new MobCast { Caster = mage, Spell = fire, Point = point, Start = start,
+                End = start + SpellCasts.Seconds(fire.CastingTime), Ap = mage.Template.AbilityPower, Counter = 1 });
+        arena.Run(1.9);
+        Check(!Since(peer, mark).Any(e => e.Code == EventCodes.HealthUpdate && Convert.ToInt16(e.P[7]) == fire.Id), "mage damage waits for its cast");
+        arena.Run(0.2);
+        Check(Since(peer, mark).Any(e => e.Code == EventCodes.HealthUpdate && Is(e.P, me.Id) && Convert.ToInt16(e.P[7]) == fire.Id && F(e.P, 2) < 0),
+            "a player remaining in the mage's ground circle takes damage");
+    }
+
     private static ClusterStore Store => Client.Clusters!;
 
     private static SpellTemplate T(string name) => Client.Spells!.Template(name) ?? throw new Exception($"{name} not in spells.xml");
@@ -46,6 +220,9 @@ public static class MobSpellTest
     private static (Arena Arena, Map Map) Quiet(Arena arena)
     {
         var map = arena.World.Maps.Find("0204")!;
+        // Spell timing and hit tests use open ground, not a wall grid that may load mid-fight.
+        var x = (int)Math.Floor(arena.Stand.X); var z = (int)Math.Floor(arena.Stand.Y);
+        MobNav.Use(map, WalkGrid.FromCells(x - 180, z - 180, x + 180, z + 180, [], [arena.Stand]));
         lock (arena.World.Sync)
             foreach (var m in map.Objects.Values.OfType<Mob>().Where(m => Vector2.Distance(m.Position, arena.Stand) < 150).ToList())
                 SpawnManager.Despawn(m, arena.World, respawn: false);

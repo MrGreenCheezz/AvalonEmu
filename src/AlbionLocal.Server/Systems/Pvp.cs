@@ -448,6 +448,7 @@ public static class Pvp
         var health = target.Health.At(ticks);
         var left = (float)SpellEffects.Clamp(world, target, health, Math.Max(0, health - damage), ticks);
         if (left > Math.Max(0, health - damage)) damage = health - left;
+        if (damage > 0) Mounts.Cancel(target, "damage");
         HealthUpdateEvent? update = null;
         if (damage > 0 || raw <= 0)
         {

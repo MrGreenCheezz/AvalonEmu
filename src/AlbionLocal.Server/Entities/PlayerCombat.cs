@@ -94,8 +94,9 @@ public sealed class PlayerCombat
     /// <summary>The get-up buff <see cref="BuffDue"/> brings (SPAWN_KNOCKDOWN_INVULNERABILITY; a PvP knockdown's the archetype's, stageE).</summary>
     public string UpBuff { get; internal set; } = Systems.Knockdown.BuffSpell;
 
-    /// <summary>Knocked down or on the get-up buff: mobs neither aggro nor hit it.</summary>
-    public bool Untouchable => Down is not null || InvulnerableUntil is not null;
+    /// <summary>Knocked down, getting up with PvE protection due, or on the get-up buff: mobs neither aggro nor hit it.</summary>
+    public bool Untouchable => Down is not null || InvulnerableUntil is not null
+        || (BuffDue is not null && UpBuff == Systems.Knockdown.BuffSpell);
 }
 
 /// <summary>

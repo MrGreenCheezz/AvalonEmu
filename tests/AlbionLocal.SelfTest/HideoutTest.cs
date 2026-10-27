@@ -323,7 +323,7 @@ public static class HideoutTest
             {
                 c.Open();
                 using var cmd = c.CreateCommand();
-                cmd.CommandText = "DROP TABLE hideout_homes; DROP TABLE hideouts; PRAGMA user_version=39;";
+                cmd.CommandText = "ALTER TABLE progression DROP COLUMN tracked; DROP TABLE hideout_homes; DROP TABLE hideouts; PRAGMA user_version=39;";
                 cmd.ExecuteNonQuery();
             }
             using (var migrated = new SqliteCharacterRepository(path))
@@ -333,7 +333,7 @@ public static class HideoutTest
                 c.Open();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "PRAGMA user_version";
-                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 42, "schema version 42");
+                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 43, "schema version 43");
             }
         }
         finally { Directory.Delete(dir, true); }

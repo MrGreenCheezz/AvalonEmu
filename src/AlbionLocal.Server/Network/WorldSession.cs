@@ -189,6 +189,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         });
         if (player.Character.Progression is { } own && Systems.Destiny.FullProgress(player.Id, own, world.GameData?.Board) is { } full)
             SendEvent(full);
+        SendEvent(Systems.Destiny.Tracked(player.Id, progression, world.GameData?.Board));
         // FullAutoLearnAchievementInfo (155), the official third (§6.5): the auto-learn nodes as op 312 left them (stageJ focus-lp SPEC §5.3);
         // key 3 only when the client sent one, key 4 only with 2 entries or more (the handler indexes it per learn group).
         SendEvent(new FullAutoLearnAchievementInfoEvent

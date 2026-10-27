@@ -217,7 +217,8 @@ public class AggressiveAI(Mob me) : MobAI(me)
     }
 
     /// <summary>A player it may fight: on its map, alive, joined, neither knocked down nor on the get-up's invulnerability (stage 5e).</summary>
-    protected static bool Valid(Player p, Map map) => p.Map == map && !p.Combat.Untouchable && p.Health.At(p.World.GameNow) > 0;
+    protected static bool Valid(Player p, Map map) => p.Map == map && !p.Combat.Untouchable
+        && p.Health.At(p.World.GameNow) > 0 && !SpellEffects.InvisibleToMobs(p, p.World.GameNow);
 
     // ---- combat ----
 
@@ -237,7 +238,8 @@ public class AggressiveAI(Mob me) : MobAI(me)
         _lastSwing = world.Now;
         _aim = null;
         _idleUntil = null;
-        Log.Debug("ai", $"{Me} fights '{target.Character.Name}'");
+        Log.Debug("ai", string.Create(CultureInfo.InvariantCulture,
+            $"{Me} fights '{target.Character.Name}': first basic attack ready in {(_nextSwing - world.GameNow) / (double)TimeSpan.TicksPerSecond:0.###} s"));
         OnEnterCombat(world);
         if (!alert || Me.Template.AlertRadius <= 0) return;
         var here = Me.Position;
@@ -426,6 +428,8 @@ public class AggressiveAI(Mob me) : MobAI(me)
         WindupEnd = damageAt;
         var flight = melee ? 0 : Vector2.Distance(Me.Position, target.PositionAt(DateTime.UtcNow)) / world.Combat.AutoAttackProjectileSpeed;
         var impact = damageAt + SpellCasts.Seconds(flight);
+        Log.Debug("ai", string.Create(CultureInfo.InvariantCulture,
+            $"{Me} starts a basic attack on '{target.Character.Name}': hit in {(impact - now) / (double)TimeSpan.TicksPerSecond:0.###} s"));
         byte type = t.AttackType switch { "ranged" => 2, "magic" => 4, _ => 1 };
         map.SendToObservers(Me, new AttackEvent
         {
@@ -506,6 +510,9 @@ public class AggressiveAI(Mob me) : MobAI(me)
         Me.TargetId = 0;
         _aim = null;
         Combat.EnemyGone(map, Me);
+        // An in-place reset still needs a fresh stop sample: the client may retain
+        // the last attack's facing target even when the server was already stationary.
+        if (!Me.Motion.Moving) Me.Motion.Stop(force: true);
         Log.Debug("ai", $"{Me} resets: {why}");
         Summons.Reset(world, map, Me); // ttlafterreset, ttlaftercasterreset (stageD effects batch 3)
         var t = Me.Template;

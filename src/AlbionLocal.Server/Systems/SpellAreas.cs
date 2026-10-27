@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Data;
@@ -385,29 +386,66 @@ public static class SpellAreas
     /// </summary>
     public sealed record ShapeNode(float Angle, Curve Distance, string? Kind, Curve Radius, float Width, float Height, float Opening, Curve Inner, Curve Outer)
     {
-        public float Reach => (float)Distance.Max + Kind switch
+        public ShapeNode? Parent { get; init; }
+
+        public Curve? AnimatedWidth { get; init; }
+
+        public Curve? AnimatedHeight { get; init; }
+
+        public Curve? AnimatedOpening { get; init; }
+
+        private float OffsetReach => (float)Distance.Keys.Max(k => Math.Abs(k.V)) + (Parent?.OffsetReach ?? 0);
+
+        public float Reach => OffsetReach + (Kind switch
         {
             "circle" => (float)Radius.Max,
-            "rectangle" => new Vector2(Width, Height).Length() / 2,
+            "rectangle" => new Vector2((float)(AnimatedWidth?.Max ?? Width), (float)(AnimatedHeight?.Max ?? Height)).Length() / 2,
             "arc" => (float)Outer.Max,
             _ => 0f,
-        };
+        });
+
+        public (Vector2 Center, float Yaw) Frame(Vector2 origin, float direction, double seconds)
+        {
+            var (center, yaw) = Parent?.Frame(origin, direction, seconds) ?? (origin, direction);
+            yaw += Angle;
+            return (center + SpellMovement.Facing(yaw) * (float)Distance.At(seconds), yaw);
+        }
     }
 
     /// <summary>
-    /// The node shapes of a spelleffectarea node (also the mobs' areas, <see cref="MobCasts"/>). A shape written without a &lt;node&gt;
-    /// (AOE_SLOW, BLIZZARD: &lt;shape&gt;&lt;circle radius="5"/&gt;&lt;/shape&gt;) is one node at the origin.
+    /// The leaf shapes of a spelleffectarea node (also the mobs' areas, <see cref="MobCasts"/>), retaining nested node transforms.
+    /// A shape without a node (AOE_SLOW, BLIZZARD) is at the origin. Compact curves span the area's time.
     /// </summary>
-    public static IEnumerable<ShapeNode> Nodes(XElement node) =>
-        node.Element("area")?.Element("shape") is { } s
-            ? (s.Elements("node").Any() ? s.Elements("node") : s.Elements().Any(e => e.Name.LocalName is "circle" or "rectangle" or "arc") ? [s] : []).Select(n =>
+    public static IEnumerable<ShapeNode> Nodes(XElement node)
+    {
+        var seconds = SpellTemplate.Float(node, "time");
+        return node.Element("area")?.Element("shape") is { } shape ? Walk(shape, null) : [];
+
+        IEnumerable<ShapeNode> Walk(XElement element, ShapeNode? parent)
         {
-            var shape = n.Elements().FirstOrDefault(e => e.Name.LocalName is "circle" or "rectangle" or "arc");
-            return new ShapeNode(SpellTemplate.Float(n, "angle"), Curve.Of((string?)n.Attribute("distance")), shape?.Name.LocalName,
-                Curve.Of((string?)shape?.Attribute("radius")), shape is null ? 0 : SpellTemplate.Float(shape, "width"),
-                shape is null ? 0 : SpellTemplate.Float(shape, "height"), shape is null ? 360 : SpellTemplate.Float(shape, "angle", 360),
-                Curve.Of((string?)shape?.Attribute("innerradius")), Curve.Of((string?)shape?.Attribute("outerradius")));
-        }) : [];
+            var frame = new ShapeNode(SpellTemplate.Float(element, "angle"), Curve.Of((string?)element.Attribute("distance"), seconds),
+                null, Curve.Of(null), 0, 0, 360, Curve.Of(null), Curve.Of(null)) { Parent = parent };
+            foreach (var child in element.Elements())
+            {
+                if (child.Name.LocalName == "node")
+                {
+                    foreach (var nested in Walk(child, frame)) yield return nested;
+                }
+                else if (child.Name.LocalName is "circle" or "rectangle" or "arc")
+                    yield return frame with
+                    {
+                        Kind = child.Name.LocalName, Radius = Curve.Of((string?)child.Attribute("radius"), seconds),
+                        Width = SpellTemplate.Float(child, "width"), Height = SpellTemplate.Float(child, "height"),
+                        AnimatedWidth = Curve.Of((string?)child.Attribute("width"), seconds),
+                        AnimatedHeight = Curve.Of((string?)child.Attribute("height"), seconds),
+                        Opening = SpellTemplate.Float(child, "angle", 360),
+                        AnimatedOpening = Curve.Of((string?)child.Attribute("angle") ?? "360", seconds),
+                        Inner = Curve.Of((string?)child.Attribute("innerradius"), seconds),
+                        Outer = Curve.Of((string?)child.Attribute("outerradius"), seconds),
+                    };
+            }
+        }
+    }
 
     /// <summary>
     /// Whether a unit at <paramref name="at"/> with <paramref name="radius"/> (its collision radius) touches the area at
@@ -430,10 +468,10 @@ public static class SpellAreas
         if (shapes.Count == 0) return Vector2.Distance(at, origin) <= reach + radius;
         foreach (var n in shapes)
         {
-            var yaw = direction + n.Angle;
+            var (center, yaw) = n.Frame(origin, direction, t);
             var along = SpellMovement.Facing(yaw);
             var across = new Vector2(along.Y, -along.X);
-            var d = at - (origin + along * (float)n.Distance.At(t));
+            var d = at - center;
             switch (n.Kind)
             {
                 case "circle":
@@ -441,14 +479,19 @@ public static class SpellAreas
                     if (d.Length() <= n.Radius.At(t) + radius) return true;
                     break;
                 case "rectangle":
-                    if (Math.Abs(Vector2.Dot(d, along)) <= n.Height / 2 + radius && Math.Abs(Vector2.Dot(d, across)) <= n.Width / 2 + radius) return true;
+                    var width = n.AnimatedWidth?.At(t) ?? n.Width;
+                    var height = n.AnimatedHeight?.At(t) ?? n.Height;
+                    if (zeroOff && (width <= 0 || height <= 0)) break;
+                    if (Math.Abs(Vector2.Dot(d, along)) <= height / 2 + radius && Math.Abs(Vector2.Dot(d, across)) <= width / 2 + radius) return true;
                     break;
                 case "arc":
+                    var opening = n.AnimatedOpening?.At(t) ?? n.Opening;
+                    if (opening <= 0 || (zeroOff && n.Outer.At(t) <= 0)) break;
                     var length = d.Length();
                     if (length > n.Outer.At(t) + radius || length < n.Inner.At(t) - radius) break;
                     if (length < 0.01f) return true;
                     var off = Math.Acos(Math.Clamp(Vector2.Dot(d / length, along), -1, 1)) * 180 / Math.PI;
-                    if (off <= n.Opening / 2) return true;
+                    if (off <= opening / 2) return true;
                     break;
             }
         }
@@ -456,15 +499,23 @@ public static class SpellAreas
     }
 
     /// <summary>
-    /// A spells.xml value that may change over time: "1.5", or keyframes "A 0:0.5; 0.6:16.5" / "0:0; 0.57:0; 1:6" (seconds:value,
-    /// the leading letters dropped), linear between them and held after the last.
+    /// A spells.xml constant, compact start-end range over the area's lifetime, or explicit seconds:value keyframes (leading
+    /// A/S flags dropped), linear between keys and held after the last.
     /// </summary>
     public sealed record Curve(IReadOnlyList<(double T, double V)> Keys)
     {
-        public static Curve Of(string? text)
+        public static Curve Of(string? text, double duration = 1)
         {
             if (string.IsNullOrWhiteSpace(text)) return new([(0, 0)]);
             var body = text.TrimStart().TrimStart('A', 'S', 'a', 's').Trim();
+            if (double.TryParse(body, NumberStyles.Float, CultureInfo.InvariantCulture, out var constant)) return new([(0, constant)]);
+            // Compact start-end curves span the area's lifetime; explicit keys retain their seconds.
+            const string number = @"[+-]?\d*\.?\d+(?:[eE][+-]?\d+)?";
+            var range = Regex.Match(body, $@"^({number})\s*-\s*({number})$");
+            if (duration > 0 && range.Success
+                && double.TryParse(range.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var from)
+                && double.TryParse(range.Groups[2].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var to))
+                return new([(0, from), (duration, to)]);
             var keys = new List<(double, double)>();
             foreach (var part in body.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             {
@@ -487,7 +538,7 @@ public static class SpellAreas
                 {
                     var (t0, v0) = Keys[i - 1];
                     var (t1, v1) = Keys[i];
-                    return t1 <= t0 ? v1 : v0 + (v1 - v0) * (t - t0) / (t1 - t0);
+                    return t == t1 || t1 <= t0 ? v1 : v0 + (v1 - v0) * (t - t0) / (t1 - t0);
                 }
             return Keys[^1].V;
         }

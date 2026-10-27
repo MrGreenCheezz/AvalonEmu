@@ -26,6 +26,7 @@ public static class MobAiTest
 {
     public static IEnumerable<(string, Action)> All =>
     [
+        ("mob AI: get-up bubble removes an existing target and threat, resets in place with a stop sample, and preserves other valid targets", ProtectedTargetReset),
         ("mob AI: soldier aggro inside 8 m, chase (event 3), stop in reach, Attack every 2.5 s with the player's HealthUpdate, leash with MOB_RETURNHOME, home and reset", SoldierFight),
         ("mob AI: a passive rabbit roams and fights only when hit; the target changes past 1.1 × the threat in range", PassiveAndThreat),
         ("mob AI: a soldier led past its pursuit radius resets there; .mob ai off settles a returning mob", PursuitLeash),
@@ -34,6 +35,55 @@ public static class MobAiTest
     ];
 
     private const string Soldier = "T4_MOB_UNDEAD_SOLDIER_VETERAN";
+
+    private static void ProtectedTargetReset()
+    {
+        using var arena0 = new Arena(ai: true);
+        var (_, peer, me) = arena0.Join("BubbleTarget", new InventoryItem("T4_MAIN_SWORD"));
+        var (arena, map) = Quiet(arena0);
+        var world = arena.World;
+        var mob = arena.Spawn(Soldier, Vector2.Zero);
+        me.Teleport(mob.Position + new Vector2(0, 1.5f), 0, DateTime.UtcNow);
+        arena.Run(Math.Max(0.1, mob.Template.AggroDelayAfterSpawn + 0.1));
+        Check(mob.TargetId == me.Id && mob.Threat.ContainsKey(me) && !mob.Motion.Moving,
+            "a stationary mob is already fighting the player before protection");
+        arena.Run(world.Combat.MobReactionTime.TotalSeconds + mob.Template.MeleeAttackDamageTime + 0.1);
+        Check(Since(peer, 0).Any(e => e.Code == EventCodes.Attack && L(e.P, 0) == mob.Id && L(e.P, 2) == me.Id),
+            "the client has already received an attack targeting this player");
+        var mark = peer.Events.Count;
+        var spell = world.Spells!.Template(Knockdown.BuffSpell)!;
+        void Bubble(Player player) => SpellCasts.Execute(new SpellCasts.SpellContext(player, map,
+            spell, 0, 100, null, player.PositionAt(DateTime.UtcNow), world.GameNow), spell);
+        Bubble(me);
+        arena.Run(0.1);
+        Check(mob.TargetId == 0 && mob.Threat.Count == 0 && mob.AI.State != MobState.Combat && !me.Combat.InCombat,
+            "the actual bubble effects drop an existing target even without a legacy protection flag");
+        Check(Moves(peer, mark, mob).Any(m => m.Speed == 0 && m.Pos == m.Target),
+            "reset at the home position publishes a fresh authoritative stop sample");
+        var health = me.Health.At(world.GameNow);
+        mark = peer.Events.Count;
+        arena.Run(2);
+        Check(me.Health.At(world.GameNow) >= health && !Since(peer, mark).Any(e => e.Code == EventCodes.Attack && L(e.P, 0) == mob.Id),
+            "the old attack is cancelled and the bubble cannot be reacquired");
+
+        // One protected player must not reset a mob that can still fight somebody else.
+        var (_, _, other) = arena.Join("OtherTarget", new InventoryItem("T4_MAIN_SWORD"));
+        other.Teleport(mob.Position + new Vector2(0, 2), 0, DateTime.UtcNow);
+        arena.Run(0.1);
+        Check(mob.TargetId == other.Id && mob.Threat.ContainsKey(other),
+            "the mob can acquire an unprotected player beside the bubble");
+        var (_, _, third) = arena.Join("RemainingThreat", new InventoryItem("T4_MAIN_SWORD"));
+        third.Teleport(mob.Position + new Vector2(0, 2.5f), 0, DateTime.UtcNow);
+        mob.AI.AddThreat(third, 0.5);
+        Bubble(other);
+        arena.Run(0.1);
+        Check(mob.AI.State == MobState.Combat && mob.TargetId == third.Id && !mob.Threat.ContainsKey(other),
+            "protecting the current target retargets another valid threat instead of resetting the whole fight");
+        Bubble(third);
+        arena.Run(0.1);
+        Check(mob.TargetId == 0 && mob.Threat.Count == 0 && mob.AI.State != MobState.Combat,
+            "once every target is protected the mob resets again");
+    }
 
     /// <summary>
     /// An arena with the AI on and every mob within 150 m of the stand despawned for good, so only the test's own mobs act, on an open walk

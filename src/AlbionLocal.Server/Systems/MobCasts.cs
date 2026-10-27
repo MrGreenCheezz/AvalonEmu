@@ -880,7 +880,8 @@ public static class MobCasts
         Log.Debug("ai", string.Create(CultureInfo.InvariantCulture,
             $"{mob} {spell}: area #{area.Id} [{index}] at ({origin.X:0.##}, {origin.Y:0.##}) facing {area.Yaw:0.#} for {seconds:0.##} s"));
         // The shapes' keyframes (AOE_SLOW_EFFECT's radius 0 → 4 at 1.7 s hits exactly then, SPEC §4.4 item 6).
-        foreach (var t in shapes.SelectMany(s => s.Radius.Keys.Concat(s.Outer.Keys)).Select(k => k.T).Where(t => t > 0 && t <= seconds).Distinct())
+        foreach (var t in shapes.SelectMany(s => s.Radius.Keys.Concat(s.Outer.Keys).Concat(s.AnimatedOpening?.Keys ?? []))
+            .Select(k => k.T).Where(t => t > 0 && t <= seconds).Distinct())
         {
             var at = area.Start + SpellCasts.Seconds(t);
             map.Timers.At(world.ClockAt(at), () => Tick(world, area, at, chain: false));

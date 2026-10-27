@@ -218,10 +218,11 @@ public static class FocusTest
         var codes = burst.Select(e => e.Code).ToList();
         var lp = burst.Single(e => e.Code == EventCodes.UpdateLearningPoints).P;
         var fame = burst.Single(e => e.Code == EventCodes.UpdateFame).P;
-        Check(codes.SequenceEqual([EventCodes.UpdateLearningPoints, EventCodes.AchievementProgressInfo, EventCodes.UpdateFame])
+        Check(codes.SequenceEqual([EventCodes.FullTrackedAchievementInfo, EventCodes.UpdateLearningPoints, EventCodes.AchievementProgressInfo, EventCodes.UpdateFame])
+              && ((int[])burst[0].P[1]!).SequenceEqual([fiber])
               && L(lp, 5) == -393 && L(lp, 1) == 1_000_000 - 393 && !lp.ContainsKey(6) && L(fame, 12) == 270_000 && L(fame, 13) == 270_000 && L(fame, 14) == 393
               && me.Character.LearningPoints == 1_000_000 - 393 && me.Character.Progression!.Progress[fiber] == 150_125_000 + 337_500,
-              $"the burst 83, 152, 82 with 393 LP spent and 27 fame bought (got {Show(burst)})");
+              $"tracking selects fiber, then the burst 83, 152, 82 with 393 LP spent and 27 fame bought (got {Show(burst)})");
 
         // The next Join: 150 key 5 flags the auto-learn node, 155 key 1 lists it.
         lock (world.Sync) peer.Disconnect();

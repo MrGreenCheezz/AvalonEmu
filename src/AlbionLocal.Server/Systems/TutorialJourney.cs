@@ -56,14 +56,18 @@ public static class TutorialJourney
         if (delta > 0) Store(p, State(p) with { JourneyOnlineTicks = checked(State(p).JourneyOnlineTicks + delta),
             JourneyTaskTicks = checked(State(p).JourneyTaskTicks + delta) });
         if (!Running(p) || SpellEffects.Stunned(p, p.World.GameNow)) return;
-        var task = Task(p); var before = State(p).JourneyCounters;
-        var counts = Counters(p);
-        var missions = Missions(task);
-        var done = missions.Select((m, i) => Evaluate(p, m, i.ToString(CultureInfo.InvariantCulture), counts, clock)).ToArray();
-        var serialized = JsonSerializer.Serialize(counts);
-        if (serialized != before) Store(p, State(p) with { JourneyCounters = serialized });
-        if (done.All(v => v)) Advance(p);
-        else if (serialized != before) SendProgress(p, false);
+        // Settle already-satisfied steps in this operation, so the next NPC marker is ready immediately.
+        for (var transitions = 0; Running(p) && transitions < 64; transitions++)
+        {
+            var task = Task(p); var before = State(p).JourneyCounters;
+            var counts = Counters(p);
+            var missions = Missions(task);
+            var done = missions.Select((m, i) => Evaluate(p, m, i.ToString(CultureInfo.InvariantCulture), counts, clock)).ToArray();
+            var serialized = JsonSerializer.Serialize(counts);
+            if (serialized != before) Store(p, State(p) with { JourneyCounters = serialized });
+            if (!done.All(v => v)) { if (serialized != before) SendProgress(p, false); break; }
+            Advance(p);
+        }
     }
     private static bool Evaluate(Player p, XElement m, string key, Dictionary<string, long> counts, OnlineClock clock)
     {
@@ -110,7 +114,7 @@ public static class TutorialJourney
             case "mount": value = p.IsMounted && p.Inventory.Equipment.Items.Any(i => i.Template.Name == Attr(m, "itemid")) ? 1 : 0; break;
             case "haveavgitempower": value = AverageItemPower(p) >= Number(m, "itempower") ? 1 : 0; break;
             case "haveplaytime":
-                // Q's minimum is total online tutorial time; ship repair's wait starts at its task.
+                // haveplaytime checks the character's online play time, not time spent in this task.
                 var ticks = PlayedTicks(p);
                 value = ticks >= Number(m, "seconds") * TimeSpan.TicksPerSecond ? 1 : 0; break;
             case "killmob": case "gather": case "marketbuyitem": case "usefunction":
@@ -335,7 +339,7 @@ public static class TutorialJourney
         return new QuestGiverInfoForPlayerEvent { BuildingObjectId = npc.Id,
             QuestGiverGuid = ((CriticalMember)npc.Spawn).Guid!.Value, QuestGiverType = npc.QuestGiverType,
             // The client checks the agent's funds before sending an acceptance request. Tutorial
-            // agents cover their largest authored reward per private player, without a shared pool.
+            // agents cover their largest authored reward per player, without a shared pool.
             // Rewards are still credited only by Complete, with its persisted delivery checkpoint.
             dr2 = Data(p).Quests.Where(q => OfferingNpc(p, q, npc))
                 .Select(q => checked(Number(q.Definition.Element("rewards")?.Element("silver") ?? new XElement("silver"), "absolute", 0) * 10000))
@@ -382,8 +386,7 @@ public static class TutorialJourney
             dsf = missions.Select((m, i) => ready || counts.GetValueOrDefault(i.ToString()) >= Math.Max(1, Number(m, "count", 1))).ToArray(),
             dsg = announce ? State(p).JourneyTask : -1, dsh = announce ? 0 : -1 });
     }
-    private static long PlayedTicks(Player p) => Quest(p).Name.EndsWith("_Q", StringComparison.Ordinal)
-        ? checked(p.Character.PlayedMilliseconds * TimeSpan.TicksPerMillisecond) : State(p).JourneyTaskTicks;
+    private static long PlayedTicks(Player p) => checked(p.Character.PlayedMilliseconds * TimeSpan.TicksPerMillisecond);
     /// <summary>Uses the emulator's six-position average (weapon, offhand, head, chest, shoes, cape),
     /// with two-handed weapons filling both hands. Each item's power includes the actual destiny,
     /// quality and durability contributions; template base values alone omit the tutorial's large

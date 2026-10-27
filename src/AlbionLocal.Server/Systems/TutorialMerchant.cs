@@ -17,14 +17,15 @@ public static class TutorialMerchant
 
     public static IEnumerable<MarketOrder> Orders(Player player, string location, string type)
     {
-        if (type != MarketOrder.Offer || player.Map is not { TutorialOwner: { } owner, Cluster: "1011" } map
-            || owner != player.Character.Id || location != map.InstanceKey) yield break;
+        if (type != MarketOrder.Offer || !player.World.Config.TutorialOpening || player.Character.Tutorial is not { Version: 1 }
+            || player.Map is not { Cluster: "1011" } map
+            || map.TutorialOwner is { } owner && owner != player.Character.Id || location != map.InstanceKey) yield break;
         foreach (var name in Stock)
         {
             if (player.World.Items.Find(name) is not { CanCreate: true } item) continue;
             var id = FirstId + item.Index;
             var today = DateTime.UtcNow.Date;
-            yield return new MarketOrder(id, Guid.Empty, MarketOrder.Offer, location, name, 1, 999,
+            yield return new MarketOrder(id, Guid.Empty, MarketOrder.Offer, location, name, 1, 1,
                 name == "T2_MOUNT_MULE" ? LaboratoryMulePrice : LaboratoryEquipmentPrice, today, today.AddDays(30),
                 new Guid((int)id, 0x5455, 0x544f, [0x52, 0x49, 0x41, 0x4c, 0, 0, 0, 1]), null);
         }

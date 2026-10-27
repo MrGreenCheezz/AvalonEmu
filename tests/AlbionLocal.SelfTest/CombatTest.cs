@@ -25,6 +25,7 @@ public static class CombatTest
     public static IEnumerable<(string, Action)> All =>
     [
         ("combat: formulas (resistance, IP and AP scaling, heal exponent, rounding, energy, fame) and their data (spells.xml, gamedata, danger type)", Formulas),
+        ("combat: silver appearance follows premium eligibility without changing pickup ownership", SilverAppearance),
         ("combat: T4 axe at IP 945 on a ghoul: auto 39, AXESMASH 201 after 0.4 s, observer events, refusals, instant spell, kill batch, loot bag, corpse, respawn", AxeFight),
         ("combat: fire staff at IP 1050: FIRESTAFFBOLT2 after 0.8 s with energy 8, projectile hit, 4 ticks over time, CastCancel, combat timeout", FireStaff),
         ("loot: shift+click from a bag into stacks, a full inventory and a freed slot (InventoryMoveGivenItems counts)", LootIntoStacks),
@@ -33,6 +34,24 @@ public static class CombatTest
     ];
 
     private static ClusterStore Store => Client.Clusters!;
+
+    private static void SilverAppearance()
+    {
+        using var arena = new Arena();
+        var (_, _, owner) = arena.Join("SilverOwner", new InventoryItem("T1_MAIN_SWORD"));
+        var (_, _, other) = arena.Join("SilverObserver", new InventoryItem("T1_MAIN_SWORD"));
+        var mob = arena.Spawn("T1_MOB_HERETIC_THIEF", new Vector2(1.5f, 0));
+        var pile = new SilverPile(arena.World.ObjectIds.Next(), mob, 3, 1.305, owner.Character.Id, arena.World.GameNow);
+        NewSilverObjectEvent View(Player p) => pile.BuildCreate(p).OfType<NewSilverObjectEvent>().Single();
+        Premium.Set(owner, false, arena.World.GameNow);
+        Check(!View(owner).dag && pile.MayTake(owner), "ordinary owners receive ordinary silver graphics and can collect");
+        Premium.Set(owner, true, arena.World.GameNow);
+        Check(View(owner).dag && pile.MayTake(owner), "premium owners receive premium graphics");
+        Premium.Set(other, true, arena.World.GameNow);
+        Check(!View(other).dag && !pile.MayTake(other), "an unrelated premium observer gains neither premium graphics nor ownership");
+        Check(View(owner).daa!.Single() == owner.Character.Id && View(other).daa!.Single() == owner.Character.Id,
+            "both observers receive the same actual owner, independently of premium appearance");
+    }
 
     /// <summary>The numeric checks of SPEC §5b.2, §5b.3 and §5c.2, and the client data they come from.</summary>
     private static void Formulas()
@@ -420,6 +439,9 @@ public static class CombatTest
         // The destiny board first (PROGRESSION.md §6.6): the fighter's own board has COMBAT_AXES_AXE (17) at 100 of its 120
         // levels (COMBAT_SPEC's elite rows), the only node in progress the axe feeds; COMBAT_AXES is at its last level.
         var axeNode = Client.GameData!.Board!.Find("COMBAT_AXES_AXE")!.Id;
+        Check(batch.Count > 0 && batch[0].Code == EventCodes.FullTrackedAchievementInfo
+              && ((int[])batch[0].P[1]!).SequenceEqual([axeNode]), "the kill selects the axe node for the Destiny Board HUD");
+        batch = [.. batch.Skip(1)];
         Check(batch.Count > 0 && batch[0].Code == EventCodes.AchievementProgressInfo && L(batch[0].P, 1) == axeNode && L(batch[0].P, 2) == 100
               && (string)batch[0].P[4]! == "[[2021000]]" && Math.Abs(F(batch[0].P, 3) - 2021000f / Client.GameData.Board.LevelFame(axeNode, 100)) < 1e-9,
               $"the kill's destiny board event: AchievementProgressInfo {{1 COMBAT_AXES_AXE, 2 level 100, 3 v / elite row 0, 4 [[2021000]]}} (got {Show(batch.Take(1))})");
@@ -465,8 +487,8 @@ public static class CombatTest
         // The silver (stage 5c SPEC §5c.3): ghoul T4 SILVERCOINS_LOOT_ROAMING 22.5 × silvermodifier 2.494 × 0.84..0.88 = 47-49.
         var pile = (SilverPile)world.Maps.Find("0204")!.Objects[L(silver, 0)];
         Check(Convert.ToInt32(silver[2]) is >= 47 and <= 49 && L(silver, 3) == ghoul.Id && silver[4] is true && silver[6] is byte[] { Length: 16 } owner
-              && new Guid(owner) == me.Character.Id && silver[12] is true && Convert.ToByte(silver[17]) == 0 && Convert.ToByte(silver[18]) == 0 && pile.Factor is > 1.3049 and < 1.3051,
-              $"NewSilverObject {{2: 47..49, 3 the ghoul, 4 true, 6 my Guid, 12 true, 17 0, 18 0}}, factor 1.45 × 0.9 (got {Show([(EventCodes.NewSilverObject, silver)])})");
+              && new Guid(owner) == me.Character.Id && !silver.ContainsKey(12) && Convert.ToByte(silver[17]) == 0 && Convert.ToByte(silver[18]) == 0 && pile.Factor is > 1.3049 and < 1.3051,
+              $"NewSilverObject {{2: 47..49, 3 the ghoul, 4 true, 6 my Guid, no premium key 12, 17 0, 18 0}}, factor 1.45 × 0.9 (got {Show([(EventCodes.NewSilverObject, silver)])})");
         var (bonus, guild) = (Combat.CapturedSilverBonus, Combat.CapturedSilverTax);
         Check(Combat.SilverValue(49, 1.305, bonus, guild) == (959175, 143876, 815299) && Combat.SilverValue(397, 1.305, bonus, guild) == (7771275, 1165691, 6605584)
               && Combat.SilverValue(3, 1.305, bonus, guild) == (58725, 8808, 49917) && Combat.SilverValue(173, 1.305) == (2257650, 0, 2257650)

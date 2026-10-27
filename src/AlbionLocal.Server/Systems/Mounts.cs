@@ -208,7 +208,7 @@ public static class Mounts
     }
 
     /// <summary>
-    /// The mount bar under way ends without a mount (SPEC §4.2: op 200, a walk-off, an action, a dismount request, the logout):
+    /// The mount bar under way ends without a mount (op 200, a walk-off, an action, a dismount request, logout, or damage reaching health):
     /// MountCancel {0 me} to the player and its observers, the mount item's NewEquipmentItem without key 3. Nothing when none runs.
     /// </summary>
     public static void Cancel(Player p, string why)

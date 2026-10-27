@@ -566,6 +566,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
             PRIMARY KEY (character_id, category)
         );
         """,
+        // v43: the most recently fame-fed Destiny Board HUD node. Existing saves select one on their next gain.
+        """
+        ALTER TABLE progression ADD COLUMN tracked INTEGER;
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";
@@ -912,9 +916,9 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
             }
         }
         if (c.Progression is not { } progression) return;
-        using var put = Command("INSERT INTO progression (character, completed, levels, progress) VALUES ($id, $completed, $levels, $progress)", tx,
+        using var put = Command("INSERT INTO progression (character, completed, levels, progress, tracked) VALUES ($id, $completed, $levels, $progress, $tracked)", tx,
             ("$id", c.Id.ToString()), ("$completed", JsonSerializer.Serialize(progression.Completed)),
-            ("$levels", JsonSerializer.Serialize(progression.Levels)), ("$progress", JsonSerializer.Serialize(progression.Progress)));
+            ("$levels", JsonSerializer.Serialize(progression.Levels)), ("$progress", JsonSerializer.Serialize(progression.Progress)), ("$tracked", progression.Tracked));
         put.ExecuteNonQuery();
     }
 
@@ -1088,7 +1092,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                 };
             }
         }
-        using var progression = Command("SELECT completed, levels, progress FROM progression WHERE character = $id", null, ("$id", c.Id.ToString()));
+        using var progression = Command("SELECT completed, levels, progress, tracked FROM progression WHERE character = $id", null, ("$id", c.Id.ToString()));
         using var p = progression.ExecuteReader();
         if (p.Read())
             c.Progression = new Progression
@@ -1096,6 +1100,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                 Completed = JsonSerializer.Deserialize<List<int>>(p.GetString(0)) ?? [],
                 Levels = JsonSerializer.Deserialize<SortedDictionary<int, int>>(p.GetString(1)) ?? [],
                 Progress = JsonSerializer.Deserialize<SortedDictionary<int, long>>(p.GetString(2)) ?? [],
+                Tracked = p.IsDBNull(3) ? null : p.GetInt32(3),
             };
     }
 

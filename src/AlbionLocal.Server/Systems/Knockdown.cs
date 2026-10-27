@@ -28,8 +28,8 @@ namespace AlbionLocal.Server.Systems;
 /// observers, then RegenerationHealthChanged with the regular rate. Health is max (official: max − 1 after the ramp).</item>
 /// <item><b>Invulnerability</b> getuptimeseconds (3 s) later: CastSpell {0 me, 1 me, 3 995, 6 0} and ActiveSpellEffectsUpdate
 /// with SPAWN_KNOCKDOWN_INVULNERABILITY (995, as captured; gamedata's knockdownbuffaftergetup names SPAWN_KNOCKDOWN, which
-/// has no invincibility). It ends at the player's first action (a Move that walks, AttackStart, CastStart) or after the
-/// spell's 15 s, with the empty list; an action before it comes does not stop it (<see cref="Combat.EffectsCleared"/>).</item>
+/// has no invincibility). Walking preserves it; AttackStart, CastStart or the spell's
+/// 15 s end it, with the empty list. An action before it comes does not stop it (<see cref="Combat.EffectsCleared"/>).</item>
 /// </list>
 /// While down, Move gets rc 881 (the official code), AttackStart and CastStart are refused, heals do nothing and no mob
 /// aggroes or hits it; while invulnerable mobs neither aggro nor hit it. Nothing of it is saved: a player who leaves while
@@ -295,7 +295,7 @@ public static class Knockdown
     }
 
     /// <summary>
-    /// The player acts (a Move that walks, AttackStart, CastStart): the get-up buff ends. An action in the getuptimeseconds
+    /// The player attacks or casts: the get-up buff ends. Walking does not call this because the authored buff permits it. An action in the getuptimeseconds
     /// before it comes changes nothing (SPEC §5e.2: it is applied 3 s after the get-up and removed at the first action after
     /// that). A no-op otherwise.
     /// </summary>

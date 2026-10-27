@@ -61,6 +61,15 @@ default templates (what world.xml counts), without the day's dynamic templates a
 
 ## World objects
 
+Simple-behaviour buildings whose authored default has `visible="false"` are not
+announced to the client. This includes the journal version of Captain Tia in Swamp
+Cross: its `HIDDEN` state has no animator actions, and creating its view then applying
+that state makes this client enumerate a null action list. Hidden buildings receive
+no creation, state, access-status or leave events, including on reentry and reconnect.
+Visible defaults receive `SimpleBehaviourBuildingStateUpdate` (645) immediately after
+`NewBuilding`, independently for each viewer. Subsequent journal quest transitions
+and activation of the hidden NPC are not implemented by this initialization.
+
 The server sends the objects of the cluster that the client cannot place or use on its own (stage 2, step 12): the NPC
 buildings (repair shop, vanity store, meld building, arena, faction trader; bank and market in their interiors), the exits
 (city gates, bank and market doors, portals), the fast travel point (harbour), the war wagon, the island seller, the
@@ -206,6 +215,9 @@ mount with a halfmountedbuff (ox, horses and most others) keeps that buff's carr
 within 2 m of it the remount takes 0.5 s. Walking more than its halfmountrange (18 m) away despawns it, as the client's
 ring around the own mount shows: the mount disappears for everyone, the half-mounted capacity ends, and the next mount
 is a full one (stageJ carry-load SPEC §3.1; inferred, no capture walks that far yet). There is no timeout.
+
+Damage that reaches the rider's health interrupts either mounting cast with `MountCancel` and invalidates its
+completion timer. A hit fully absorbed by a damage shield, or ignored by invulnerability, does not interrupt it.
 
 The carry load follows the client's inventory bar (stageJ carry-load SPEC §1): only the bag's items weigh (worn items,
 the mount, the potion and the food stacks weigh nothing), and the maximum is 50 kg plus the worn items' maxload passives
@@ -367,6 +379,9 @@ floors) a mob chases and runs home along a path round walls and cliffs (the bots
 background; straight until it is ready), aggroes only players it can see, and swings or casts at its target only with line
 of sight; without sight in reach it walks to the target until it sees it.
 
+Invisibility to mobs also invalidates an existing threat target, including the get-up bubble. The mob switches to
+another valid enemy, or resets if none remain. A stationary reset sends a fresh stop sample to its observers.
+
 Armour (analysis/work/stageJ/armour/SPEC.md): a player's physical armour, magic resistance and crowd control resistance come
 from its worn items with their item power, as the client's character window shows them: (share × 100 + the items.xml value) ×
 1.03^(IP/100) − share × 100, where only the chest has an armour share (1.0) and the chest, shields (0.6) and talismans (1.8) a
@@ -419,8 +434,9 @@ resets, and it regenerates slowly (max / 600 per second, max / 18 once no mob fi
 (Move gets 881), attack, cast, harvest or loot, no heal reaches it (only a revive, below) and no mob aggroes it; its own damage over time and
 spells still in flight stop doing anything. 18 s after the fight ended (600 s at the
 latest) it stands up where it fell with full health and energy (Respawn), and 3 s later gets the knockdown
-invulnerability (SPAWN_KNOCKDOWN_INVULNERABILITY: mobs leave it alone) until it walks, attacks or casts, or 15 s pass
-(an action in those first 3 s does not stop the buff from coming).
+invulnerability (SPAWN_KNOCKDOWN_INVULNERABILITY: mobs leave it alone) until it attacks or casts, or 15 s pass.
+Walking preserves this protection, as declared by the buff's effects. Mobs also ignore the player during the
+three-second get-up animation before the buff arrives (an action then does not stop the buff from coming).
 There is no real death in PvE: no respawn point, no silver or durability loss (the SPEC defines none for the knockdown;
 `Pve:KnockdownWear` adds a share of each item's maximum durability, 0 by default),
 and nothing of the knockdown is saved, so a player who leaves while down comes back standing
