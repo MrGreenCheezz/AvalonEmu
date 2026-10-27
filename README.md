@@ -56,7 +56,7 @@ the `pve` preset turns the PvE-friendly additions on. What changed lately: [docs
 
 Modding (C# plugins, no-code rules, the Studio editor, ModKit content packs, extra action bars) and optional client
 mods are kept apart from this classic server, in the
-[`modifications`](https://github.com/MrGreenCheezz/albion-local-server/tree/modifications) branch.
+[`modifications`](https://github.com/MrGreenCheezz/AvalonEmu/tree/modifications) branch.
 
 The detailed, per-feature reference (English) is in [docs/REFERENCE.md](docs/REFERENCE.md); the architecture notes
 (Russian) are in [docs/ARCHITECTURE.ru.md](docs/ARCHITECTURE.ru.md). Both mention a private analysis workspace
@@ -140,7 +140,7 @@ its client or anti-cheat are not.
 ## License
 
 MIT (see [LICENSE](LICENSE)): you may use, change and share the code freely, as long as you keep the copyright
-notice, i.e. credit the original source (https://github.com/MrGreenCheezz/albion-local-server). The license covers this
+notice, i.e. credit the original source (https://github.com/MrGreenCheezz/AvalonEmu). The license covers this
 repository's own code only; it grants nothing about the game, its client, its data or its trademarks.
 
 ## Configuration files
