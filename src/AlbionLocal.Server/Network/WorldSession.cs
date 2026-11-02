@@ -123,6 +123,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         if (Character is { } member && world.Parties.Online(member.Id) is null)
         {
             world.Parties.Disconnected(member.Id);
+            world.PartyFinder.Disconnected(member.Id);
             world.Guilds.Disconnected(member.Id);
             world.Chat.LoggedOut(member.Id);
             world.Social.Disconnected(member);
@@ -229,6 +230,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         Player?.Visibility.SendClusterWide();
         if (Player is { } joined)
         {
+            Systems.Avatars.SendOwned(joined);
             SendDestinyBoard(joined);
             // Its list, the mount events and the slot cooldowns (stageD consumables SPEC §6, mounts SPEC §4.8).
             foreach (var e in Systems.Consumables.JoinEvents(joined, Systems.Mounts.JoinEvents(joined))) SendEvent(e);
@@ -237,7 +239,9 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         // JoinFinished switches the client into the world; later progress events update that model.
         if (Player is { } tutorialPlayer) Systems.OpeningTutorial.Joined(tutorialPlayer);
         SendEvent(new JoinFinishedEvent { ddn = jr.a8a });
+        SendShopCatalogue();
         if (Player is not { } player) return;
+        Systems.Festivities.Joined(player); // 518 replaces the native Activity Hub event list, including an empty calendar.
         Systems.OpeningTutorial.Entered(player);
         player.Visibility.SendAccessStatus();
         player.Visibility.FlushLists();

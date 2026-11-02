@@ -76,6 +76,23 @@ public sealed partial class SqliteCharacterRepository : IMarketStore
         }
     }
 
+    public IReadOnlyList<MarketSale> SalesAcrossMarkets(string itemName, int quality, DateTime since)
+    {
+        if (quality is < 1 or > 5) return [];
+        lock (_sync)
+        {
+            using var select = Command("""
+                SELECT location, uniquename, quality, amount, unit_price, at FROM market_sales
+                WHERE uniquename = $name AND quality = $quality AND at >= $since ORDER BY at DESC
+                """, null, ("$name", itemName), ("$quality", quality), ("$since", since.Ticks));
+            using var r = select.ExecuteReader();
+            var list = new List<MarketSale>();
+            while (r.Read())
+                list.Add(new MarketSale(r.GetString(0), r.GetString(1), r.GetInt32(2), r.GetInt32(3), r.GetInt64(4), new DateTime(r.GetInt64(5), DateTimeKind.Utc)));
+            return list;
+        }
+    }
+
     public long TakeCredits(Guid character)
     {
         lock (_sync)

@@ -6,16 +6,17 @@ namespace AlbionLocal.Server.Network;
 
 /// <summary>
 /// The arena operations (analysis/work/stageN/arena/SPEC.md §1.1): the arena agency's register (281), the queue's cancel (283), the leave
-/// (284), the ready popup's accept (285) and decline (286). The state and the rules are in <see cref="Arenas"/>. The group invite (282),
-/// the custom matches (289) and the crystal entering lock (287/288) are answered without effect.
+/// (284), the invited registration's join (285) and decline (286). The state and the rules are in <see cref="Arenas"/>. The group invite
+/// (282) and custom matches (289) are answered without effect. The ready popup's Join uses the entering channel (287/288).
 /// </summary>
 public sealed partial class WorldSession
 {
     /// <summary>
     /// ArenaRegister (o5 {0 the agency's object, 1 the arena category, 2 as a group, 3 the item roles, 4/5 -1}; ArenaDetailsGui.SendArenaRegister
     /// 0x1812ED2C0): the queue of the category's mode (2 ranked_1v1 → 1v1, 0 unranked → 5v5, 1 ranked → the Crystal Arena, or the 5v5 without
-    /// Arena:CrystalArena) with the party when key 2. RC 0 with
-    /// {1 now} (the client's OnRegisterResponse shows an error only for RC 11243); a refusal is RC 1 with the reason in chat.
+    /// Arena:CrystalArena) with the party when key 2. An accepted registration is completed by ArenaRegistrationInfo, without an RPC
+    /// response. The installed 345319 client's OnRegisterResponse (0x1812EC710) always shows an error; RC 11243 only supplies its
+    /// specific reason and timestamp. A refusal is RC 1 with the reason in chat.
     /// </summary>
     [Handles(OperationCodes.ArenaRegister, Status = SessionStatus.InWorld)]
     private AlbionResponse? ArenaRegister(ArenaRegisterRequest req)
@@ -23,7 +24,7 @@ public sealed partial class WorldSession
         if (Player is not { } player) return new GenericResponse { ReturnCode = 1 };
         var refused = Arenas.ModeOfCategory(req.bp, world.Config.Arena.CrystalArena) is not { } mode ? $"arena category {req.bp} is not offered here (unranked, ranked or 1v1)"
             : world.Arenas.Register(player, mode, req.bq, req.bp, req.br);
-        if (refused is null) return new ArenaRegisterResponse { ak0 = world.GameNow };
+        if (refused is null) return null;
         Log.Info(Name, $"'{player.Character.Name}' arena registration refused: {refused}");
         Expeditions.Tell(player, $"Arena: {refused}.");
         return new GenericResponse { ReturnCode = 1 };
@@ -47,10 +48,32 @@ public sealed partial class WorldSession
         return new GenericResponse();
     }
 
-    /// <summary>JoinArenaMatch (wt {0 the roles, 1 int}, the ready popup's join): the ready check accepted. RC 0, or 1 without a ready check.</summary>
+    /// <summary>JoinArenaMatch (wt {0 the roles, 1 int}): the invited registration's join. The native ready popup instead uses EnteringArenaStart.</summary>
     [Handles(OperationCodes.JoinArenaMatch, Status = SessionStatus.InWorld)]
     private AlbionResponse? JoinArenaMatch(JoinArenaMatchRequest req) =>
         new GenericResponse { ReturnCode = Player is { } player && world.Arenas.Accept(player) ? (short)0 : (short)1 };
+
+    /// <summary>
+    /// EnteringArenaStart (287, r7 {0 client timestamp}): the ready popup's Join click starts its five-second channel. Accepted requests
+    /// get no RPC response: the 345319 cw2.ai7 (0x1809DE720) cancels its action on any op-287 response, regardless of return code.
+    /// Event 269, key 1, finishes (true) or cancels (false) the client action.
+    /// </summary>
+    [Handles(OperationCodes.EnteringArenaStart, Status = SessionStatus.InWorld)]
+    private AlbionResponse? EnteringArenaStart(EnteringArenaStartRequest req)
+    {
+        if (Player is { } player && world.Arenas.StartEntering(player) is { } why)
+            Log.Info(Name, $"'{player.Character.Name}' arena Join channel refused: {why}");
+        return null;
+    }
+
+    /// <summary>EnteringArenaCancel (288, r6 {0 client timestamp}): interruption of the ready popup's Join channel; keep the invitation.</summary>
+    [Handles(OperationCodes.EnteringArenaCancel, Status = SessionStatus.InWorld)]
+    private AlbionResponse? EnteringArenaCancel(EnteringArenaCancelRequest req)
+    {
+        if (Player is { } player && !world.Arenas.CancelEntering(player, "cancelled by the client"))
+            player.SendAround(new EnteringArenaCancelEvent { ddn = player.Id });
+        return null;
+    }
 
     /// <summary>DeclineArenaInvitation (rp, no keys): the ready check (or the queue) declined. RC 0.</summary>
     [Handles(OperationCodes.DeclineArenaInvitation, Status = SessionStatus.InWorld)]

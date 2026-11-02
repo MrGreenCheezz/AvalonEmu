@@ -769,8 +769,8 @@ public sealed record ServerConfig
 
     /// <summary>
     /// Guilds:SilverTax (0; the pve preset 0.05): the share of each silver pile a member takes that goes to its guild's account
-    /// (TakeSilver key 5, GuildUpdate kinds 0/2 keys 11 and 14) in place of Economy:SilverPickupTax (SPEC §10.5); 0 = the economy's tax,
-    /// kept back as before. A MASTER_OF_COIN or higher pays the account out with .guild payout.
+    /// (TakeSilver key 5, GuildUpdate kinds 0/2 keys 11 and 14) in place of Economy:SilverPickupTax (SPEC §10.5).
+    /// A positive value fixes the guild rate; 0 uses its saved native tax. The economy tax applies only without a guild.
     /// </summary>
     public double GuildSilverTax { get; init; }
 
@@ -863,8 +863,8 @@ public sealed record ServerConfig
 
     /// <summary>
     /// Islands:BuyWithoutPremium (true in both presets, for now): a character without premium gets Join key 91 (Islands:PremiumDays) too, so
-    /// the island merchant sells and upgrades islands to everyone. Temporary (the user's decision 2026-10-26): there is no gold shop and no
-    /// premium to buy yet; the strict official rule is false (islands for premium characters only), the default once premium can be had.
+    /// the island merchant sells and upgrades islands to everyone. Retained compatibility setting; set false to use
+    /// the shop's lifetime purchased premium days for the native island requirements.
     /// </summary>
     public bool IslandsBuyWithoutPremium { get; init; } = true;
 
@@ -897,8 +897,8 @@ public sealed record ServerConfig
     public bool IslandsStarterBuildings { get; init; }
 
     /// <summary>
-    /// Premium:Mode (None; the pve preset Free; analysis/work/stageJ/focus-lp/SPEC.md D1): None = nobody is premium (the official preset has
-    /// no premium shop: BuyPremium stays refused); Free = every character is premium, always and at no cost (Join keys 90/91, Login key 35,
+    /// Premium:Mode (None; the pve preset Free): None = use the shop's purchased character expiry;
+    /// Free = every character is premium, always and at no cost (Join keys 90/91, Login key 35,
     /// the premium factors of characters.xml, <see cref="Systems.Premium"/>).
     /// </summary>
     public PremiumMode PremiumMode { get; init; } = PremiumMode.None;
@@ -1959,7 +1959,7 @@ public sealed record ServerConfig
 /// <summary>Premium:Mode (<see cref="ServerConfig.PremiumMode"/>): who is premium.</summary>
 public enum PremiumMode
 {
-    /// <summary>Nobody is premium (the official preset: this server has no premium shop).</summary>
+    /// <summary>Premium is active only while the character's purchased entitlement has not expired.</summary>
     None,
 
     /// <summary>Every character is premium, always, at no cost (the pve preset; focus-lp SPEC D1).</summary>

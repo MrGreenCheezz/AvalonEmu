@@ -111,6 +111,14 @@ public sealed class ArenaMatch
     public TimeSpan Due { get; set; }
     public long FoundTicks { get; set; }
     public TimeSpan? FightSince { get; set; }
+    /// <summary>Native HUD timestamps for the first countdown, current round, and completed result; retained for reconnects.</summary>
+    public long HudStartTicks { get; set; }
+    public long HudRoundTicks { get; set; }
+    public long HudEndTicks { get; set; }
+    public Dictionary<Guid, (int BeforePoints, int AfterPoints, short BeforeRank, short AfterRank)> HudRanks { get; } = [];
+    public Dictionary<string, ArenaPlayerResult> Results { get; } = new(StringComparer.Ordinal);
+    public Dictionary<Guid, List<ArenaRewardReceipt>> RewardReceipts { get; } = [];
+    public Dictionary<Guid, List<ArenaRewardReceipt>> RankUpReceipts { get; } = [];
     public int Round { get; set; }
     public int[] Tickets { get; } = new int[2];
     public int[] Kills { get; } = new int[2];
@@ -251,13 +259,20 @@ public sealed partial class Arenas(World world)
 
     // ---- the client's queue status (SPEC §1.2) ----
 
-    /// <summary>ArenaRegistrationInfo (267) to <paramref name="p"/>: status, the category, the timestamp (5: since when queued; 7: when found), the counts.</summary>
+    /// <summary>
+    /// ArenaRegistrationInfo (267): key 4 is the result (1 = no error, including a normal queue cancellation); key 8 is the selected
+    /// item-role id assigned for a ready check. The 345319 client treats a default result of 0 as an internal error and reads the ready
+    /// role from key 8, separately from the selectable roles in key 7. Counts describe the humans; the native popup's denominator is
+    /// the category's authored team size times two, even when a local bot fixture fills a smaller match.
+    /// </summary>
     private void Info(Player p, int status, int category, long since = 0, int total = 0, int ready = 0, int[]? roles = null)
     {
         p.Session.Send(new ArenaRegistrationInfoEvent
         {
-            ddn = p.Id, br8 = category, br9 = status, bsa = since == 0 ? world.GameNow : since, bse = roles ?? [], bsg = [], bsh = total, bsi = ready,
+            ddn = p.Id, br8 = category, br9 = status, bsa = since == 0 ? world.GameNow : since, bsb = 1,
+            bse = roles ?? [], bsf = roles is { Length: > 0 } ? roles[0] : 0, bsg = [], bsh = total, bsi = ready,
         });
+        Log.Info("arena", $"'{p.Character.Name}' registration status {status}, category {category}, result 1, roles [{string.Join(",", roles ?? [])}], assigned role {(roles is { Length: > 0 } ? roles[0] : 0)}, humans {ready}/{total}");
     }
 
     private void Info(Guid id, int status, int category, long since = 0, int total = 0, int ready = 0, int[]? roles = null)
@@ -340,6 +355,7 @@ public sealed partial class Arenas(World world)
     {
         foreach (var (id, _) in e.Players)
         {
+            if (Online(id) is { } player) CancelEntering(player, why);
             Info(id, StatusOut, e.Category);
             Tell(id, $"Arena {e.Mode.Name}: you are out of the queue ({why}).");
         }
@@ -406,7 +422,8 @@ public sealed partial class Arenas(World world)
         var category = m.Entries[0].Category;
         foreach (var id in m.Team.Keys)
         {
-            Info(id, StatusReady, category, m.FoundTicks, m.Team.Count, 0);
+            var roles = m.Entries.First(e => e.Players.Any(player => player.Id == id)).Roles;
+            Info(id, StatusReady, category, m.FoundTicks, m.Team.Count, 0, roles);
             Tell(id, string.Create(CultureInfo.InvariantCulture, $"Arena {mode.Name}: a match is ready. Accept within {Options.AcceptSeconds:0} s (the popup, or .arena accept)."));
         }
     }
@@ -434,6 +451,7 @@ public sealed partial class Arenas(World world)
     /// </summary>
     private void FailReadyCheck(ArenaMatch m, IReadOnlyCollection<Guid> refused, string why)
     {
+        CancelEntering(m, why);
         _matches.Remove(m.Id);
         m.Closed = true;
         var back = new List<ArenaEntry>();
@@ -460,6 +478,7 @@ public sealed partial class Arenas(World world)
     /// </summary>
     private void Start(ArenaMatch m)
     {
+        CancelEntering(m, "the match starts");
         var template = world.CachedCluster(m.Mode.Cluster);
         var category = m.Entries[0].Category;
         foreach (var id in m.Team.Keys.ToList())
@@ -546,6 +565,7 @@ public sealed partial class Arenas(World world)
         if (!m.Team.TryGetValue(p.Character.Id, out var team))
         {
             Expeditions.Tell(p, $"You are watching {m} (not a member).");
+            HudJoined(m, p);
             return;
         }
         var arrived = m.Arriving.Remove(p.Character.Id);
@@ -553,6 +573,7 @@ public sealed partial class Arenas(World world)
         Expeditions.Tell(p, string.Create(CultureInfo.InvariantCulture,
             $"Arena {m.Mode.Name}: you are on team {(team == 0 ? "blue" : "red")}. {(m.Mode.Rounds ? "Best of three rounds" : $"{m.Tickets[team]} tickets: each defeat costs {PerDeath(m)}")}; .arena leave forfeits."));
         if (m.State == ArenaState.Arriving && m.Arriving.Count == 0) Begin(m);
+        else HudJoined(m, p);
     }
 
     /// <summary>All arrived (or Arena:ArrivalSeconds passed): the bots, the first countdown.</summary>
@@ -570,7 +591,6 @@ public sealed partial class Arenas(World world)
             return;
         }
         if (world.Maps.Find(m.Id) is { } map) PlaceOrbs(m, map);
-        HudStart(m);
         Countdown(m);
         // A team with neither a player nor a bot (none could be made): no fight and no reward for the other side.
         for (var t = 0; t < 2; t++)
@@ -580,6 +600,7 @@ public sealed partial class Arenas(World world)
                 Close(m, $"team {t} is empty");
                 return;
             }
+        foreach (var p in InMap(m).Where(p => !p.IsBot)) HudJoined(m, p);
     }
 
     /// <summary>
@@ -591,6 +612,8 @@ public sealed partial class Arenas(World world)
         m.Round++;
         m.State = ArenaState.Countdown;
         m.Due = world.Now + TimeSpan.FromSeconds(Options.CountdownSeconds);
+        var starts = world.GameNow + (m.Due - world.Now).Ticks;
+        if (m.HudStartTicks == 0) m.HudStartTicks = starts;
         m.RespawnAt.Clear();
         if (world.Maps.Find(m.Id) is not { } map) return;
         var index = new int[2];
@@ -603,6 +626,7 @@ public sealed partial class Arenas(World world)
             if (bot.Map == map) Reset(bot, Spot(m, team, index[team]++));
         for (var t = 0; t < 2; t++)
             while (m.Bots.Count(b => b.Value == t) < m.BotSlots[t] && SpawnBot(m, map, t, index[t]++)) { }
+        if (m.Mode.Rounds && m.Round > 1) HudRound(m, m.Round, starts);
         TellAll(m, m.Mode.Rounds
             ? string.Create(CultureInfo.InvariantCulture, $"Arena: round {m.Round} ({Score(m)}) begins in {Options.CountdownSeconds:0} s.")
             : string.Create(CultureInfo.InvariantCulture, $"Arena: the fight begins in {Options.CountdownSeconds:0} s."));
@@ -626,7 +650,8 @@ public sealed partial class Arenas(World world)
         if (!world.Bots.ArenaBots || world.Bots.NavOf(map) is not { Usable: true } nav) return false;
         var (spot, facing) = Spot(m, team, index);
         var at = nav.Grid.Walkable(spot) ? spot : nav.Grid.Nearest(spot, 6) ?? spot;
-        if (world.Bots.Spawn(map, BotRole.Arena, BotTier(m), at, facing, healthFactor: Options.BotHealthFactor, damageFactor: Options.BotDamageFactor) is not { } bot)
+        if (world.Bots.Spawn(map, BotRole.Arena, BotTier(m), at, facing, healthFactor: Options.BotHealthFactor, damageFactor: Options.BotDamageFactor,
+            unavailableName: m.Results.ContainsKey) is not { } bot)
             return false;
         m.Bots[bot] = team;
         Entered(bot, m, arrived: true);
@@ -680,6 +705,7 @@ public sealed partial class Arenas(World world)
     private bool Down(long causer, string causerName, Player target, AlbionEvent update, long ticks)
     {
         if (Find(target.Map?.Cluster) is not { } m || !m.Team.TryGetValue(target.Character.Id, out var team)) return false;
+        if (m.State == ArenaState.Fight) world.Armory.ArenaDefeated(target.Map?.FindPlayer(causer), target);
         target.SendAround(update);
         Knockdown.Start(target, causer, causerName, ticks, KnockdownKind.Pvp);
         Scored(m, team, causerName, target.Character.Name);
@@ -688,7 +714,11 @@ public sealed partial class Arenas(World world)
     }
 
     /// <summary>An arena bot at 0 health (Pvp.Damage, instead of the bots' defeat: no loot, no rewards): it leaves, its team pays a ticket, a new one comes later.</summary>
-    public bool BotDown(Player attacker, Player bot, AlbionEvent update) => BotDown(attacker.Character.Name, bot, update);
+    public bool BotDown(Player attacker, Player bot, AlbionEvent update)
+    {
+        if (Find(bot.Map?.Cluster) is { State: ArenaState.Fight } m && m.Bots.ContainsKey(bot)) world.Armory.ArenaDefeated(attacker, bot);
+        return BotDown(attacker.Character.Name, bot, update);
+    }
 
     private bool BotDown(string causerName, Player bot, AlbionEvent update)
     {
@@ -721,9 +751,13 @@ public sealed partial class Arenas(World world)
     private void End(ArenaMatch m, int winner, string why)
     {
         if (m.Winner is not null) return;
+        foreach (var p in InMap(m)) ObserveParticipant(m, p);
+        foreach (var p in InMap(m).Where(p => !p.IsBot))
+            world.Armory.ArenaEnded(p, winner >= 0 && m.Team.GetValueOrDefault(p.Character.Id, -1) == winner);
         m.Winner = winner;
         m.State = ArenaState.Ended;
         m.Due = world.Now + TimeSpan.FromSeconds(Options.EndSeconds);
+        m.HudEndTicks = world.GameNow;
         foreach (var p in InMap(m).Where(p => p.Combat.Down is not null).ToList()) Knockdown.GetUp(p);
         TellAll(m, winner < 0 ? $"Arena: a draw ({why})." : $"Arena: team {(winner == 0 ? "blue" : "red")} ({Describe(m, winner)}) wins ({why}).");
         var rated = Options.Rated && (!m.HadBots || Options.RateWithBots) && m.TeamOf(0).Any() && m.TeamOf(1).Any();
@@ -731,7 +765,18 @@ public sealed partial class Arenas(World world)
             ? world.Ratings.Record(m.Mode.Name, [.. m.TeamOf(0).Select(id => (id, m.Names[id]))], [.. m.TeamOf(1).Select(id => (id, m.Names[id]))], winner < 0 ? 0.5 : winner == 0 ? 1 : 0)
             : [];
         foreach (var id in m.Team.Keys) m.RewardRank[id] = RankIndexOf(id, m);
+        foreach (var id in m.Team.Keys)
+        {
+            var rank = world.Ratings.ArenaRank(id, m.Mode.Category);
+            m.HudRanks[id] = (rank?.Points ?? 0, rank?.Points ?? 0, (short)(rank?.Rank ?? 0), (short)(rank?.Rank ?? 0));
+        }
         var ranks = RankPointsAt(m, changes, winner);
+        foreach (var id in m.Team.Keys)
+        {
+            var before = m.HudRanks[id];
+            var after = world.Ratings.ArenaRank(id, m.Mode.Category);
+            m.HudRanks[id] = (before.BeforePoints, after?.Points ?? 0, before.BeforeRank, (short)(after?.Rank ?? 0));
+        }
         foreach (var id in m.Team.Keys)
         {
             var won = winner >= 0 && m.Team[id] == winner;
@@ -745,6 +790,7 @@ public sealed partial class Arenas(World world)
                     + string.Create(CultureInfo.InvariantCulture, $" Back in {Options.EndSeconds:0} s (or .arena leave)."));
             }
         }
+        foreach (var p in InMap(m).Where(p => !p.IsBot)) HudEnd(m, p);
         Log.Info("arena", $"{m} ended: {(winner < 0 ? "a draw" : $"team {winner} wins")} ({why}), kills {m.Kills[0]}:{m.Kills[1]}{(rated ? ", rated" : "")}");
     }
 
@@ -761,7 +807,9 @@ public sealed partial class Arenas(World world)
         var fame = Rates.ScaleFame((long)Math.Round((won ? Options.WinFame : Options.LossFame) * 10000), world.Rates.Fame);
         if (fame > 0)
         {
+            var before = p.Character.Fame;
             Destiny.Award(p, fame, Destiny.Kill(p, BotTier(m)), pvp: true, journals: false);
+            if (m.Results.TryGetValue(p.Character.Name, out var result)) result.Fame += Math.Max(0, p.Character.Fame - before);
             given.Add(string.Create(CultureInfo.InvariantCulture, $"{fame / 10000.0:0.##} fame"));
         }
         if (Options.RewardItems)
@@ -789,21 +837,29 @@ public sealed partial class Arenas(World world)
                 if (limited) items.Add(("T4_LOOTBAG_EXPEDITION_ROYAL_SIGIL", 1));
             }
             else items.Add(("T2_SKILLBOOK_NONTRADABLE", premium ? 7 : 5));
-            given.AddRange(GiveItems(p, items, $"the arena ({m.Mode.Name})"));
+            given.AddRange(GiveItems(p, items, $"the arena ({m.Mode.Name})", RewardReceipts(m, p.Character.Id)));
         }
         world.Saves.MarkChanged(p.Character);
         return given.Count == 0 ? "No reward" : "Reward: " + string.Join(", ", given);
     }
 
     /// <summary>Gives <paramref name="items"/> to <paramref name="p"/> (the bag, else the mail); the given ones' names for the chat line.</summary>
-    private List<string> GiveItems(Player p, IEnumerable<(string Name, int Count)> items, string why)
+    private List<string> GiveItems(Player p, IEnumerable<(string Name, int Count)> items, string why, List<ArenaRewardReceipt>? receipts = null)
     {
         var given = new List<string>();
         foreach (var (name, count) in items)
         {
             if (world.Items.Find(name) is not { CanCreate: true } type) continue;
-            if (WorldSession.Fits(p.Inventory.Bag, [(type, count)])) p.Session.GiveItem(p, type, count);
+            if (WorldSession.Fits(p.Inventory.Bag, [(type, count)]))
+            {
+                p.Session.GiveItem(p, type, count);
+                // GiveItem changes the live containers only. MarkChanged cannot copy those into Character.Inventory;
+                // without SaveItems the next transfer/reconnect reloads the pre-reward bag despite the reward receipt.
+                p.SaveItems();
+                Log.Info("arena", $"'{p.Character.Name}' reward {type.Name} x{count} delivered to inventory and copied into its saved character");
+            }
             else if (!Mailer.Overflow(world, p.Character, [new InventoryItem(type.Name, count)], why)) continue;
+            receipts?.Add(new ArenaRewardReceipt(6, count, type.Index));
             given.Add(count == 1 ? type.Name : $"{type.Name} x{count}");
         }
         return given;
@@ -846,6 +902,7 @@ public sealed partial class Arenas(World world)
     public void Close(ArenaMatch m, string why)
     {
         if (m.Closed) return;
+        CancelEntering(m, why);
         m.Closed = true;
         m.Channels.Clear();
         foreach (var bot in m.Bots.Keys.Where(b => b.Map is not null).ToList()) world.Bots.Despawn(bot, $"the arena closes ({why})", BotRefill.Now);
@@ -889,6 +946,7 @@ public sealed partial class Arenas(World world)
                 Out(e, "a player went offline");
             }
         foreach (var mode in Modes) MatchUp(mode);
+        UpdateEntering(now);
         foreach (var m in _matches.Values.ToList())
         {
             switch (m.State)
@@ -906,8 +964,11 @@ public sealed partial class Arenas(World world)
                     if (now >= m.Due)
                     {
                         m.State = ArenaState.Fight;
-                        if (m.FightSince is null || m.Mode.Rounds) HudRound(m, m.Mode.Rounds ? m.Round : 1);
+                        var firstFight = m.FightSince is null;
                         m.FightSince ??= now;
+                        if (firstFight) HudFight(m);
+                        if (firstFight || m.Mode.Rounds) HudRound(m, m.Mode.Rounds ? m.Round : 1);
+                        HudScore(m);
                         TellAll(m, "Arena: fight!");
                     }
                     break;

@@ -21,5 +21,10 @@ public static class LoginWorld
     public static string[] Flags => [];
 
     /// <summary>Login key 99, the feature switch table (<see cref="FeatureSwitches"/>); [112] DynamicTemplates is on, the client default.</summary>
-    public static bool[] Features() => FeatureSwitches.Defaults();
+    public static bool[] Features()
+    {
+        var features = FeatureSwitches.Defaults();
+        features[171] = true; // PartyFinder: native advertisements/applications backed by Systems.PartyFinder.
+        return features;
+    }
 }

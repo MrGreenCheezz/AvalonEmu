@@ -1,5 +1,6 @@
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
+using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Protocol;
 
 namespace AlbionLocal.Server.Systems;
@@ -26,12 +27,16 @@ public static class LearningPoints
     private static CharacterDefaults Defaults(World world) => world.GameData?.Defaults ?? CharacterDefaults.Default;
 
     /// <summary>The cap, a7m (Join key 39, 83 key 3): LearningPoints:Max, else characters.xml learningpointsmax(premium), 999999.</summary>
-    public static long Max(Player p) =>
-        (long)Math.Round((p.World.Config.LearningPointsMax ?? (Premium.Is(p) ? Defaults(p.World).LearningPointsMaxPremium : Defaults(p.World).LearningPointsMax)) * A7m);
+    public static long Max(Player p) => Max(p.World, Premium.Is(p));
+
+    private static long Max(World world, bool premium) =>
+        (long)Math.Round((world.Config.LearningPointsMax ?? (premium ? Defaults(world).LearningPointsMaxPremium : Defaults(world).LearningPointsMax)) * A7m);
 
     /// <summary>Seconds per point (Join key 40, 83 key 4 as a7m): while premium LearningPoints:SecondsPerPoint, else learningpointsecondsperpointpremium (2880); without premium learningpointsecondsperpoint (0 = none).</summary>
-    public static double SecondsPerPoint(Player p) =>
-        Premium.Is(p) ? p.World.Config.LearningPointsSecondsPerPoint ?? Defaults(p.World).SecondsPerPointPremium : Defaults(p.World).SecondsPerPoint;
+    public static double SecondsPerPoint(Player p) => SecondsPerPoint(p.World, Premium.Is(p));
+
+    private static double SecondsPerPoint(World world, bool premium) =>
+        premium ? world.Config.LearningPointsSecondsPerPoint ?? Defaults(world).SecondsPerPointPremium : Defaults(world).SecondsPerPoint;
 
     /// <summary>
     /// The whole points earned since the stamp up to <paramref name="now"/>: n = floor((now − stamp) / seconds per point), the points
@@ -42,21 +47,32 @@ public static class LearningPoints
     public static long Accrue(Player p, long now, bool send)
     {
         var c = p.Character;
-        var per = (long)Math.Round(SecondsPerPoint(p) * TimeSpan.TicksPerSecond);
-        if (c.LpStamp == 0 || per <= 0)
-        {
-            c.LpStamp = now; // saved with whatever is saved next: without accrual the stamp means nothing yet
-            return 0;
-        }
-        if (now - c.LpStamp < per) return 0;
-        var n = (now - c.LpStamp) / per;
-        c.LpStamp += n * per;
-        var before = c.LearningPoints;
-        c.LearningPoints = Math.Max(before, Math.Min(Max(p), before + n * A7m));
-        p.World.Saves.MarkDirty(c);
-        var gained = c.LearningPoints - before;
+        var stamp = c.LpStamp;
+        var gained = AccrueSnapshot(p.World, c, now, p.PremiumOverride);
+        if (c.LpStamp != stamp || gained > 0) p.World.Saves.MarkDirty(c);
         if (send && gained > 0) p.Session.Send(Event(p, gained, Payout));
         return gained;
+    }
+
+    internal static long AccrueSnapshot(World world, Character c, long now, bool? sessionOverride)
+    {
+        if (c.LpStamp == 0)
+        {
+            c.LpStamp = now;
+            return 0;
+        }
+        var before = c.LearningPoints;
+        foreach (var (start, end, premium) in Premium.AccrualPeriods(world, c, c.LpStamp, now, sessionOverride))
+        {
+            // A fractional premium point cannot turn into a normal point at another rate after the boundary.
+            c.LpStamp = Math.Max(c.LpStamp, start);
+            var per = (long)Math.Round(SecondsPerPoint(world, premium) * TimeSpan.TicksPerSecond);
+            if (per <= 0) { c.LpStamp = end; continue; }
+            var n = (end - c.LpStamp) / per;
+            c.LpStamp += n * per;
+            c.LearningPoints = Math.Max(c.LearningPoints, Math.Min(Max(world, premium), c.LearningPoints + n * A7m));
+        }
+        return c.LearningPoints - before;
     }
 
     /// <summary><paramref name="amount"/> points (a7m) as a reward (at most the cap), with its UpdateLearningPoints of kind <paramref name="kind"/>.</summary>
@@ -65,10 +81,33 @@ public static class LearningPoints
         if (amount <= 0) return;
         Accrue(p, p.World.GameNow, send: true);
         var c = p.Character;
-        var before = c.LearningPoints;
-        c.LearningPoints = Math.Max(before, Math.Min(Max(p), before + amount));
+        var gained = Add(c, amount, Max(p));
         p.World.Saves.MarkChanged(c);
-        p.Session.Send(Event(p, c.LearningPoints - before, kind));
+        p.Session.Send(Event(p, gained, kind));
+    }
+
+    /// <summary>
+    /// Settles and credits a checkout's character copy, with the same accrual and cap as ordinary rewards.
+    /// A purchase must fit in full; its caller discards this copy on failure and saves it with the receipt
+    /// before publishing Event. Neither a live character nor its save queue is changed here.
+    /// </summary>
+    internal static bool TryPurchase(World world, Character snapshot, int points, long now, bool? sessionOverride, bool grantsPremium)
+    {
+        if (points <= 0) return false;
+        AccrueSnapshot(world, snapshot, now, sessionOverride);
+        var premium = sessionOverride ?? (grantsPremium || Premium.End(world, snapshot, now) > 0);
+        var cap = Max(world, premium);
+        var amount = checked((long)points * A7m);
+        if (snapshot.LearningPoints > cap || amount > cap - snapshot.LearningPoints) return false;
+        return Add(snapshot, amount, cap) == amount;
+    }
+
+    private static long Add(Character c, long amount, long cap)
+    {
+        if (amount <= 0 || c.LearningPoints >= cap) return 0;
+        var gained = Math.Min(amount, cap - c.LearningPoints);
+        c.LearningPoints = checked(c.LearningPoints + gained);
+        return gained;
     }
 
     /// <summary>
@@ -98,6 +137,10 @@ public static class LearningPoints
     /// </summary>
     public static void Update(World world, TimeSpan now)
     {
+        var ticks = world.GameNow;
+        // Expiry is a world-tick transition, independent of the minute payout cadence.
+        foreach (var map in world.Maps.Maps)
+            foreach (var p in map.Players.Values) Premium.Update(p, ticks);
         if (world.LearningTickDue is not { } due)
         {
             world.LearningTickDue = now + TickInterval;
@@ -105,12 +148,10 @@ public static class LearningPoints
         }
         if (now < due) return;
         world.LearningTickDue = now + TickInterval;
-        var ticks = world.GameNow;
         foreach (var map in world.Maps.Maps)
             foreach (var p in map.Players.Values)
             {
                 Accrue(p, ticks, send: true);
-                Premium.Update(p, ticks);
             }
     }
 }

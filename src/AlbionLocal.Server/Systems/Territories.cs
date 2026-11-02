@@ -76,10 +76,15 @@ public sealed partial class Territories(World world, Persistence.ITerritoryStore
     /// <summary>Every territory (the data layer; none without world.xml).</summary>
     public IEnumerable<TerritoryState> All => States?.Values ?? Enumerable.Empty<TerritoryState>();
 
-    /// <summary>The territory <paramref name="key"/>: its Guid as text (the requests' key 0, av.o), else its name; null = none.</summary>
+    /// <summary>The territory <paramref name="key"/>: native Guid@cluster, a bare Guid or its name; null = none.</summary>
     public TerritoryState? Find(string? key)
     {
         if (string.IsNullOrWhiteSpace(key) || States is not { } states) return null;
+        // Installed 345319 av.o (642050) returns Guid@cluster. The detail UI passes it unchanged to GetClaimInfo
+        // (1C5B20A -> A7A820, tg) and GetMonolithInfo (1C587BA -> A7B070, ud). Never ignore a mismatching cluster.
+        var separator = key.IndexOf('@');
+        if (separator > 0 && Guid.TryParse(key.AsSpan(0, separator), out var nativeId))
+            return states.TryGetValue(nativeId, out var state) && state.Cluster.Id == key[(separator + 1)..] ? state : null;
         if (Guid.TryParse(key, out var id)) return states.GetValueOrDefault(id);
         return states.Values.FirstOrDefault(s => string.Equals(s.Territory.Name, key.Trim(), StringComparison.OrdinalIgnoreCase));
     }

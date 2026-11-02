@@ -245,12 +245,16 @@ public sealed partial class WorldSession
             var fromPlayer = pile.SourceKind == SilverPile.FromPlayer;
             // × the premium silver factor (premiumsilverlootfactor 1.5, Premium:SilverFactor; stageJ focus-lp SPEC §5.5): key 7 true, as captured.
             var bonus = fromPlayer ? 1 : world.Config.SilverPickupFactor * Premium.SilverFactor(player);
-            // Guilds:SilverTax (guilds SPEC §10.5): a member's tax goes to its guild's account in place of Economy:SilverPickupTax.
+            // A member's saved native tax (or positive mode override) credits its guild; players without a guild keep the economy pickup tax.
             var guild = fromPlayer ? null : world.Guilds.TaxGuild(player);
-            var (gross, tax, net) = Combat.SilverValue(pile.Amount, pile.Factor, bonus, fromPlayer ? 0 : guild is not null ? world.Config.GuildSilverTax : world.Config.SilverPickupTax);
+            var (gross, tax, net) = Combat.SilverValue(pile.Amount, pile.Factor, bonus, fromPlayer ? 0 : guild is not null ? world.Guilds.EffectiveTax(guild) : world.Config.SilverPickupTax);
+            // Refuse the pickup before consuming it or crediting its tax if either destination would overflow.
+            if (net < 0 || player.Character.Silver < 0 || net > long.MaxValue - player.Character.Silver
+                || guild is not null && (guild.SilverA7m < 0 || tax > long.MaxValue - guild.SilverA7m))
+                continue;
             if (guild is not null)
             {
-                world.Guilds.Deposit(guild, tax);
+                world.Guilds.DepositTax(guild, player, tax);
                 world.GuildGoals.TaxPaid(guild, player, tax); // stage I: the Member Logs' TAXPAID
             }
             var factor = (long)Math.Round(pile.Factor * 10000);

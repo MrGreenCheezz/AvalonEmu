@@ -55,6 +55,9 @@ public sealed class BoardNode
     public required string Name { get; init; }
     public required bool IsTemplate { get; init; }
 
+    /// <summary>Authored tracking="forced" nodes cannot be toggled by TrackAchievements.</summary>
+    public bool ForcedTracking { get; init; }
+
     /// <summary>The mission type: fameearned, killmobfame, gatherfame, craftitemfame, farmharvestfame, … (templates: missiontype).</summary>
     public required string Mission { get; init; }
 
@@ -173,6 +176,7 @@ public sealed class DestinyBoard
                 nodes.Add(new BoardNode
                 {
                     Id = id, Name = name, IsTemplate = false, Mission = mission is null ? "" : Attr(mission, "type") ?? "",
+                    ForcedTracking = Attr(el, "tracking") == "forced",
                     Items = mission is null ? [] : [.. mission.Elements().Where(c => c.Name.LocalName is "equipitem" or "validitem").Select(c => Attr(c, "id") ?? "")],
                     Levels = [new BoardLevel(ToA7m(Num(mission is null ? null : Attr(mission, "value"))), min, 99, 0, 99, 0)],
                     BaseLevels = 1,
@@ -204,6 +208,7 @@ public sealed class DestinyBoard
             nodes.Add(new BoardNode
             {
                 Id = id, Name = name, IsTemplate = true, Mission = Attr(el, "missiontype") ?? "",
+                ForcedTracking = Attr(el, "tracking") == "forced",
                 Items = [.. (el.Element("itemlist")?.Elements("itempattern") ?? []).Select(p => Attr(p, "pattern") ?? "")],
                 Levels = [.. levels], BaseLevels = baseCount,
                 ItemUsePatterns = Patterns(el.Element("baserewards")),

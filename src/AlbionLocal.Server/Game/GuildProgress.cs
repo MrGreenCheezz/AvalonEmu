@@ -7,6 +7,25 @@ namespace AlbionLocal.Server.Game;
 /// </summary>
 public sealed class GuildProgress
 {
+    /// <summary>Native new-member mail (479/480), kept in the existing guild JSON. Empty disables the welcome.</summary>
+    public string NewMemberMail { get; set; } = "";
+
+    /// <summary>Recruitment configuration (184/185); null in older saves means not configured.</summary>
+    public GuildRecruitmentSettings? Recruitment { get; set; }
+
+    /// <summary>485's ordered optional-stat slots, including None and duplicates; null in older saves means unset.
+    /// Kept separately because184 replaces Recruitment without changing these slots.</summary>
+    public int[]? OptionalStats { get; set; }
+
+    /// <summary>Appearance's512-character guild codex (236), including its actual last editor and commit time.</summary>
+    public string Codex { get; set; } = "";
+    public Guid CodexAuthor { get; set; }
+    public string CodexAuthorName { get; set; } = "";
+    public long CodexUpdatedAt { get; set; }
+
+    /// <summary>481/482: the guild's displayed preference,0 unset,1..6 faction. It does not enlist any character.</summary>
+    public byte FactionAllegiance { get; set; }
+
     /// <summary>The guild's seasons, the newest last (at most <see cref="Systems.GuildGoals.SeasonsKept"/>).</summary>
     public List<GuildSeasonState> Seasons { get; set; } = [];
 
@@ -21,6 +40,65 @@ public sealed class GuildProgress
 
     /// <summary>The season-end member rewards per member not given yet (an offline member's, given at its next login; paid once).</summary>
     public Dictionary<Guid, List<GuildMemberReward>> Owed { get; set; } = [];
+
+    /// <summary>Committed account movements, oldest first (GetGuildAccountLogs, op 159). Existing balances have no invented history.</summary>
+    public List<GuildAccountTransaction> AccountTransactions { get; set; } = [];
+
+    /// <summary>
+    /// QueryAllianceGuildStats (310): points observed since this counter was introduced. Null in older saves; retained season
+    /// totals cannot reconstruct either a lifetime total (only four seasons are kept) or their weekly distribution.
+    /// </summary>
+    public GuildSeasonPointLog? SeasonPointLog { get; set; }
+}
+
+/// <summary>The native recruitment editor's own values, kept with the guild's existing JSON.
+/// This does not register a public Guild Finder listing or manufacture guild activity statistics.</summary>
+public sealed class GuildRecruitmentSettings
+{
+    public byte PrimaryLanguage { get; set; }
+    public byte SecondaryLanguage { get; set; }
+    public string Description { get; set; } = "";
+    public Guid Author { get; set; }
+    public string AuthorName { get; set; } = "";
+    public byte JoinSettings { get; set; }
+    public bool BeginnerFriendly { get; set; }
+    public string DiscordLink { get; set; } = "";
+    public byte Home { get; set; }
+    public short ActiveFrom { get; set; } = -1;
+    public short ActiveTo { get; set; } = -1;
+    public int Activities { get; set; }
+    public long MinimumFame { get; set; }
+    public long MinimumPvpFame { get; set; }
+}
+
+/// <summary>
+/// Prospective guild season points, in whole points. All is the total since CoveredSinceUtc, not an invented lifetime total;
+/// the first recorded week may be partial. Stored in the same progress JSON as the season totals, with no schema migration.
+/// </summary>
+public sealed class GuildSeasonPointLog
+{
+    public long CoveredSinceUtc { get; set; }
+
+    /// <summary>Monday at Bounties:ResetUtc, matching the guild's Member Logs.</summary>
+    public long Week { get; set; }
+
+    public long This { get; set; }
+
+    public long Last { get; set; }
+
+    public long All { get; set; }
+}
+
+/// <summary>A recorded guild account movement: a7m amount, UTC ticks, and the native reason/localization parameter.</summary>
+public sealed class GuildAccountTransaction
+{
+    public Guid Character { get; set; }
+    public string PlayerName { get; set; } = "";
+    public int LogType { get; set; }
+    public int Reason { get; set; }
+    public string Parameter { get; set; } = "";
+    public long Amount { get; set; }
+    public long At { get; set; }
 }
 
 /// <summary>A season-end member reward (SPEC §2.6): the season it closes and the guild's bracket (iron … crystal: the items and the journal's gotguildmemberreward).</summary>

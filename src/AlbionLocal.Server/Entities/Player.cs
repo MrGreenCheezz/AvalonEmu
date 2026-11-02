@@ -300,6 +300,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
         var e = new NewCharacterEvent
         {
             cvx = Id, cvy = c.Name ?? "", cvz = IsBot ? 0 : c.Template,
+            cv0 = IsBot ? 0 : Systems.Avatars.Ring(c),
             cv1 = IsBot ? c.Template : c.Appearance,
             cv2 = look ? c.Customization : null, cv3 = look ? c.Clothes : null, cv4 = c.Id,
             cwb = position, cwc = target, cwf = stamp, cwg = direction, cwh = speed,                        // [14] [15] [18] [19] [20]

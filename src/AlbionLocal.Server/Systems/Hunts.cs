@@ -521,9 +521,15 @@ public sealed class Hunts(World world)
         var e = new HuntFinishedEvent { ecs = h.Id };
         foreach (var p in Online(h))
         {
-            if (gain > 0) Destiny.Award(p, gain, Destiny.Kill(p, h.Mob.Tier), journals: false);
+            var memberGain = Rates.ScaleFame(gain, Math.Max(0, 1 + FestivityBonuses.Sum(p, "trackingfamemodifier", world.GameNow)));
+            if (memberGain > 0)
+            {
+                var fameBefore = p.Character.Fame;
+                Destiny.Award(p, memberGain, Destiny.Kill(p, h.Mob.Tier), journals: false);
+                PvpChallenge.OnTracking(p, p.Character.Fame - fameBefore);
+            }
             p.Session.Send(e);
-            Tell(p, string.Create(CultureInfo.InvariantCulture, $"Hunt complete: {Name(h.Target)} slain by '{killer.Character.Name}' (+{gain / 10000.0:0.#} fame)."));
+            Tell(p, string.Create(CultureInfo.InvariantCulture, $"Hunt complete: {Name(h.Target)} slain by '{killer.Character.Name}' (+{memberGain / 10000.0:0.#} fame)."));
         }
         world.Vanity.HuntWon(Online(h), Name(h.Target)); // stageN vanity: the final kill may drop a cosmetic for each member
         Log.Info("hunt", string.Create(CultureInfo.InvariantCulture, $"{h} won by '{killer.Character.Name}' after {h.QuestCount + 1} quests: {gain / 10000.0:0.#} fame each"));

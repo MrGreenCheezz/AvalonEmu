@@ -302,8 +302,11 @@ public static class Pvp
             };
         if (mine <= 0) attacker.Session.Send(new KillRewardedNoFameEvent { ddn = attacker.Id });
         if (crime) Crime(attacker, target, Reputation.LostKnockdown, ticks);
+        var statisticsDetails = CharacterStatisticsRecorder.CapturePvpResult(kill);
         PvpGoals.OnPvpKill(world, kill);
+        world.Shop.PlayKillEmote(attacker, target, knockdown: true, ticks);
         world.Corrupted.Defeated(attacker, target); // stageL corrupted: one side of an invasion beat the other (after its goals)
+        CharacterStatisticsRecorder.PvpResult(world, kill, statisticsDetails);
         // HitBy stays while it is down: an execute's death (Death.Kill) shares its fame and wear by these attackers. The get-up clears it,
         // so a second knockdown shares only its own damage.
     }
@@ -456,6 +459,7 @@ public static class Pvp
             if (damage > 0) SpellEffects.Damaged(target, type, ticks);
             update = Combat.HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
             Death.Hit(attacker, target, damage);
+            world.Armory.Damage(attacker, target, Math.Max(0, health - left));
             DeathRecaps.Hit(target, attacker, spell, origin, -damage, ticks); // stageP: the death recap's player rows
             if (damage > 0) world.Arenas.Damaged(target); // stageP: a hit breaks an arena orb channel
             if (target.IsBot) world.Bots.Hurt(target, attacker, damage, ticks); // stage I: the bot's retarget measure

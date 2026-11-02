@@ -34,7 +34,7 @@ public sealed class GuildMember(Guid id, string name, GuildRole role, DateTime j
 
 /// <summary>
 /// A guild (stageH guilds SPEC §4): its id, unique name (NOCASE), crest and banner, the account fields the GuildUpdate carries
-/// (the guild account's silver, a7m: Guilds:SilverTax and the contracts fill it, .guild payout empties it; tax a7m, unused), the guild
+/// (the guild account's silver, a7m: its pickup tax and the contracts fill it, withdrawals empty it; tax a7m, 10000 = 100 %), the guild
 /// experience and contracts of §10, the guild goals' state (stage I) and the ids of its eight role tags (<see cref="GuildRoles"/>; per
 /// guild [choice]). Members in join order. Saved at once by the guild store; the account, the experience, the contracts and the guild
 /// goals, which change with every kill, every 30 s.
@@ -67,6 +67,9 @@ public sealed class Guild(Guid id, string name, DateTime created, GuildLogo logo
 
     /// <summary>The guild goals' seasons, weeks and member logs (stageI guild-goals SPEC §2.8), saved with the contracts.</summary>
     public GuildProgress Progress { get; set; } = new();
+
+    /// <summary>Shared loadouts; changes are persisted immediately, independently of character saves.</summary>
+    public GuildLoadouts Loadouts { get; set; } = new();
 
     /// <summary>The ids of the eight role tags in <see cref="GuildRoles.TagRoles"/> order (GuildFullAccessTagsUpdated key 1).</summary>
     public Guid[] Tags { get; } = tags;
@@ -130,11 +133,20 @@ public static class GuildRoles
     /// <summary>GuildPermission KICK_FROM_GUILD and INVITE (SPEC §0).</summary>
     public const long Kick = 4, Invite = 8;
 
+    /// <summary>345319 GuildPermission.WITHDRAWAL_FROM_SILVER_ACCOUNT; GuildAccountView.OnGuildDataChanged 10983CB.</summary>
+    public const long WithdrawSilver = 0x100;
+
+    /// <summary>345319 GuildPermission.CHANGE_GUILD_TAX; GuildAccountView.OnTaxChangeClicked 1098899.</summary>
+    public const long ChangeTax = 0x4000;
+
     /// <summary>GuildPermission ACCESS_GUILD_MAIL (SPEC §0; stageJ mail SPEC §1.5): the guild's mailbox and mail to its members (the guild master and The Right Hand).</summary>
     public const long AccessGuildMail = 65536;
 
     /// <summary>GuildPermission ALLIANCE_MANAGEMENT (stageP hideouts SPEC §1.1): found, leave, invite to, kick from and disband the guild's alliance, answer invitations.</summary>
     public const long AllianceManagement = 131072;
+
+    /// <summary>Build 345319 LoadoutListGui.HasGuildPermission (106DDA0): edit the guild's shared loadouts.</summary>
+    public const long ManageLoadouts = 0x20000000;
 
     /// <summary>All 36 permission flags (the GUILDMASTER tag).</summary>
     public const long All = 0xFFFFFFFFF;

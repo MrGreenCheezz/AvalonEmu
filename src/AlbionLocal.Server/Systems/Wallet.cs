@@ -50,6 +50,8 @@ public static class Wallet
     /// </summary>
     public static bool TransferGold(Player from, Player to, long raw, string why)
     {
+        if (from.World.Shop.Enabled && !from.Character.Transient && !to.Character.Transient)
+            return from.World.Shop.TransferGold(from, to, raw);
         if (raw < 0 || from.Character.Gold < raw) return false;
         if (raw == 0) return true;
         from.Character.Gold -= raw;
@@ -62,8 +64,8 @@ public static class Wallet
     /// <summary>Sets both values (GM .money) and sends UpdateMoney.</summary>
     public static void Set(Player p, long silver, long gold)
     {
+        p.World.Shop.SetGold(p, Math.Max(0, gold));
         p.Character.Silver = Math.Max(0, silver);
-        p.Character.Gold = Math.Max(0, gold);
         Changed(p, "set");
     }
 

@@ -1,12 +1,12 @@
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Protocol;
+using AlbionLocal.Server.Systems;
 
 namespace AlbionLocal.Server.Network;
 
 /// <summary>
-/// The use flags and the auto-learn choice (analysis/work/stageJ/focus-lp/SPEC.md D4, D6, §5.2): two requests the official server never
-/// answers (no response in any capture; the client never waits for one).
+/// Use flags, tracked Destiny nodes and auto-learn choices. These requests do not await operation responses.
 /// </summary>
 public sealed partial class WorldSession
 {
@@ -29,6 +29,40 @@ public sealed partial class WorldSession
         c.UseFlags = req.e8 ? c.UseFlags | (1 << req.e7) : c.UseFlags & ~(1 << req.e7);
         world.Saves.MarkChanged(c);
         Log.Info(Name, $"'{c.Name}' use flag {(UseFlagName)req.e7} {(req.e8 ? "on" : "off")}");
+        return null;
+    }
+
+    /// <summary>
+    /// 345319: cs6.s (RVA C00390) flushes Dictionary&lt;int,bool&gt; as parallel ID/state arrays through A67340 (op 311).
+    /// BFD850 excludes completed and tracking="forced" nodes. Event 154 replaces the entire tracked set (consumer BFA6D0).
+    /// These are deltas, not two add/remove lists. No operation response is awaited.
+    /// </summary>
+    [Handles(OperationCodes.TrackAchievements, Status = SessionStatus.InWorld)]
+    private AlbionResponse? TrackAchievements(TrackAchievementsRequest req)
+    {
+        if (Player is not { } player || player.Character.Progression is not { } progression || world.GameData?.Board is not { } board)
+            return null;
+        if (req.ag1 is not { } nodes || req.ag2 is not { } states || nodes.Length != states.Length || nodes.Length > board.Nodes.Count)
+        {
+            player.Session.Send(Destiny.Tracked(player.Id, progression, board));
+            return null;
+        }
+        var selected = new SortedSet<int>(progression.TrackedNodes.Where(id => board.InProgress(progression, id)));
+        var accepted = false;
+        for (var i = 0; i < nodes.Length; i++)
+        {
+            var id = nodes[i];
+            if (!board.InProgress(progression, id) || board.Nodes[id].ForcedTracking) continue;
+            accepted = true;
+            if (states[i]) selected.Add(id); else selected.Remove(id);
+        }
+        if (accepted && (progression.TrackedIds is null || !progression.TrackedIds.SequenceEqual(selected)))
+        {
+            progression.TrackedIds = [.. selected];
+            world.Saves.MarkChanged(player.Character);
+        }
+        // Also acknowledge no-op/replayed deltas and restore the authoritative flags after rejected entries.
+        player.Session.Send(Destiny.Tracked(player.Id, progression, board));
         return null;
     }
 

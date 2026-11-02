@@ -26,8 +26,8 @@ public sealed record OrbChannel(ArenaOrb Orb, Vector2 From, TimeSpan Due, long S
 /// <item>The round score (roundbasedscore, or Arena:OrbRoundLookup for an instant orb): every matchtype roundduration the side holding more orbs
 /// takes the ticketreductionlookup of the difference from the other; resetorbs onlyscoringorbs makes the scoring side's orbs neutral, all every orb.
 /// Only where a mode's matchtype has such orbs: the Crystal Arena (MATCH_CRYSTAL_GVG_NONLETHAL, 120 s, 20/30/40; stageP P6).</item>
-/// <item>Arena:MatchHud (false): OrbUpdate (131), MatchUpdate (121), StartArenaMatchInfos (119) and MatchNewCombatRound / MatchEndCombatRound
-/// (171/172), whose fields are only partly decoded, go out only with it.</item>
+/// <item>The verified native match HUD uses 119/118/121/120 and the round number/start timestamp in 171. Arena:MatchHud still gates the
+/// experimental OrbUpdate (131) and MatchEndCombatRound (172) fields.</item>
 /// </list>
 /// The score lines go to chat as before.
 /// </summary>
@@ -135,6 +135,7 @@ public sealed partial class Arenas
             {
                 m.Channels.Remove(p);
                 ToMap(m, new ClaimOrbFinishedEvent { ddn = p.Id, bx2 = c.Orb.Id });
+                if (ObserveParticipant(m, p) is { } result) result.Captures++;
                 Claimed(m, c.Orb, TeamOf(m, p));
             }
         }
@@ -239,7 +240,7 @@ public sealed partial class Arenas
         if (_matches.Count > 0 && Find(target.Map?.Cluster) is { Channels.Count: > 0 } m) CancelClaim(m, target, "damaged");
     }
 
-    // ---- Arena:MatchHud (partly decoded) ----
+    // ---- Native HUD; experimental orb details remain behind Arena:MatchHud ----
 
     /// <summary>
     /// OrbUpdate (131, avx; clp.af copies keys 1-6, 7, 8-10, 11/12, 13/14, 15) with Arena:MatchHud only [infer: 1 the owner's Guid, 2 the claiming
@@ -261,30 +262,69 @@ public sealed partial class Arenas
     }
 
     /// <summary>
-    /// StartArenaMatchInfos (119, azn; dha.ah 0x180B286B0) at the first countdown, with Arena:MatchHud only: 0 the match, 1 the matchtype's
-    /// index in matchtypes.bin, 4/5 the teams' Guids, 8/9 their characters, 10 now, 11 the arena category, 13 −1 (no crystal league level, so
-    /// the client reads key 15), 15 the arena season (as GetArenaRankings key 0) [infer: keys 2/3, 6/7 (team names ""), 12, 14, 16-18 left at
-    /// 0 / empty; capture R2/R3].
+    /// Client 345319: dha.ah B286B0 -> dd3.ah AC0E00, ArenaMatchStatsGui.SetStartMatchInfos 1307190.
+    /// Key 10 is the scheduled fight start, key 12 the recipient's team (used to orient its score). Keys 2/3 are world object ids,
+    /// not timestamps; instanced arenas have no associated territory objects. Unverified league/modifier fields remain unset.
     /// </summary>
-    private void HudStart(ArenaMatch m)
+    private bool HasMatchHud(ArenaMatch m) => m.HudStartTicks != 0 && MatchTypeOf(m) is not null
+        && ArenaFile()?.CategoryOf(m.Mode.Category) is not null;
+
+    private void HudStart(ArenaMatch m, Player p)
     {
-        if (!Options.MatchHud) return;
-        ToMap(m, new StartArenaMatchInfosEvent
+        var ownTeam = m.Team.TryGetValue(p.Character.Id, out var team) ? m.TeamGuids[team] : Guid.Empty;
+        p.Session.Send(new StartArenaMatchInfosEvent
         {
-            dzd = m.Guid, dze = MatchTypeOf(m)?.Index ?? 0, dzh = m.TeamGuids[0], dzi = m.TeamGuids[1], dzj = "", dzk = "",
-            dzl = [.. m.TeamOf(0)], dzm = [.. m.TeamOf(1)], dzn = world.GameNow, dzo = m.Entries[0].Category, dzq = -1, dzs = ArenaData.SeasonIndex,
+            dzd = m.Guid, dze = MatchTypeOf(m)!.Index, dzh = m.TeamGuids[0], dzi = m.TeamGuids[1], dzj = "", dzk = "",
+            dzl = [.. m.TeamOf(0).Concat(m.Bots.Where(b => b.Value == 0).Select(b => b.Key.Character.Id))],
+            dzm = [.. m.TeamOf(1).Concat(m.Bots.Where(b => b.Value == 1).Select(b => b.Key.Character.Id))],
+            dzn = m.HudStartTicks, dzo = m.Mode.Category, dzp = ownTeam, dzq = -1, dzs = ArenaData.SeasonIndex,
         });
     }
 
-    /// <summary>
-    /// MatchNewCombatRound (171 {0 match, 1 now, 2 the round}) with Arena:MatchHud only, for the round-scored crystal orbs' 120 s cycles and the
-    /// 1v1 [infer: what the client shows of it; capture R3].
-    /// </summary>
-    private void HudRound(ArenaMatch m, int round)
+    /// <summary>Recreate presentation only; joining an active/result map never repeats rewards or changes match state.</summary>
+    private void HudJoined(ArenaMatch m, Player p)
     {
-        if (!Options.MatchHud || !m.Mode.Rounds && !m.Orbs.Any(o => o.Type.Score == MatchTypeData.OrbScore.RoundBased)) return;
+        if (p.IsBot || !HasMatchHud(m)) return;
+        HudStart(m, p);
+        HudRoster(m, p);
+        if (m.FightSince is not null)
+        {
+            p.Session.Send(FightEvent(m));
+            if (m.CombatRound > 0)
+                p.Session.Send(new MatchNewCombatRoundEvent { cos = m.Guid, cot = m.HudRoundTicks, cou = m.CombatRound });
+        }
+        p.Session.Send(ScoreEvent(m));
+        if (m.State == ArenaState.Ended) HudEnd(m, p);
+    }
+
+    private int MatchSecondsLeft(ArenaMatch m)
+    {
+        var duration = TimeSpan.FromMinutes(m.Mode.Minutes > 0 ? m.Mode.Minutes : Options.MatchMinutes);
+        var left = m.FightSince is { } since ? duration - (world.Now - since) : duration;
+        return (int)Math.Clamp(Math.Ceiling(left.TotalSeconds), 0, int.MaxValue);
+    }
+
+    /// <summary>118 sets the client's match-started flag (dd3.ah AC0350); 119 alone only opens the countdown.</summary>
+    private StartMatchEvent FightEvent(ArenaMatch m) => new()
+    {
+        dz2 = m.Guid, dz3 = MatchSecondsLeft(m), dz5 = m.Tickets[0], dz6 = m.Tickets[1],
+    };
+
+    private void HudFight(ArenaMatch m)
+    {
+        if (HasMatchHud(m)) ToMap(m, FightEvent(m));
+    }
+
+    /// <summary>
+    /// 345319 dd3.ao AC2900 copies key 1 to the round-start timestamp and key 2 to the round number. The arena HUD uses a future
+    /// round-start timestamp for the next 1v1 countdown (13092A3); round-scored orbs retain their existing cycle number.
+    /// </summary>
+    private void HudRound(ArenaMatch m, int round, long? starts = null)
+    {
+        if (!m.Mode.Rounds && !m.Orbs.Any(o => o.Type.Score == MatchTypeData.OrbScore.RoundBased)) return;
         m.CombatRound = round;
-        ToMap(m, new MatchNewCombatRoundEvent { cos = m.Guid, cot = world.GameNow, cou = round });
+        m.HudRoundTicks = starts ?? world.GameNow;
+        if (HasMatchHud(m)) ToMap(m, new MatchNewCombatRoundEvent { cos = m.Guid, cot = m.HudRoundTicks, cou = round });
     }
 
     /// <summary>MatchEndCombatRound (172 {0 match, 1, 2 bool}) with Arena:MatchHud only [infer: 1 team A scored the cycle, 2 team B; capture R3].</summary>
@@ -294,17 +334,52 @@ public sealed partial class Arenas
         ToMap(m, new MatchEndCombatRoundEvent { coj = m.Guid, cok = first, col = second });
     }
 
-    /// <summary>MatchUpdate (121, asg) with Arena:MatchHud only [infer: 1/2 tickets, 3/4 orbs held, 9/10 the fight's start and end; R2].</summary>
+    /// <summary>
+    /// 345319 dd3.an AC2320 -> ArenaMatchStatsGui.UpdateMatch 1308770: keys 1/2 are remaining seconds converted into local deadlines;
+    /// keys 3/4 are the two scores. The second clock and the orb/modifier/cooldown fields have no confirmed authority mapping here.
+    /// </summary>
+    private MatchUpdateEvent ScoreEvent(ArenaMatch m) => new()
+    {
+        cqh = m.Guid, cqi = MatchSecondsLeft(m), cqk = m.Tickets[0], cql = m.Tickets[1],
+    };
+
     private void HudScore(ArenaMatch m)
     {
-        if (!Options.MatchHud) return;
-        var now = world.GameNow;
-        var since = m.FightSince is { } f ? now - (world.Now - f).Ticks : now;
-        var minutes = m.Mode.Minutes > 0 ? m.Mode.Minutes : Options.MatchMinutes;
-        ToMap(m, new MatchUpdateEvent
+        if (!HasMatchHud(m)) return;
+        ToMap(m, ScoreEvent(m));
+        HudRoster(m);
+    }
+
+    /// <summary>
+    /// 345319 ctp.aqw 9A4530 -> dha.ah B28A80/dd3.ai AC1450: winner team and actual end timestamp; the result also hides the HUD
+    /// (ArenaMatchStatsGui.OnEndArenaMatch 1306340). AC1110 -> dd4.aa AC38C0 applies name, damage done/received, healing done/received
+    /// and whole fame (943B40 multiplies key 7 by 10000). ScoreboardGui.a 140FE90 / UpdateTotals 140BCD0 ->
+    /// ScoreboardExtraPageView.SetTotalsTop 1406BF0 confirms the columns. Event 169 first creates the named rows.
+    /// 99AC00 accepts reward triples kind 6/count/item-index and kind 24/PSP/0 only. The two ordinary reward lists are concatenated
+    /// by RewardsListView 13EC2F0: all paid ordinary receipts use keys 11-13 until their main/daily distinction is established;
+    /// keys 17-19 are paid rank-up rewards (CrystalArenaRankedView 12A7F4A). Silver/fame are not supported reward-row kinds here.
+    /// Keys 20/21 and 22/23 are actual before/after RP and rank (GetRankPoints 12A8390 / DetermineVisualState 12A81B0).
+    /// Key 24 enables the paid rank-up chest visual (12A8292 checks it before the rank-up list). Keys 8/10 retain their prior
+    /// defaults: cancellation/daily fields have no confirmed authority mapping.
+    /// </summary>
+    private void HudEnd(ArenaMatch m, Player p)
+    {
+        if (!HasMatchHud(m) || m.Winner is not { } winner || m.HudEndTicks == 0 || p.IsBot) return;
+        var rank = m.HudRanks.GetValueOrDefault(p.Character.Id);
+        var rows = m.Results.Values.OrderBy(r => r.Team).ThenBy(r => r.Name, StringComparer.Ordinal).ToArray();
+        var rewards = m.RewardReceipts.GetValueOrDefault(p.Character.Id) ?? [];
+        var rankUp = m.RankUpReceipts.GetValueOrDefault(p.Character.Id) ?? [];
+        p.Session.Send(CompleteResults(m, rows));
+        p.Session.Send(new EndArenaMatchEvent
         {
-            cqh = m.Guid, cqi = m.Tickets[0], cqj = m.Tickets[1], cqk = m.Orbs.Count(o => o.Owner == 0), cql = m.Orbs.Count(o => o.Owner == 1),
-            cqq = since, cqr = since + TimeSpan.FromMinutes(minutes).Ticks,
+            b43 = m.Guid, b44 = winner >= 0 ? m.TeamGuids[winner] : Guid.Empty, b4n = m.HudEndTicks,
+            b45 = [.. rows.Select(r => r.Name)], b46 = [.. rows.Select(r => (float)r.DamageDone)], b47 = [.. rows.Select(r => (float)r.DamageReceived)],
+            b48 = [.. rows.Select(r => (float)r.HealingDone)], b49 = [.. rows.Select(r => (float)r.HealingReceived)], b5a = [.. rows.Select(r => r.Fame / 10000)],
+            b4p = [.. rewards.Select(r => r.Kind)], b4q = [.. rewards.Select(r => r.Amount)], b4r = [.. rewards.Select(r => r.Item)],
+            b4s = [], b4t = [], b4u = [],
+            b4v = [.. rankUp.Select(r => r.Kind)], b4w = [.. rankUp.Select(r => r.Amount)], b4x = [.. rankUp.Select(r => r.Item)],
+            b4y = rank.BeforePoints, b4z = rank.AfterPoints, b40 = rank.BeforeRank, b41 = rank.AfterRank,
+            b42 = rankUp.Count > 0,
         });
     }
 }

@@ -150,9 +150,19 @@ public sealed partial class Guilds
 
     // ---- events (SPEC §2) ----
 
+    private (int Body, int Portrait, int Ring, byte Flag) MemberAppearance(Guid character, Player? online)
+    {
+        // Resolve the live character before the repository, as CharacterStats142 does; a stored
+        // copy must not replace unsaved avatar/flag changes for an online member.
+        var c = online?.Character ?? world.Characters.Find(character);
+        if (c is null) return default;
+        return (online?.Bot is not null ? c.Template : c.Appearance,
+            online?.Bot?.Avatar ?? c.Template, Avatars.Ring(c), online?.Flag ?? c.Flag);
+    }
+
     /// <summary>
     /// GuildUpdate kind 0 (103, ap1; SPEC §2.2, §3.6): 0 id, 1-9 one entry per member, online members first (all nine present and of
-    /// one length: the client indexes them by key 1), 4 last seen (now for an online member), 5 roles, 6-8 zeros, 9 the flags
+    /// one length: the client indexes them by key 1), 4 last seen (now for an online member), 5 roles, 6 body type, 7 portrait, 8 ring, 9 the flags
     /// (PackedEnum byte[]), 10 kind 0 (a zero byte is left out, read as 0), 11/14 the accounts, 15 the name, 16/17 the alliance's text and Guid
     /// ("" and left out without one, <see cref="Alliances.PlateOf"/>),
     /// 18 the tutorial popup, 19 {} and 28/32/34/36 "" as official (never null), 20-26 the crest.
@@ -160,8 +170,11 @@ public sealed partial class Guilds
     public GuildUpdateEvent FullUpdate(Guild g, bool tutorial)
     {
         var now = world.GameNow;
-        var rows = g.Members.Select(m => (m, p: Online(m.Id))).OrderBy(x => x.p is null).ToList();
-        var n = rows.Count;
+        var rows = g.Members.Select(m =>
+        {
+            var p = Online(m.Id);
+            return (m, p, appearance: MemberAppearance(m.Id, p));
+        }).OrderBy(x => x.p is null).ToList();
         var logo = g.Logo;
         var alliance = world.Alliances.OfGuild(g.Id);
         return new GuildUpdateEvent
@@ -172,13 +185,19 @@ public sealed partial class Guilds
             cf4 = [.. rows.Select(x => x.p is not null)],                          // [3]
             cf5 = [.. rows.Select(x => x.p is not null ? now : x.m.LastSeen.Ticks)], // [4] GameTimeStamp[]
             cf6 = [.. rows.Select(x => (byte)x.m.Role)],                           // [5] GuildRole[]
-            cf7 = new int[n], cf8 = new int[n], cf9 = new int[n],                  // [6-8] (official [0,1,0] / [0,14,0] / [0,0,0]: unknown)
-            cga = [.. rows.Select(x => x.p?.Flag ?? (byte)0)],                       // [9] FlaggingStatus[]
+            // 345319 9F4C93-9F4D7C maps these arrays to the same member fields as 104 below.
+            cf7 = [.. rows.Select(x => x.appearance.Body)],                       // [6]
+            cf8 = [.. rows.Select(x => x.appearance.Portrait)],                   // [7]
+            cf9 = [.. rows.Select(x => x.appearance.Ring)],                       // [8]
+            cga = [.. rows.Select(x => x.appearance.Flag)],                       // [9] FlaggingStatus[]
             cgc = g.SilverA7m, cgf = TaxOf(g),                                      // [11] [14]
             cgg = g.Name, cgh = world.Alliances.PlateOf(alliance), cgi = alliance?.Id ?? Guid.Empty, // [15] [16] [17]
             cgj = tutorial, cgk = [],                                              // [18] [19]
             cgl = logo.Schema, cgm = logo.Symbol, cgn = logo.Color1, cgo = logo.Color2, cgp = logo.SymbolColor, cgq = logo.Scale, cgr = logo.Offset,
-            cgt = "", cgx = "", cgz = "", cg1 = "",                                // [28] [32] [34] [36]
+            cgt = "", cgx = "",                                                   // [28] [32]
+            // 345319 cxn.u9F4F98-9F4FE1 -> c2n Codex/author/name/time; date is key37, not33.
+            cgz = g.Progress.Codex, cg0 = g.Progress.CodexAuthor,
+            cg1 = g.Progress.CodexAuthorName, cg2 = g.Progress.CodexUpdatedAt,        // [34]-[37]
         };
     }
 
@@ -202,14 +221,18 @@ public sealed partial class Guilds
         ces = [.. g.Members.Select(m => GuildRoles.HeldTag(m.Role) is >= 0 and var t ? new[] { (byte)t } : new byte[] { 0xFF })],
     };
 
-    /// <summary>GuildPlayerUpdated (104, ap0; SPEC §2.1) of <paramref name="m"/>: 0 Guid, 1 name, 2 online, 3 last seen (now when online), 4 role, 7 flag, 9 kind.</summary>
+    /// <summary>GuildPlayerUpdated (104, ap0; SPEC §2.1) of <paramref name="m"/>: 0 Guid, 1 name, 2 online, 3 last seen (now when online), 4 role, 5 portrait, 6 ring, 7 flag, 8 body type, 9 kind.</summary>
     public GuildPlayerUpdatedEvent PlayerUpdate(GuildMember m, byte kind, bool? online = null)
     {
         var p = Online(m.Id);
         var on = online ?? p is not null;
+        var appearance = MemberAppearance(m.Id, p);
         return new GuildPlayerUpdatedEvent
         {
-            cfr = m.Id, cfs = m.Name, cft = on, cfu = on ? world.GameNow : m.LastSeen.Ticks, cfv = (byte)m.Role, cfy = on && p is not null ? p.Flag : (byte)0, cf0 = kind,
+            cfr = m.Id, cfs = m.Name, cft = on, cfu = on ? world.GameNow : m.LastSeen.Ticks, cfv = (byte)m.Role,
+            // 345319 9F347F-9F34EF -> c2p; GuildMembersListEntry.SetAvatar (10B6AB8-10B6B75)
+            // uses these values directly, without a CharacterStats query.
+            cfw = appearance.Portrait, cfx = appearance.Ring, cfy = appearance.Flag, cfz = appearance.Body, cf0 = kind,
         };
     }
 
@@ -373,15 +396,46 @@ public sealed partial class Guilds
         if (!Enabled || !_invites.Remove(me, out var invite) || invite.Expires <= world.Clock.Now) return Refused;
         if (Of(me) is not null) return JoinInGuild;
         if (!_byId.TryGetValue(invite.Guild, out var g)) return Refused;
+        var check = CheckAdmission(p.Character, g, out _);
+        if (check != 0) return check;
+        var joined = CommitAdmission(p.Character, g, invite.Inviter, invite.InviterName, 22);
+        if (joined != 0) { _invites[me] = invite; return joined; }
+        guild = g;
+        return 0;
+    }
+
+    // Shared by accepted invitations, accepted applications and explicit open recruitment. The same
+    // guild/member store, capacity, alliance and change-cooldown authority governs every entry route.
+    private short CheckAdmission(Character character, Guild g, out long cooldownEnd)
+    {
+        cooldownEnd = 0;
+        if (!Enabled || !_byId.TryGetValue(g.Id, out var actual) || actual != g) return Refused;
+        if (Of(character.Id) is not null) return JoinInGuild;
         if (g.Members.Count >= Config.GuildMaxMembers) return JoinGuildFull;
         if (!world.Alliances.Fits(g)) return JoinAllianceFull;
-        if (CooldownEnd(me) is not null) return JoinCooldown;
-        var member = new GuildMember(me, p.Character.Name ?? "", Config.GuildJoinRole, UtcNow);
+        if (CooldownEnd(character.Id) is { } end) { cooldownEnd = end.Ticks; return JoinCooldown; }
+        return 0;
+    }
+
+    private short CommitAdmission(Character character, Guild g, Guid actor, string actorName, int reason)
+    {
+        var me = character.Id;
+        var member = new GuildMember(me, character.Name ?? "", Config.GuildJoinRole, UtcNow);
+        var historyCount = g.Progress.AccountTransactions.Count;
         g.Members.Add(member);
         _byMember[me] = g;
-        Save(g);
+        AddAccountEvent(g, actor, actorName, reason, member.Name);
+        try { Save(g); } // membership and its actual join event commit in the same guild transaction
+        catch (Exception ex)
+        {
+            g.Members.Remove(member);
+            _byMember.Remove(me);
+            g.Progress.AccountTransactions.RemoveRange(historyCount, g.Progress.AccountTransactions.Count - historyCount);
+            Log.Warn("guild", $"join of '{member.Name}' to '{g.Name}' was not saved: {ex.Message}");
+            return Refused;
+        }
         Changed(me);
-        guild = g;
+        _invites.Remove(me);
         Log.Info("guild", $"'{member.Name}' joins guild '{g.Name}' as {member.Role} ({g.Members.Count} members)");
         return 0;
     }
@@ -390,16 +444,21 @@ public sealed partial class Guilds
     /// After a JoinGuild's rc 0: the joiner gets GuildUpdate kind 0 (key 18 true) and 349, the other members GuildPlayerUpdated kind
     /// 1 (the new member, online) and 349, and the joiner's 106 goes to it and its observers.
     /// </summary>
-    public void AfterJoin(Player p, Guild g)
+    public void AfterJoin(Player p, Guild g) => AfterJoin(g, g.Find(p.Character.Id)!, p);
+
+    private void AfterJoin(Guild g, GuildMember member, Player? p)
     {
-        var member = g.Find(p.Character.Id)!;
-        p.Session.Send(FullUpdate(g, tutorial: true));
         var tags = Tags(g);
-        p.Session.Send(tags);
-        SendTo(g, PlayerUpdate(member, KindAdd, online: true), except: member.Id);
+        if (p is not null)
+        {
+            p.Session.Send(FullUpdate(g, tutorial: true));
+            p.Session.Send(tags);
+        }
+        SendTo(g, PlayerUpdate(member, KindAdd, online: p is not null), except: member.Id);
         SendTo(g, tags, except: member.Id);
-        Announce(p);
+        if (p is not null) Announce(p);
         Mailer.GuildNotice(world, g, "New member", $"{member.Name} joined the guild."); // stageJ mail SPEC §3: the guild's mailbox
+        WelcomeNewMember(member.Id, g);
     }
 
     /// <summary>Flow 3.2, DeclineGuildInvitation (107): the invitation goes; the inviter, when it plays, gets GuildInviteDeclined {0 decliner, 1 reason}.</summary>
@@ -421,15 +480,29 @@ public sealed partial class Guilds
         if (Of(p.Character.Id) is not { } g) return Refused;
         var me = g.Find(p.Character.Id)!;
         var handOver = me.Role == GuildRole.Guildmaster && g.Members.Count > 1;
+        GuildMember? next = null;
+        var previousRole = GuildRole.None;
+        var historyCount = g.Progress.AccountTransactions.Count;
         if (handOver)
         {
-            if (g.Find(successor) is not { } next || next == me) return Refused;
+            next = g.Find(successor);
+            if (next is null || next == me) return Refused;
+            previousRole = next.Role;
             next.Role = GuildRole.Guildmaster;
+            AddAccountEvent(g, me.Id, me.Name, 26, RoleLogParameter(next));
+        }
+        if (!Remove(g, me, KindLeft, "leaves"))
+        {
+            if (next is not null) next.Role = previousRole;
+            g.Progress.AccountTransactions.RemoveRange(historyCount, g.Progress.AccountTransactions.Count - historyCount);
+            return Refused;
+        }
+        if (next is not null)
+        {
             SendTo(g, PlayerUpdate(next, KindRole));
+            SendTo(g, Tags(g));
             Log.Info("guild", $"'{next.Name}' leads guild '{g.Name}'");
         }
-        Remove(g, me, KindLeft, "leaves");
-        if (handOver) SendTo(g, Tags(g));
         return 0;
     }
 
@@ -437,9 +510,30 @@ public sealed partial class Guilds
     /// <paramref name="m"/> is out of <paramref name="g"/> (left: kind 3, kicked: kind 2 to the others): its guild change cooldown
     /// starts, the others get 104, and the guild is saved, or deleted with its last member (its name is free again).
     /// </summary>
-    private void Remove(Guild g, GuildMember m, byte kind, string why, bool deleted = false)
+    private bool Remove(Guild g, GuildMember m, byte kind, string why, bool deleted = false, GuildMember? actor = null)
     {
+        var position = g.Members.IndexOf(m);
+        var historyCount = g.Progress.AccountTransactions.Count;
         g.Members.Remove(m);
+        if (g.Members.Count > 0)
+        {
+            AddAccountEvent(g, actor?.Id ?? m.Id, actor?.Name ?? m.Name, kind == KindKicked ? 25 : 24,
+                kind == KindKicked ? m.Name : "");
+            try { Save(g); } // remaining members, any hand-over and the history row are saved together
+            catch (Exception ex)
+            {
+                Log.Warn("guild", $"removal of '{m.Name}' from '{g.Name}' was not saved: {ex.Message}");
+                if (!deleted)
+                {
+                    g.Members.Insert(position, m);
+                    g.Progress.AccountTransactions.RemoveRange(historyCount, g.Progress.AccountTransactions.Count - historyCount);
+                    return false;
+                }
+                // Character deletion already committed and cascaded its membership. It cannot be rolled back here;
+                // retain the observed event and retry its progress save without resurrecting the deleted member.
+                Touch(g);
+            }
+        }
         _byMember.Remove(m.Id);
         _missed.Remove(m.Id);
         Changed(m.Id);
@@ -450,11 +544,11 @@ public sealed partial class Guilds
         {
             PayOutAccount(g, m, receiverDeleted: deleted);
             Delete(g);
-            return;
+            return true;
         }
         SendTo(g, PlayerUpdate(m, kind, online: Online(m.Id) is not null));
-        Save(g);
         if (!deleted) Mailer.GuildNotice(world, g, kind == KindKicked ? "Member kicked" : "Member left", $"{m.Name} {(kind == KindKicked ? "was kicked from" : "left")} the guild.");
+        return true;
     }
 
     private void Delete(Guild g)
@@ -481,8 +575,8 @@ public sealed partial class Guilds
         var me = g.Find(kicker.Character.Id)!;
         if ((target != Guid.Empty ? g.Find(target) : g.Find(name)) is not { } m || m == me || !GuildRoles.CanKick(me.Role, m.Role)) return Refused;
         var kicked = Online(m.Id);
+        if (!Remove(g, m, KindKicked, $"is kicked by '{me.Name}'", actor: me)) return Refused;
         kicked?.Session.Send(PlayerUpdate(m, KindLeft, online: true));
-        Remove(g, m, KindKicked, $"is kicked by '{me.Name}'");
         if (kicked is not null) Announce(kicked);
         return 0;
     }
@@ -516,13 +610,15 @@ public sealed partial class Guilds
     public bool SetRole(Guild g, GuildMember by, GuildMember target, GuildRole role)
     {
         if (target == by || role == GuildRole.None) return false;
+        var oldTargetRole = target.Role;
+        var oldActorRole = by.Role;
+        var historyCount = g.Progress.AccountTransactions.Count;
         if (role == GuildRole.Guildmaster)
         {
             if (by.Role != GuildRole.Guildmaster) return false;
             target.Role = GuildRole.Guildmaster;
             by.Role = GuildRole.TheRightHand;
-            SendTo(g, PlayerUpdate(target, KindRole));
-            SendTo(g, PlayerUpdate(by, KindRole));
+            AddAccountEvent(g, by.Id, by.Name, 26, RoleLogParameter(by));
         }
         else
         {
@@ -530,10 +626,20 @@ public sealed partial class Guilds
             if (!GuildRoles.CanAssign(by.Role, check, target.Role)) return false;
             if (target.Role == role) return true;
             target.Role = role;
-            SendTo(g, PlayerUpdate(target, KindRole));
         }
+        AddAccountEvent(g, by.Id, by.Name, 26, RoleLogParameter(target));
+        try { Save(g); }
+        catch (Exception ex)
+        {
+            target.Role = oldTargetRole;
+            by.Role = oldActorRole;
+            g.Progress.AccountTransactions.RemoveRange(historyCount, g.Progress.AccountTransactions.Count - historyCount);
+            Log.Warn("guild", $"rank change in '{g.Name}' was not saved: {ex.Message}");
+            return false;
+        }
+        SendTo(g, PlayerUpdate(target, KindRole));
+        if (by.Role != oldActorRole) SendTo(g, PlayerUpdate(by, KindRole));
         SendTo(g, Tags(g));
-        Save(g);
         Log.Info("guild", $"'{by.Name}' makes '{target.Name}' {target.Role} in guild '{g.Name}'");
         return true;
     }

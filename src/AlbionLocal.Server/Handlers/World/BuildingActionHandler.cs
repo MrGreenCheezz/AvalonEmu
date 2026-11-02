@@ -22,7 +22,7 @@ public enum RepairError : byte
 public enum SalvageError : byte { OutOfRange = 2, ItemNotSalvageable = 3, InventoryFull = 4, ItemTierToHigh = 6 }
 
 /// <summary>CraftItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 1).</summary>
-public enum CraftError : byte { NotEnoughSilver = 6, NotEnoughResources = 8, InventoryFull = 14, PriceChanged = 23 }
+public enum CraftError : byte { NotEnoughSilver = 6, NotEnoughGold = 7, NotEnoughResources = 8, InventoryFull = 14, InvalidAmount = 18, PriceChanged = 23 }
 
 /// <summary>
 /// Op 55 ActionOnBuildingStart, the station actions (stage 6 SPEC §6a.1, §6a.3, §6c with the verifier's corrections): the
@@ -287,8 +287,8 @@ public sealed partial class WorldSession
     /// <summary>
     /// Crafting (ACT 1; stage 6 SPEC §6c), a shop purchase too: the item by key 7 (client index) or key 10 (uniquename), which
     /// must be in the building's craftingitemlist; recipe key 8 (default 0); amount key 9. Crafts = ceil(amount /
-    /// amountcrafted); output = crafts × amountcrafted (C-C4). Price = recipe silver × crafts (a7m; gold recipes and other
-    /// requirement kinds than resources → NotEnoughResources), the client's key 4 per <see cref="Pricing.Accepts"/> (else
+    /// amountcrafted); output = crafts × amountcrafted (C-C4). Instant gold recipes use <see cref="StartGoldCraft"/> and
+    /// their native final-quantity price contract. Otherwise price = recipe silver × crafts (a7m), the client's key 4 per <see cref="Pricing.Accepts"/> (else
     /// PriceChanged, 23) and in the wallet (6); resources crafts × count each in the inventory (8); the output must fit
     /// before anything is taken (14). A shop (isshop, the faction trader) or a recipe without time runs at once: NewBuilding
     /// key 16, UpdateMoney, the resources, the output (NewSimpleItem / NewEquipmentItem + InventoryPutItem, into a stack where
@@ -318,9 +318,10 @@ public sealed partial class WorldSession
         if (req.v < 0 || req.v >= item.Recipes.Count) return Generic($"{item.Name} has no recipe {req.v}");
         var recipe = item.Recipes[req.v];
         if (req.w <= 0 || req.w > 9999) return Generic($"amount {req.w}");
+        if (recipe.Gold > 0) return StartGoldCraft(player, building, item, req);
         // StageL mists phase B: the City Trader's standing gates and FAVOR (Systems/Mists) are kept; every other kind is not yet.
-        if (recipe.Gold > 0 || recipe.Unsupported.Any(u => !Systems.Mists.Supports(u) && !Systems.Factions.Supports(u)))
-            return Refuse(CraftError.NotEnoughResources, $"the recipe needs {(recipe.Gold > 0 ? "gold" : string.Join(", ", recipe.Unsupported))}, not made here yet");
+        if (recipe.Unsupported.Any(u => !Systems.Mists.Supports(u) && !Systems.Factions.Supports(u)))
+            return Refuse(CraftError.NotEnoughResources, $"the recipe needs {string.Join(", ", recipe.Unsupported)}, not made here yet");
         var crafts = Pricing.Crafts(req.w, recipe.AmountCrafted);
         if (world.Mists.TraderRefusal(player, recipe, crafts) is { } gated) return Refuse(CraftError.NotEnoughResources, gated);
         if (world.Factions.ShopRefusal(player, recipe, crafts, building.Template) is { } faction) return Refuse(CraftError.NotEnoughResources, faction); // stageN faction SPEC §3
@@ -338,7 +339,19 @@ public sealed partial class WorldSession
             needs.Add((type, need));
         }
         var output = crafts * recipe.AmountCrafted;
-        if (!Fits(bag, item.IsEquipment ? Enumerable.Repeat((item, 1), output) : [(item, output)]))
+        // TakeItems empties resource stacks before GiveItem places the output.
+        // Count those slots in the same reverse order, without changing inventory
+        // during validation; otherwise a full bag rejects a craft that makes room.
+        var remainingNeeds = needs.GroupBy(n => n.Type).ToDictionary(g => g.Key, g => g.Sum(n => n.Count));
+        var freed = 0;
+        for (var slot = bag.Size - 1; slot >= 0; slot--)
+        {
+            if (bag[slot] is not { } stack || !remainingNeeds.TryGetValue(stack.Template, out var remaining) || remaining <= 0) continue;
+            var taken = Math.Min(remaining, stack.Count);
+            remainingNeeds[stack.Template] = remaining - taken;
+            if (taken == stack.Count) freed++;
+        }
+        if (!Fits(bag, item.IsEquipment ? Enumerable.Repeat((item, 1), output) : [(item, output)], freed: freed))
             return Refuse(CraftError.InventoryFull, $"{output} x {item.Name} do not fit the inventory");
 
         var instant = building.Template.IsShop || recipe.Time <= 0;
@@ -366,9 +379,12 @@ public sealed partial class WorldSession
         // The quality bonus (destiny board itemcraftquality + focus), fixed for the batch (enchanting SPEC §3).
         var qualityBonus = item.IsEquipment && !building.Template.IsShop ? Focus.QualityBonus(player, item, now, focusShare) : 0;
         if (!instant) StartedToObservers(player, action);
-        // The return bonus: the city's and the category's, + ActionFocus CraftingEfficiency × the share of the focus cost covered.
+        // The return bonus: city + category + active global production bonuses, then ActionFocus
+        // CraftingEfficiency × the share of the focus cost covered. Snapshot once for this batch.
         var returns = !building.Template.IsShop && world.Config.CraftingReturns
-            ? Math.Min(1, Pricing.ReturnFraction(world.Crafting.Bonus(player.Map!.Cluster, item.Attrs.GetValueOrDefault("craftingcategory", ""))
+            ? Math.Min(1, Pricing.ReturnFraction(world.Crafting.Bonus(player.Map!.Cluster,
+                item.Attrs.GetValueOrDefault("craftingcategory", ""),
+                world.Festivities.ActiveAt(now).SelectMany(festivity => festivity.CraftBonuses))
                 + world.Economy.FocusEfficiency * focusShare) * world.Rates.CraftingReturn) : 0; // × Rates:CraftingReturn
         Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
             $"'{player.Character.Name}' crafts {output} x {item.Name} ({crafts} craft(s), recipe {req.v}) at {building.Template.Name} for {req.r / 10000.0:0.####} silver{(focusUsed > 0 ? $", {focusUsed:0} focus" : "")}{(returns > 0 ? $", {returns * 100:0.#} % of the resources back" : "")}{(instant ? "" : $", {Pricing.CraftDuration(recipe, crafts, timeReduction).TotalSeconds:0.####} s")}"));

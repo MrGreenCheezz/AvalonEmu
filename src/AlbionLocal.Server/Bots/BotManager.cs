@@ -738,9 +738,11 @@ public sealed partial class BotManager(World world)
     /// tier, which may move its tier to the nodes the map has). Null when the map has no template, no free name was found or a gatherer
     /// finds nothing to gather. Bot support roles: a patrol's <paramref name="part"/> (null: its group's next, <see cref="BotGroup.NextPart"/>)
     /// with Bots:Support:Enabled, its weapon and kit by it; one whose weapon did not resolve at its tier (no holy staff below T3) a dps.
+    /// <paramref name="unavailableName"/> optionally retains names that a caller's native presentation still references (arena results).
     /// </summary>
     public Player? Spawn(Map map, BotRole role, int tier, Vector2 at, float facing, BotSlot? slot = null, BotPoi? poi = null, GatherProfile? profile = null,
-        BotGroup? group = null, double healthFactor = 1, double damageFactor = 1, bool? elite = null, BotIdentity? identity = null, PatrolPart? part = null)
+        BotGroup? group = null, double healthFactor = 1, double damageFactor = 1, bool? elite = null, BotIdentity? identity = null, PatrolPart? part = null,
+        Func<string, bool>? unavailableName = null)
     {
         if (map.Template is null) return null;
         if (role == BotRole.Gatherer && (profile ??= ProfileFor(map, tier)) is null) return null;
@@ -748,8 +750,9 @@ public sealed partial class BotManager(World world)
         if (Patrols(role) && (group ??= NavOf(map) is { } nav && PatrolRoute.Pick(nav, map.Template, Random, at, PortalStops(map, nav, at)) is { } route ? new BotGroup(route) : null) is null)
             return null;
         if (profile is not null) tier = profile.Tier;
-        if (identity is not null && (_held.Contains(identity.Index) && slot?.Identity != identity.Index || Taken(identity.Name))) identity = null;
-        var name = identity?.Name ?? (slot?.Name is { } kept && !Taken(kept) ? kept : BotNames.Next(Settings, Random, Taken));
+        bool NameUnavailable(string candidate) => Taken(candidate) || unavailableName?.Invoke(candidate) == true;
+        if (identity is not null && (_held.Contains(identity.Index) && slot?.Identity != identity.Index || NameUnavailable(identity.Name))) identity = null;
+        var name = identity?.Name ?? (slot?.Name is { } kept && !NameUnavailable(kept) ? kept : BotNames.Next(Settings, Random, NameUnavailable));
         if (name is null)
         {
             Log.Warn("bots", $"map {map.Cluster}: no free bot name in 50 tries, spawn skipped (more syllables in content/bots.json Names)");

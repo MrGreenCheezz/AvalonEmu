@@ -68,8 +68,9 @@ public sealed class PlayerTrade(int id, TradeSide a, TradeSide b, long expires)
 /// revision, reset both accepts and go to every open window as an Update per recipient (its own offer with object ids, the
 /// partner's without); a refused one gets a resync Update, since the client changed its own window before asking. An accept
 /// (op 166) counts only for the current revision and Trade:AcceptDelaySeconds after the last change; withdrawing always counts.
-/// When both accept, <see cref="Commit"/> exchanges the offers atomically under the world lock and saves both characters in one
-/// transaction (<see cref="Persistence.SaveScheduler.SaveTogether"/>). A cancel (op 162, too far, the map left, a knockdown, the
+/// When both accept, <see cref="Commit"/> exchanges the offers atomically under the world lock. With the account shop, both wallets
+/// and character inventories commit before delivery; legacy repositories use <see cref="Persistence.SaveScheduler.SaveTogether"/>.
+/// A cancel (op 162, too far, the map left, a knockdown, the
 /// lapse, a server stop) sends PlayerTradeCancel (177) to both: an invitee that declined still holds its trade object until it.
 /// Nothing moves before the commit, so a disconnect or a crash before it loses nothing. Each tick (<see cref="Update"/>) checks the
 /// range and takes out offered items that left the bag or changed their count (the client locks them; this is the backstop).
@@ -245,7 +246,7 @@ public sealed class Trades(World world)
         for (var s = 0; s < bag.Size; s++)
         {
             if (bag[s] is { } i && !outgoing.Contains(i)) slots[s] = (i.Template, i.JournalFame, i.PartlyFilled, i.Count);
-            else if (bag[s] is null && bag.Unloaded[s] is not null) blocked[s] = true;
+            else if (bag.Unloaded[s] is not null) blocked[s] = true;
         }
         foreach (var (type, count, record) in incoming)
         {
@@ -302,6 +303,47 @@ public sealed class Trades(World world)
         }
         // 3. The saved records of everything outgoing (quality, durability, spells, journal fame), before anything moves.
         var records = new[] { t.A, t.B }.ToDictionary(s => s, s => s.Slots.Values.Select(o => (o.Item, Record: Record(o.Item))).ToList());
+        if (world.Shop.Enabled)
+        {
+            TradeInventoryPlan? a = null, b = null;
+            var committed = world.Shop.TryCommitTrade(t, () =>
+            {
+                a = PlanInventory(t.A, records[t.A], records[t.B]);
+                b = PlanInventory(t.B, records[t.B], records[t.A]);
+                return (a.Character, b.Character);
+            }, (first, second) =>
+            {
+                var publishA = InstallInventory(a!);
+                var publishB = InstallInventory(b!);
+                t.A.Player.Character.Silver = first.Silver; t.A.Player.Character.Gold = first.Gold;
+                t.B.Player.Character.Silver = second.Silver; t.B.Player.Character.Gold = second.Gold;
+                // Install both complete live states and their future save snapshots before any send or item hook.
+                // A disconnected peer may throw while publishing; the durable exchange must remain complete and non-replayable.
+                t.A.Player.SaveItems();
+                t.B.Player.SaveItems();
+                Remove(t);
+                publishA();
+                publishB();
+                // Hooks see both completed bags. Their own subsequent changes follow the normal item save path.
+                foreach (var plan in new[] { a!, b! })
+                {
+                    foreach (var item in plan.Added) world.Scripts.OnItemAdded(plan.Player, item);
+                    plan.Player.SaveItems();
+                }
+            });
+            if (!committed)
+            {
+                t.A.Accepted = t.B.Accepted = false;
+                foreach (var side in t.Open)
+                {
+                    side.Player.Session.Send(AcceptChange(t, side));
+                    side.Player.Session.Send(new SystemMessageEvent { d0p = "No se pudo guardar el intercambio. No se ha movido nada; vuelve a aceptar.", d0q = 1 });
+                }
+                return;
+            }
+            Finish(t, records);
+            return;
+        }
         // 4. Take.
         foreach (var side in new[] { t.A, t.B })
         {
@@ -325,10 +367,96 @@ public sealed class Trades(World world)
         t.A.Player.SaveItems();
         t.B.Player.SaveItems();
         world.Saves.SaveTogether(t.A.Player.Character, t.B.Player.Character);
-        // 7. Done.
+        Finish(t, records);
+    }
+
+    private void Finish(PlayerTrade t, Dictionary<TradeSide, List<(Item Item, InventoryItem Record)>> records)
+    {
         Remove(t);
         foreach (var side in new[] { t.A, t.B }) side.Player.Session.Send(new PlayerTradeFinishedEvent { dm7 = t.Id });
         Log.Info("trade", $"trade {t.Id} done: {Describe(t.A, records[t.A])} -> '{t.B.Player.Character.Name}'; {Describe(t.B, records[t.B])} -> '{t.A.Player.Character.Name}'");
+    }
+
+    private sealed record TradeInventoryPlan(Player Player, Character Character, Inventory Inventory, Item[] Removed, List<Item> Added);
+
+    /// <summary>Stages the exact objects GiveItem would create, without changing the live bags or sending events.</summary>
+    private TradeInventoryPlan PlanInventory(TradeSide side, List<(Item Item, InventoryItem Record)> outgoing,
+        List<(Item Item, InventoryItem Record)> incoming)
+    {
+        var player = side.Player;
+        var original = player.Inventory;
+        var staged = new Inventory(original.Equipment.Id, original.Bag.Id);
+        static Item Copy(Item i) => new(i.Id, i.Template, i.Count, i.Quality, i.DurabilityRaw, i.Active, i.Passive, i.Source)
+            { JournalFame = i.JournalFame, Soul = i.Soul };
+        foreach (var (from, to) in new[] { (original.Equipment, staged.Equipment), (original.Bag, staged.Bag) })
+            for (var slot = 0; slot < from.Size; slot++)
+            {
+                to.Unloaded[slot] = from.Unloaded[slot];
+                if (from[slot] is { } item) to.Put(slot, Copy(item));
+            }
+        staged.Overflow.AddRange(original.Overflow);
+        foreach (var (item, _) in outgoing) staged.Bag.Take(original.Bag.IndexOf(item));
+        var added = new List<Item>();
+        foreach (var (item, record) in incoming)
+        {
+            var max = WorldSession.MaxStack(item.Template);
+            var count = record.Count;
+            if (max > 1 && !item.PartlyFilled && staged.Bag.Items.FirstOrDefault(i => i.Template == item.Template
+                && i.JournalFame == item.JournalFame && !i.PartlyFilled && i.Count + count <= max) is { } stack)
+            {
+                stack.Count += count;
+                continue;
+            }
+            for (var left = count; left > 0;)
+            {
+                var slot = staged.Bag.FreeSlot();
+                if (slot < 0) throw new InvalidOperationException("trade inventory no longer fits");
+                var n = Math.Min(left, max);
+                left -= n;
+                var made = player.Session.PrepareTradeItem(item.Template, record with { Count = n }, player);
+                staged.Bag.Put(slot, made);
+                added.Add(made);
+            }
+        }
+        var snapshot = player.Character.Clone();
+        staged.SaveTo(snapshot, id => world.Spells?.Name(id));
+        foreach (var vault in player.OpenVaults.Values) snapshot.Vaults[vault.Key] = Inventory.Records(vault.Container, id => world.Spells?.Name(id));
+        return new(player, snapshot, staged, outgoing.Select(o => o.Item).ToArray(), added);
+    }
+
+    /// <summary>Installs without callbacks; the returned action only publishes the already installed changes.</summary>
+    private static Action InstallInventory(TradeInventoryPlan plan)
+    {
+        var player = plan.Player;
+        var bag = player.Inventory.Bag;
+        var changed = new List<Item>();
+        var added = new List<(Item Item, int Slot)>();
+        foreach (var item in plan.Removed) bag.Take(bag.IndexOf(item));
+        for (var slot = 0; slot < bag.Size; slot++)
+        {
+            if (plan.Inventory.Bag[slot] is not { } planned) continue;
+            if (bag[slot] is { } current && current.Id == planned.Id)
+            {
+                if (current.Count == planned.Count) continue;
+                current.Count = planned.Count;
+                changed.Add(current);
+            }
+            else
+            {
+                bag.Put(slot, planned);
+                added.Add((planned, slot));
+            }
+        }
+        return () =>
+        {
+            foreach (var item in plan.Removed) player.Session.Send(new InventoryDeleteItemEvent { ckr = item.Id });
+            foreach (var item in changed) player.Session.SendItem(item);
+            foreach (var (item, slot) in added)
+            {
+                player.Session.SendItem(item);
+                player.Session.Send(new InventoryPutItemEvent { ckw = item.Id, ckx = slot, cky = bag.Id });
+            }
+        };
     }
 
     /// <summary>Steps 6-9 of the invite rules (§2.3) between <paramref name="a"/> and <paramref name="b"/>, the distance against <paramref name="range"/>.</summary>

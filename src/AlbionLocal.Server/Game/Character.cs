@@ -13,6 +13,9 @@ public sealed class Character
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = "";
 
+    /// <summary>Personal profile statement (op 290 / CharacterStats event 142 key 5); empty until edited.</summary>
+    public string Statement { get; set; } = "";
+
     /// <summary>
     /// Stage I bots (analysis/work/stageI/bots/SPEC.md §1.2): a bot's character, never saved (<see cref="Persistence.SaveScheduler"/>
     /// drops every mark and save of it) and never in the repository; not a column, not cloned.
@@ -100,6 +103,10 @@ public sealed class Character
     /// </summary>
     public Dictionary<string, List<InventoryItem?>> Vaults { get; set; } = new(StringComparer.Ordinal);
 
+    /// <summary>Personal bank tabs by resolved vault location, in display order; schema v52.
+    /// Includes default-tab metadata when customized. An absent location retains the client's implicit default tab.</summary>
+    public Dictionary<string, List<BankTab>> BankTabs { get; set; } = new(StringComparer.Ordinal);
+
     /// <summary>The key of a vault in <see cref="Vaults"/>: "&lt;cluster&gt;|&lt;tab Guid&gt;", or "shared|&lt;tab Guid&gt;" (<see cref="SharedVault"/>).</summary>
     public static string VaultKey(string location, Guid tab) => $"{location}|{tab}";
 
@@ -184,6 +191,12 @@ public sealed class Character
     /// </summary>
     public string[]? JournalTracked { get; set; }
 
+    /// <summary>Personal chat tabs (op 127 / event 217); null retains the server defaults until customized.</summary>
+    public ChatTab[]? ChatTabs { get; set; }
+
+    /// <summary>Observed statistics and combat history; null means no prospective coverage yet (schema v48).</summary>
+    public CharacterStatistics? Statistics { get; set; }
+
     /// <summary>
     /// StageH expeditions (SPEC §5.1, §8): the daily bonuses taken, the last expedition run and the reward items that did not fit the
     /// inventory (given at a later Join); null = never ran one.
@@ -236,12 +249,13 @@ public sealed class Character
     /// <summary>A deep copy: what the repository hands out and what a save snapshot holds share nothing with the original.</summary>
     public Character Clone() => new()
     {
-        Id = Id, Name = Name, Account = Account, Template = Template, Appearance = Appearance, Tutorial = Tutorial,
+        Id = Id, Name = Name, Statement = Statement, Account = Account, Template = Template, Appearance = Appearance, Tutorial = Tutorial,
         Customization = [.. Customization], Clothes = [.. Clothes],
         Cluster = Cluster, PositionX = PositionX, PositionY = PositionY, Direction = Direction,
         PreviousCluster = PreviousCluster, LastLeftAt = LastLeftAt, LastCity = LastCity, PendingTransfer = PendingTransfer, DungeonReturn = DungeonReturn, Created = Created,
         Fame = Fame, Silver = Silver, Gold = Gold, PlayedMilliseconds = PlayedMilliseconds,
         Vaults = Vaults.ToDictionary(v => v.Key, v => v.Value.Select(i => i?.Copy()).ToList(), StringComparer.Ordinal),
+        BankTabs = BankTabs.ToDictionary(v => v.Key, v => v.Value.ToList(), StringComparer.Ordinal),
         Equipment = [.. Equipment.Select(i => i?.Copy())],
         Inventory = [.. Inventory.Select(i => i?.Copy())],
         Progression = Progression?.Clone(),
@@ -251,6 +265,8 @@ public sealed class Character
         MountedSince = MountedSince, MountCooldownUntil = MountCooldownUntil,
         Flag = Flag, Faction = Faction, Reputation = Reputation, ReputationAt = ReputationAt,
         JournalTracked = JournalTracked is { } tracked ? [.. tracked] : null,
+        ChatTabs = ChatTabs?.Select(t => t.Copy()).ToArray(),
+        Statistics = Statistics?.Clone(),
         Expeditions = Expeditions?.Clone(),
         Goals = Goals?.Clone(),
         BlackMarket = BlackMarket,
@@ -286,7 +302,17 @@ public sealed class VanityLog
     /// <summary>Mount category index → mount skin number.</summary>
     public Dictionary<int, int> MountSkins { get; set; } = new();
 
-    public VanityLog Clone() => new() { Unlocks = [.. Unlocks], Wardrobe = [.. Wardrobe], MountSkins = new(MountSkins) };
+    /// <summary>Character-specific portrait rewards, by original XML name. Account vanity unlocks remain
+    /// separate in Unlocks/ShopAccount; neither set grants every locked portrait by default.</summary>
+    public HashSet<string> Avatars { get; set; } = new(StringComparer.Ordinal);
+    public HashSet<string> AvatarRings { get; set; } = new(StringComparer.Ordinal);
+    public int AvatarRing { get; set; }
+
+    public VanityLog Clone() => new()
+    {
+        Unlocks = [.. Unlocks], Wardrobe = [.. Wardrobe], MountSkins = new(MountSkins),
+        Avatars = new(Avatars, StringComparer.Ordinal), AvatarRings = new(AvatarRings, StringComparer.Ordinal), AvatarRing = AvatarRing,
+    };
 }
 
 /// <summary>
@@ -356,6 +382,7 @@ public sealed class GoalLog
     public Dictionary<string, long> Done { get; set; } = new(StringComparer.Ordinal);
     public HashSet<string> Claimed { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, SeasonLog> Seasons { get; set; } = new(StringComparer.Ordinal);
+    public PersonalMightLog? Conqueror { get; set; }
     public Dictionary<string, int> Bounties { get; set; } = new(StringComparer.Ordinal);
     public HashSet<string> BountiesDone { get; set; } = new(StringComparer.Ordinal);
 
@@ -390,11 +417,59 @@ public sealed class GoalLog
     {
         Journal = new(Journal, StringComparer.Ordinal), Done = new(Done, StringComparer.Ordinal), Claimed = new(Claimed, StringComparer.Ordinal),
         Seasons = Seasons.ToDictionary(s => s.Key, s => s.Value.Clone(), StringComparer.Ordinal),
+        Conqueror = Conqueror?.Clone(),
         Bounties = new(Bounties, StringComparer.Ordinal), BountiesDone = new(BountiesDone, StringComparer.Ordinal), BountiesOwed = new(BountiesOwed, StringComparer.Ordinal),
         ItemsOwed = [.. ItemsOwed],
         PvpVictims = PvpVictims.ToDictionary(v => v.Key, v => v.Value.ToList(), StringComparer.Ordinal),
         PvpDuels = PvpDuels.ToDictionary(v => v.Key, v => v.Value.ToList(), StringComparer.Ordinal),
         PvpDay = PvpDay, PvpDayPoints = PvpDayPoints, PvpRefused = new(PvpRefused, StringComparer.Ordinal), JournalVersion = JournalVersion,
+    };
+}
+
+/// <summary>Personal Might, separate from guild Might and Adventurer's Challenge. Existing characters start collecting
+/// at CoveredSinceUtc; their earlier activities are unknown, never reconstructed from total fame. Kept in goals JSON.</summary>
+public sealed class PersonalMightLog
+{
+    public long CoveredSinceUtc { get; set; }
+    public long Week { get; set; }
+    public long WeeklyMight { get; set; }
+    public bool WeeklyClaimed { get; set; }
+    public HashSet<long> WeeklyFavorPaid { get; set; } = [];
+    public Dictionary<string, Dictionary<string, long>> Seasons { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, PersonalMightRewards> Rewards { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Unique guild bracket milestones actually crossed while this character belonged to the guild.
+    /// No retroactive credit on first load or when joining a guild already in a higher bracket.</summary>
+    public Dictionary<string, HashSet<string>> BracketRewards { get; set; } = new(StringComparer.Ordinal);
+    public PersonalMightLog Clone() => new()
+    {
+        CoveredSinceUtc = CoveredSinceUtc, Week = Week, WeeklyMight = WeeklyMight, WeeklyClaimed = WeeklyClaimed,
+        WeeklyFavorPaid = [.. WeeklyFavorPaid],
+        Seasons = Seasons.ToDictionary(s => s.Key, s => new Dictionary<string, long>(s.Value, StringComparer.Ordinal), StringComparer.Ordinal),
+        Rewards = Rewards.ToDictionary(s => s.Key, s => s.Value.Clone(), StringComparer.Ordinal),
+        BracketRewards = BracketRewards.ToDictionary(s => s.Key, s => new HashSet<string>(s.Value, StringComparer.Ordinal), StringComparer.Ordinal),
+    };
+}
+
+/// <summary>Finalized personal season entitlement and original chest loot, separate from guild rewards. The display
+/// item identifies a reward; Pending holds its once-rolled contents until they fit the normal inventory. Both claim
+/// markers and inventory changes commit in one character transaction. No state is reconstructed for unrecorded seasons.</summary>
+public sealed class PersonalMightRewards
+{
+    public long Might { get; set; }
+    public Guid Guild { get; set; }
+    public string GuildName { get; set; } = "";
+    public byte Bracket { get; set; }
+    public int Rank { get; set; } = -1;
+    public bool Participation { get; set; }
+    public string[] Items { get; set; } = [];
+    public HashSet<string> Claimed { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, int> Pending { get; set; } = new(StringComparer.Ordinal);
+    public HashSet<string> Withdrawals { get; set; } = new(StringComparer.Ordinal);
+    public PersonalMightRewards Clone() => new()
+    {
+        Might = Might, Guild = Guild, GuildName = GuildName, Bracket = Bracket, Rank = Rank, Participation = Participation,
+        Items = [.. Items], Claimed = new(Claimed, StringComparer.Ordinal), Pending = new(Pending, StringComparer.Ordinal),
+        Withdrawals = new(Withdrawals, StringComparer.Ordinal),
     };
 }
 

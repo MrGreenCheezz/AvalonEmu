@@ -28,8 +28,13 @@ public sealed class Progression
     /// </summary>
     public SortedDictionary<int, long> Progress { get => _progress; set => _progress = value ?? []; }
 
-    /// <summary>The last fame-fed node selected for the Destiny Board HUD; null until a gain selects one.</summary>
+    /// <summary>Legacy automatic HUD selection, used until the player chooses their own pins.</summary>
     public int? Tracked { get; set; }
+
+    /// <summary>Manual HUD pins from op 311. Null preserves legacy automatic selection; an empty array means explicitly no pins.</summary>
+    public int[]? TrackedIds { get; set; }
+
+    public IReadOnlyList<int> TrackedNodes => TrackedIds ?? (Tracked is { } id ? [id] : []);
 
     /// <summary>
     /// Everything unlocked: the 30 plain achievements finished and every template achievement at its base
@@ -55,13 +60,17 @@ public sealed class Progression
 
     public void SetLevel(int id, int level) => Levels[id] = level;
 
-    public Progression Clone() => new() { Completed = [.. Completed], Levels = new(Levels), Progress = new(Progress), Tracked = Tracked };
+    public Progression Clone() => new()
+    {
+        Completed = [.. Completed], Levels = new(Levels), Progress = new(Progress), Tracked = Tracked,
+        TrackedIds = TrackedIds is { } ids ? [.. ids] : null,
+    };
 
     /// <summary>
-    /// Keys 1-5 of FullAchievementInfo; key 4 (the tracked flag, a38+0x28) selects the HUD node, key 5 (the auto-learn flag, cs7+0x29) true for the
+    /// Keys 1-5 of FullAchievementInfo; key 4 (the tracked flag, a38+0x28) selects HUD nodes, key 5 (the auto-learn flag, cs7+0x29) true for the
     /// in-progress ids in <paramref name="autoLearn"/> (stageJ focus-lp SPEC §5.3; null = none).
     /// </summary>
     public FullAchievementArrays BuildFullAchievementInfo(IReadOnlyCollection<int>? autoLearn = null) =>
-        new([.. Completed], [.. Levels.Keys], [.. Levels.Values], [.. Levels.Keys.Select(id => id == Tracked)],
+        new([.. Completed], [.. Levels.Keys], [.. Levels.Values], [.. Levels.Keys.Select(id => TrackedNodes.Contains(id))],
             [.. Levels.Keys.Select(id => autoLearn?.Contains(id) == true)]);
 }

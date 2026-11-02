@@ -759,6 +759,7 @@ public static class BotCombat
             foreach (var p in map.Players.Values.ToList()) p.Session.Send(died);
         }
         else Knockdown.Start(bot, killer.Id, killer.Character.Name, ticks, KnockdownKind.Pvp);
+        world.Shop.PlayKillEmote(killer, bot, knockdown: !death, ticks);
         // StageL corrupted (SPEC §4.5): a beaten invader gives the run's InvaderReward and the PvP goals, no fame, bag or silver.
         if (info.Role == BotRole.Invader) world.Corrupted.InvaderBeaten(bot, killer, attackers, death, crime, ticks);
         else bots.Rewards.Grant(bot, killer, attackers, death, crime, ticks);

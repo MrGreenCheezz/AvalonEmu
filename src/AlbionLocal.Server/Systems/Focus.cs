@@ -30,27 +30,36 @@ public static class Focus
     }
 
     /// <summary>The focus cap of <paramref name="p"/> (Join key 28): Focus:Max, else characters.xml (premium)craftingfocusmax, 30000.</summary>
-    public static double Max(Player p) =>
-        p.World.Config.FocusMax ?? (Premium.Is(p) ? Defaults(p.World).FocusMaxPremium : Defaults(p.World).FocusMax);
+    public static double Max(Player p) => Max(p.World, Premium.Is(p));
+
+    private static double Max(World world, bool premium) =>
+        world.Config.FocusMax ?? (premium ? Defaults(world).FocusMaxPremium : Defaults(world).FocusMax);
 
     /// <summary>
     /// The focus regained per second (Join key 30, 94 key 5): while premium Focus:RegenPerDay, else premiumcraftingfocusregenerationperday
     /// (10000), / 86400 = 0.11574074; without premium craftingfocusregenerationperday (0).
     /// </summary>
-    public static double RegenPerSecond(Player p) =>
-        (Premium.Is(p) ? p.World.Config.FocusRegenPerDay ?? Defaults(p.World).FocusRegenPerDayPremium : Defaults(p.World).FocusRegenPerDay) / 86400.0;
+    public static double RegenPerSecond(Player p) => RegenPerSecond(p.World, Premium.Is(p));
+
+    private static double RegenPerSecond(World world, bool premium) =>
+        (premium ? world.Config.FocusRegenPerDay ?? Defaults(world).FocusRegenPerDayPremium : Defaults(world).FocusRegenPerDay) / 86400.0;
 
     /// <summary>
     /// The focus at GameTimeStamp <paramref name="now"/>: the stored value plus the regeneration since its stamp, at most <see cref="Max"/>
     /// (a value above the cap, which a GM may set, does not go down); a stamp of 0 regenerates nothing.
     /// </summary>
-    public static double Current(Player p, long now)
+    public static double Current(Player p, long now) => Current(p.World, p.Character, now, p.PremiumOverride);
+
+    internal static double Current(World world, Character c, long now, bool? sessionOverride)
     {
-        var c = p.Character;
         if (c.FocusStamp == 0 || now <= c.FocusStamp) return c.CraftingFocus;
-        var regen = RegenPerSecond(p);
-        if (regen <= 0) return c.CraftingFocus;
-        return Math.Max(c.CraftingFocus, Math.Min(Max(p), c.CraftingFocus + (now - c.FocusStamp) / TicksPerSecond * regen));
+        var focus = c.CraftingFocus;
+        foreach (var (start, end, premium) in Premium.AccrualPeriods(world, c, c.FocusStamp, now, sessionOverride))
+        {
+            var regen = RegenPerSecond(world, premium);
+            if (regen > 0) focus = Math.Max(focus, Math.Min(Max(world, premium), focus + (end - start) / TicksPerSecond * regen));
+        }
+        return focus;
     }
 
     /// <summary>The regeneration so far into the stored value, the stamp at <paramref name="now"/> (before any change of the value or of the regeneration).</summary>

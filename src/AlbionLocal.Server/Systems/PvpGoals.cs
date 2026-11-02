@@ -183,6 +183,7 @@ public static class PvpGoals
     /// </summary>
     public static void OnPvpKill(World world, PvpKill k)
     {
+        world.Armory.PvpKilled(k);
         var s = world.Goals.Pvp;
         if (!s.Enabled || k.Killer.Player is not { } killer) return;
         var receivers = new List<(Player Player, Role Role)> { (killer, Role.Kill) };

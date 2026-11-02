@@ -130,9 +130,7 @@ public sealed partial class WorldSession
         static bool Compare(int value, int? wanted, int mode) =>
             wanted is not { } w || (mode switch { 1 => value <= w, 2 => value >= w, _ => value == w });
         var (quality, tier, enchantment) = (Number(filter.Quality), Number(filter.Tier), Number(filter.Enchantment));
-        var open = Expire(world.Market!.Orders(location, type)).Concat(JournalMerchant.Orders(world, location, type))
-            .Concat(TutorialMerchant.Orders(player, location, type))
-            .Concat(BlackMarket.Orders(world, player.Character, location, type))
+        var open = MarketOrders(player, location, type)
             .Select(o => (Order: o, Item: world.Items.Find(o.ItemName)))
             .Where(x => x.Item is { } t && (types is null || types.Contains(t.Index))
                 && categories.All(c => ShopCategoryLevels.Any(l => string.Equals(t.Attrs.GetValueOrDefault(l), c, StringComparison.OrdinalIgnoreCase)))
@@ -154,8 +152,86 @@ public sealed partial class WorldSession
         return ([.. list.Skip(offset).Take(size).Select(o => Dto(o, finished: false))], list.Count > offset + size);
     }
 
+    /// <summary>The same available orders for listings and minimum prices, scoped to a market resolved by <see cref="MarketAt"/>.</summary>
+    private IEnumerable<MarketOrder> MarketOrders(Player player, string location, string type)
+    {
+        var now = DateTime.UtcNow;
+        return Expire(world.Market!.Orders(location, type))
+            .Concat(JournalMerchant.Orders(world, location, type))
+            .Concat(TutorialMerchant.Orders(player, location, type))
+            .Concat(BlackMarket.Orders(world, player.Character, location, type))
+            .Where(o => o.Location == location && o.Type == type && o.Amount > 0 && o.UnitPrice > 0 && o.Expires > now);
+    }
+
     /// <summary>The orders of <paramref name="orders"/> that are still open; each expired one is ended (<see cref="MarketExpiry"/>: a finished entry and its owner's mail).</summary>
     private List<MarketOrder> Expire(IEnumerable<MarketOrder> orders) => MarketExpiry.Expire(world, orders);
+
+    /// <summary>
+    /// AuctionGetLowestOfferPrices (op 97): key 0 is the market object, key 1 the requested item type ids.
+    /// Client 345319 MarketPlaceCreateBuyOrderView.OnLowestOfferPricesReceived (metadata token 0600F271,
+    /// GameAssembly RVA 0xFB8340, VA 0x180FB8340) reads response keys 0/1 at adz +0x20/+0x28 as parallel
+    /// short[]/a7m[] arrays. Both must be non-null and equally long. The minimum is the unit price of an open
+    /// sell order at this market, across qualities; absent types are omitted, not assigned an invented price.
+    /// </summary>
+    [Handles(OperationCodes.AuctionGetLowestOfferPrices, Status = SessionStatus.InWorld)]
+    private AlbionResponse? AuctionGetLowestOfferPrices(AuctionGetLowestOfferPricesRequest req)
+    {
+        if (Player is not { } player) return null;
+        var answer = new AuctionGetLowestOfferPricesResponse { am0 = [], am1 = [] };
+        if (MarketAt(player, req.bqs) is not { } location)
+            return RefuseMarket(player, OperationCodes.AuctionGetLowestOfferPrices, $"object {req.bqs} is no marketplace here", answer);
+        if (req.bo0 is not { Length: > 0 }) return answer;
+
+        var requested = req.bo0.ToHashSet();
+        var prices = new Dictionary<short, long>();
+        foreach (var order in MarketOrders(player, location, MarketOrder.Offer))
+        {
+            if (world.Items.Find(order.ItemName) is not { } item || !requested.Contains(item.Index)) continue;
+            if (!prices.TryGetValue(item.Index, out var price) || order.UnitPrice < price)
+                prices[item.Index] = order.UnitPrice;
+        }
+        answer.am0 = req.bo0.Distinct().Where(prices.ContainsKey).ToArray();
+        answer.am1 = answer.am0.Select(id => prices[id]).ToArray();
+        return answer;
+    }
+
+    /// <summary>
+    /// RequestEstimatedMarketValue (op 417): client 345319 sender RVA 0xA71840 and event-465 receiver RVA 0xA5A620.
+    /// Normal estimates use parallel keys 2/3/4 (item type int, exact quality byte, a7m unit price); zero means unknown,
+    /// not -1. zx=true requests the Black Market estimate: ItemStatsView's named Black Market value fields use dn7.apt
+    /// (0x13F4B30) -> c3d.c2 (0xA58660), whose cache miss calls sender 0xA763C0 with zx=1. Keys 7/8/9 populate that
+    /// separate cache at c3d +0x3D0 (receiver 0xA5A99D -> 0xA5AE90), while normal values use +0x3C8.
+    /// Local policy, not a claim about the official algorithm: the amount-weighted unit price of executed sales over
+    /// the retained 29 days, using only BM locations for zx=true and only non-BM locations otherwise. Pending offers
+    /// and ItemValue never substitute for sales; no observations in the requested market kind means unknown (0).
+    /// </summary>
+    [Handles(OperationCodes.RequestEstimatedMarketValue, Status = SessionStatus.InWorld)]
+    private AlbionResponse? RequestEstimatedMarketValue(RequestEstimatedMarketValueRequest req)
+    {
+        // The event carries a byte quality. Invalid qualities are not widened to "all" or truncated into another key.
+        if (Player is null || req.zv <= 0 || req.zw is < 1 or > 5) return null;
+        long value = 0;
+        if (world.Market is { } market && world.Items[req.zv] is { } item)
+        {
+            var now = DateTime.UtcNow;
+            var since = now - TimeSpan.FromDays(IMarketStore.HistoryDays);
+            decimal amount = 0, silver = 0;
+            foreach (var sale in market.SalesAcrossMarkets(item.Name, req.zw, since))
+            {
+                if (sale.Quality != req.zw || !string.Equals(sale.ItemName, item.Name, StringComparison.OrdinalIgnoreCase)
+                    || BlackMarket.IsLocation(sale.Location) != req.zx || sale.At < since || sale.At > now
+                    || sale.Amount <= 0 || sale.UnitPrice <= 0) continue;
+                amount += sale.Amount;
+                silver += (decimal)sale.UnitPrice * sale.Amount;
+            }
+            if (amount > 0) value = (long)(silver / amount);
+        }
+
+        SendEvent(req.zx
+            ? new EstimatedMarketValueUpdateEvent { b5s = [req.zv], b5t = [(byte)req.zw], b5u = [value] }
+            : new EstimatedMarketValueUpdateEvent { b5n = [req.zv], b5o = [(byte)req.zw], b5p = [value] });
+        return null;
+    }
 
     /// <summary>
     /// AuctionGetItemAverageStats (op 95, ajx: 0 the market object, 1 item type id, 2 quality, 3 the span ajx.a: 0 24 hours, 1 7 days,

@@ -65,26 +65,33 @@ public sealed partial class SqliteCharacterRepository : IMailStore
         lock (_sync)
         {
             using var tx = _db.BeginTransaction();
-            long id;
-            // AUTOINCREMENT (seeded at 999999 in v22): an id is never given out twice, so the client's cached row and DeleteMail's
-            // "everything up to the newest I listed" bound can never land on a mail the player has not seen.
-            using (var insert = Command("""
-                       INSERT INTO mails (character, guild, kind, category, sender, sender_id, from_guild, subject, body, editor, received, expires, read)
-                       VALUES ($character, $guild, $kind, $category, $sender, $senderId, $fromGuild, $subject, $body, $editor, $received, $expires, 0)
-                       RETURNING id
-                       """, tx,
-                       ("$character", m.Guild ? null : m.Owner.ToString()), ("$guild", m.Guild ? m.Owner.ToString() : null), ("$kind", (int)m.Kind),
-                       ("$category", (int)m.Category), ("$sender", m.Sender), ("$senderId", m.SenderId == Guid.Empty ? null : m.SenderId.ToString()),
-                       ("$fromGuild", m.FromGuild ? 1 : 0), ("$subject", m.Subject), ("$body", m.Body), ("$editor", m.Editor), ("$received", m.Received.Ticks),
-                       ("$expires", m.Expires?.Ticks)))
-                id = Convert.ToInt64(insert.ExecuteScalar());
-            foreach (var item in items ?? [])
-                using (var attach = Command("INSERT INTO mail_attachments (id, mail, item) VALUES ($id, $mail, $item)", tx,
-                           ("$id", Guid.NewGuid().ToString()), ("$mail", id), ("$item", JsonSerializer.Serialize(item))))
-                    attach.ExecuteNonQuery();
+            var id = AddMail(m, items, tx);
             tx.Commit();
             return id;
         }
+    }
+
+    /// <summary>The same mail/attachment insertion inside an existing character transaction.</summary>
+    private long AddMail(Mail m, IReadOnlyList<InventoryItem>? items, SqliteTransaction tx)
+    {
+        long id;
+        // AUTOINCREMENT (seeded at 999999 in v22): an id is never given out twice, so the client's cached row and DeleteMail's
+        // "everything up to the newest I listed" bound can never land on a mail the player has not seen.
+        using (var insert = Command("""
+                   INSERT INTO mails (character, guild, kind, category, sender, sender_id, from_guild, subject, body, editor, received, expires, read)
+                   VALUES ($character, $guild, $kind, $category, $sender, $senderId, $fromGuild, $subject, $body, $editor, $received, $expires, 0)
+                   RETURNING id
+                   """, tx,
+                   ("$character", m.Guild ? null : m.Owner.ToString()), ("$guild", m.Guild ? m.Owner.ToString() : null), ("$kind", (int)m.Kind),
+                   ("$category", (int)m.Category), ("$sender", m.Sender), ("$senderId", m.SenderId == Guid.Empty ? null : m.SenderId.ToString()),
+                   ("$fromGuild", m.FromGuild ? 1 : 0), ("$subject", m.Subject), ("$body", m.Body), ("$editor", m.Editor), ("$received", m.Received.Ticks),
+                   ("$expires", m.Expires?.Ticks)))
+            id = Convert.ToInt64(insert.ExecuteScalar());
+        foreach (var item in items ?? [])
+            using (var attach = Command("INSERT INTO mail_attachments (id, mail, item) VALUES ($id, $mail, $item)", tx,
+                       ("$id", Guid.NewGuid().ToString()), ("$mail", id), ("$item", JsonSerializer.Serialize(item))))
+                attach.ExecuteNonQuery();
+        return id;
     }
 
     public void MarkMailsRead(Guid owner, bool guild, IEnumerable<long> ids, bool read)

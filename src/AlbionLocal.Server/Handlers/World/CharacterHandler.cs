@@ -158,7 +158,8 @@ public sealed partial class WorldSession
             a8b = c.Id,       // [1] Guid  character id
             a8c = c.Name,     // [2] string name
             a8d = c.Template, // [3] avatar id (bbg.abo); historical storage name is Template
-            a8f = c.Appearance, // [5] body template id (creation key 2); [4] avatar ring stays default 0
+            a8e = Systems.Avatars.Ring(c), // [4] selected personal/account avatar ring
+            a8f = c.Appearance, // [5] body template id (creation key 2)
             a8i = Systems.OpeningTutorial.ClientCluster(c, world), // [8] must equal SelectCharacter's client instance id
             a8j = new Vector2(c.PositionX, c.PositionY), // [9] spawn position (cx2.ai7 → player vfunc +0x278, same setter as MoveResponse)
             a8k = facing,     // [10] facing in degrees (cx2.ai7, with key 9): the arrival's after a cluster change (SPEC stage 3 §3), else 0
@@ -171,7 +172,12 @@ public sealed partial class WorldSession
             a8v = mount.Value, a8w = mount.Max, a8x = mount.RegenCap, a8y = mount.RegenPerSecond,
             a8z = mount.Max > 0 ? mount.Stamp : 0,
             a87 = c.Silver,   // [33] silver, a7m raw (stage 6 SPEC §0; ctp+0x2c8)
-            a88 = c.Gold,     // [34] gold, a7m raw (ctp+0x2d0); keys 83-86 (the city price factor) are left out: factor 1 (SPEC §0.1)
+            a88 = c.Gold,     // [34] gold, a7m raw (ctp+0x2d0)
+            // [83] Global gold price in raw a7m: 345319 A5B87A stores it in c3d.x, used by
+            // GuildCreateModule 10A0AF0 for the silver discount. Zero advertises almost 100 % off.
+            // The current 5000 reference matches the native threshold; custom lower references
+            // still require backend fee-discount alignment. Keys 84-86 remain unverified.
+            bal = checked(world.Shop.SilverPerGold * 10000),
             a96 = nowTicks,   // [68] clock anchor GameTimeStamp (UTC ticks)
             a97 = nowMs,      // [69] Photon server time (ms) at the anchor
             // Item containers (cx2.ai7): equipment via ctp.af (10 EquipmentSlot slots), inventory via
@@ -190,6 +196,16 @@ public sealed partial class WorldSession
             ba4 = loginAt,            // [102] GameTimeStamp, the same for every Join of a login
             ba5 = joins,              // [103] 1, 2, 3, …
             bbk = c.LastCity,         // [118]
+            // cvp.d(ahg), matching 344269 RVA 9CEFC0: consumable ID and play-on-knockdown preference.
+            bbl = world.Shop.EquippedKillEmote(c),    // [119]
+            bbm = world.Shop.KillEmoteOnKnockdown(c), // [120]
+            // Client 345319: 0x9ED6B7 reads Join[125] and 0x9ED6C1 stores player+0x500.
+            // JournalTrackerHudGui.get_CurrentJournalState (0x1056D70 -> 0x163A8E0) hides the
+            // native Journal HUD when it is false, even when event 600 supplies real progress.
+            // Advertise the enabled backend, including a cold catalogue load: JournalHandler
+            // refreshes its actual saved progress once loaded. This neither changes the tutorial
+            // lock [124] nor adds achievements/quests; the legacy tutorial tracker remains separate.
+            bbr = world.Goals.Journal.Enabled && world.Clusters is not null, // [125]
             // StageE (pvp SPEC §0, §3.4): the reputation points, now and their level (4 NEUTRAL at 0), the saved flag and the enlisted faction.
             a9f = (float)c.Reputation,               // [41]
             a9g = nowTicks,                          // [42] GameTimeStamp

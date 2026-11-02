@@ -24,6 +24,8 @@ public sealed class WebRequest
 public sealed record WebResponse(int Status, string Body, string ContentType = "text/html; charset=utf-8")
 {
     public List<(string Name, string Value)> Headers { get; } = [];
+    public byte[]? BinaryBody { get; init; }
+    public string CacheControl { get; init; } = "no-store";
 
     public static WebResponse Redirect(string to)
     {
@@ -160,12 +162,12 @@ public sealed class MiniHttp : IDisposable
 
     private static async Task Write(NetworkStream stream, WebResponse r, CancellationToken ct)
     {
-        var body = Encoding.UTF8.GetBytes(r.Body);
+        var body = r.BinaryBody ?? Encoding.UTF8.GetBytes(r.Body);
         var head = new StringBuilder()
             .Append($"HTTP/1.1 {r.Status} {Reason(r.Status)}\r\n")
             .Append($"Content-Type: {r.ContentType}\r\nContent-Length: {body.Length}\r\nConnection: close\r\n")
-            .Append("Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: same-origin\r\nX-Frame-Options: DENY\r\n")
-            .Append("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'\r\n");
+            .Append($"Cache-Control: {r.CacheControl}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: same-origin\r\nX-Frame-Options: DENY\r\n")
+            .Append("Content-Security-Policy: default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'\r\n");
         foreach (var (name, value) in r.Headers) head.Append($"{name}: {value}\r\n");
         head.Append("\r\n");
         await stream.WriteAsync(Encoding.ASCII.GetBytes(head.ToString()), ct);

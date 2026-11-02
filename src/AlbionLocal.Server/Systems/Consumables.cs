@@ -232,7 +232,7 @@ public static class Consumables
 
     /// <summary>
     /// The buffovertime types the server applies (Player.ComputeStats, the cast and cooldown factors, the damage, heal and cc
-    /// sums of <see cref="SpellEffects"/>); an inventory item whose buff has another type (fame, fishing, destiny progression, …)
+    /// sums of <see cref="SpellEffects"/> and <see cref="Destiny.Award"/>); an inventory item whose buff has another type
     /// is refused (<see cref="Supported"/>).
     /// </summary>
     private static readonly IReadOnlySet<string> Applied = new HashSet<string>(StringComparer.Ordinal)
@@ -242,14 +242,16 @@ public static class Consumables
         "magiccooldownreduction", "attackspeedbonus", "movespeedbonus", "healmodifier", "magicresistance", "physicalarmor",
         "crowdcontrolresistance", "magicspelldamagebonus", "magicattackdamagebonus", "physicalspelldamagebonus", "physicalattackdamagebonus",
         "fishingspeed", // the fishing bait (econ SPEC §2.2): Fishing.BiteDelay reads it
+        "destinyboardprogressionbonus", // Scroll of Fame: the board bonus, persisted/timed by the existing effects engine
+        "mobfamemodifier", "resourcefamemodifier", // Season fame reward: Combat.FameBuff / Destiny.Award; saved by the normal effects engine
     };
 
     /// <summary>
     /// Whether every effect of <paramref name="spell"/> does something on this server (SPEC §3.1 step 5, §4.3): the first-wave
     /// <see cref="ItemTags"/>, the nop/dummy markers, removeactiveeffects, health/energy changes, a buffovertime of an
     /// <see cref="Applied"/> type, and an applyspell whose named spell passes the same check. An item with another tag
-    /// (unlockavatar, a fame or fishing buff, …) is refused, so it is never eaten without
-    /// effect; the tag is logged once.
+    /// is refused, so it is never eaten without effect; the tag is logged once. Permanent unlockavatar
+    /// rewards use Avatars.Consume's atomic unlock/consume path before this timed-effect check.
     /// </summary>
     public static bool Supported(SpellTemplate spell, SpellData? spells, int depth = 0)
     {
@@ -344,6 +346,18 @@ public static class Consumables
             return;
         }
         var spell = batch.Spell;
+        if (Shop.IsVanityChargeReward(spell))
+        {
+            var inUse = batch.Done + 1 < batch.Count && item.Count > 1;
+            if (!p.World.Shop.RedeemVanityChargeItem(p, item, spell, inUse))
+            {
+                End(p, batch, "the vanity charge reward could not be committed");
+                return;
+            }
+            batch.Done++;
+            if (batch.Done >= batch.Count || item.Count <= 0) End(p, batch, null);
+            return;
+        }
         // A chest's loot is rolled first: when it does not all fit the bag, the use is refused and nothing is used up. (The chest's
         // own slot is not counted as freed: it is taken out only at the end of the batch.)
         IReadOnlyList<(ItemTemplate Item, int Count)>? loot = null;
@@ -370,6 +384,10 @@ public static class Consumables
         var hit = Combat.CastHit(p.Id, p.Id, spell.Id, 0);
         if (batch.Done < batch.Count && item.Count > 0)
         {
+            // Keep each completed use's saved effects and remaining stack in the same character snapshot. Other item
+            // effects may already have marked this character dirty; a longer batch must not wait until logout/End.
+            Store(p);
+            p.SaveItems();
             p.Session.Send(new NewSimpleItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, da0 = true });
             p.SendAround(hit);
             return;
@@ -453,9 +471,17 @@ public static class Consumables
         }
         // Items left: in-use off wherever the stack lies now (moved during the batch to the equipment or an open vault tab).
         else if (item.Count > 0 && Holds(p, item)) p.Session.Send(new NewSimpleItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count });
+        // Inventory consumables (including the Scroll of Fame) bypass Hit, which captures slot-consumable buffs.
+        // Capture here before queuing the item save, so a durable decrement cannot leave Effects at its pre-use value.
+        Store(p);
+        if (Shop.IsVanityChargeReward(batch.Spell))
+        {
+            p.Inventory.SaveTo(p.Character, id => p.World.Spells?.Name(id));
+            p.World.Saves.MarkChanged(p.Character);
+        }
+        else p.SaveItems();
         p.Session.AnswerConsumableUse(batch.RequestId, batch.Encrypted);
         if (batch.Count > 1) p.SendAround(new BatchUseItemEndEvent { ddn = p.Id });
-        p.SaveItems();
         Log.Info("items", string.Create(CultureInfo.InvariantCulture,
             $"'{p.Character.Name}' used {item.Template.Name} {batch.Done} of {batch.Count} time(s){(why is null ? "" : $" ({why})")}, {Math.Max(0, item.Count)} left"));
     }
@@ -477,8 +503,8 @@ public static class Consumables
 
     /// <summary>
     /// Writes the player's own timed spells (their buffovertime and dummy sub-effects, with their start and durations; the
-    /// over-time ticks are not kept) and the pending slot cooldowns into its character. Called after a slot cast's hit and
-    /// when the player leaves the world; the caller saves.
+    /// over-time ticks are not kept) and the pending slot cooldowns into its character. Called after a slot cast's hit,
+    /// each completed inventory use/batch, and when the player leaves the world; the caller saves.
     /// </summary>
     public static void Store(Player p)
     {

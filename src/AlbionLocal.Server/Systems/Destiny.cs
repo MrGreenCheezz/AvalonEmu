@@ -34,6 +34,16 @@ public static class Destiny
     public static List<DestinyBoard.Step> Award(Player p, long gain, FameContext ctx, long bonus = 0, long? boardGain = null, bool pvp = false,
         ItemTemplate? source = null, bool journals = true, bool guild = true)
     {
+        // The Conqueror season's timed fame reward modifies actual resource fame (including fishing), not LP
+        // or tome grants. Its mob modifier is already applied at Combat.FameBuff, so it must not be added here.
+        if (!pvp && ctx.Source is FameSource.Harvest or FameSource.Fishing
+            && FestivityBonuses.Sum(p, "resourcefamemodifier", p.World.GameNow) is var resourceBonus and not 0)
+        {
+            var factor = Math.Max(0, 1 + resourceBonus);
+            gain = Rates.ScaleFame(gain, factor);
+            bonus = Rates.ScaleFame(bonus, factor);
+            if (boardGain is { } resourceBoard) boardGain = Rates.ScaleFame(resourceBoard, factor);
+        }
         if (guild && !pvp && gain > 0)
         {
             if (p.World.Guilds.FameBonus(p) is var perk and > 0)
@@ -47,18 +57,28 @@ public static class Destiny
         if (guild) p.World.GuildGoals.OnFame(p, gain, ctx, pvp);
         var c = p.Character;
         var before = c.Fame;
+        if (guild) CharacterStatisticsRecorder.Fame(p, gain, ctx, pvp, journals);
         c.Fame += gain;
         p.World.Vanity.Fame(p, before, c.Fame); // stageN vanity: a total-fame milestone may drop a cosmetic
         p.World.Saves.MarkChanged(c);
         // The premium share of the nodes (UpdateFame key 5 sources only; the client adds the same premium part to what it shows itself).
         var board = boardGain ?? gain;
-        if (!pvp && Premium.FameFactor(p) is var premium && premium != 1) board = Rates.ScaleFame(board, premium);
+        // Progression bonuses add to the Premium share of the base gain; they do not multiply Premium again.
+        // Timed effects supply their current value (Scroll of Fame: +0.15 for 10800 seconds).
+        // Tomes and direct LP progress use their separate paths and do not acquire this activity bonus.
+        if (!pvp)
+        {
+            var factor = Premium.FameFactor(p) + Math.Max(0, FestivityBonuses.Sum(p, "destinyboardprogressionbonus", p.World.GameNow));
+            if (factor != 1) board = Rates.ScaleFame(board, factor);
+        }
         var steps = Advance(p, board, ctx, out var spent, out var extra);
         if (journals)
         {
             // PVE-DESIGN step 11 (stageH journals SPEC §C.3, §B.2): the season points (376) and the journal's fame missions (600) before the UpdateFame.
             Seasons.OnFame(p, gain, ctx, pvp);
+            PvpChallenge.OnFame(p, gain, ctx, pvp);
             AlbionJournal.OnFame(p, gain, ctx, pvp);
+            p.World.Armory.OnFame(p, gain, ctx, pvp);
         }
         p.Session.Send(new UpdateFameEvent
         {
@@ -125,17 +145,30 @@ public static class Destiny
         var c = p.Character;
         var budget = LearningBudget(p);
         var steps = board.Apply(progression, gain, ctx, budget);
-        // Several nodes can receive the same gain. Prefer activity-specific nodes over general fame,
-        // then retain the board's ascending processing order. Completed nodes cannot display another level.
-        var latest = steps.Where(s => !s.Finished && board.InProgress(progression, s.Node))
-            .OrderBy(s => board.Nodes[s.Node].Mission == "fameearned" ? 0 : 1)
-            .Select(s => (int?)s.Node).LastOrDefault();
-        if (latest is null && progression.Tracked is { } previous && board.InProgress(progression, previous)) latest = previous;
-        if (latest != progression.Tracked)
+        if (progression.TrackedIds is { } manual)
         {
-            progression.Tracked = latest;
-            p.World.Saves.MarkChanged(c);
-            p.Session.Send(Tracked(p.Id, progression, board));
+            // A fame gain must not replace the player's pins. Only remove nodes that can no longer progress.
+            var active = manual.Where(id => board.InProgress(progression, id)).ToArray();
+            if (!manual.SequenceEqual(active))
+            {
+                progression.TrackedIds = active;
+                p.World.Saves.MarkChanged(c);
+                p.Session.Send(Tracked(p.Id, progression, board));
+            }
+        }
+        else
+        {
+            // Preserve legacy automatic selection until the first manual pin/unpin.
+            var latest = steps.Where(s => !s.Finished && board.InProgress(progression, s.Node))
+                .OrderBy(s => board.Nodes[s.Node].Mission == "fameearned" ? 0 : 1)
+                .Select(s => (int?)s.Node).LastOrDefault();
+            if (latest is null && progression.Tracked is { } previous && board.InProgress(progression, previous)) latest = previous;
+            if (latest != progression.Tracked)
+            {
+                progression.Tracked = latest;
+                p.World.Saves.MarkChanged(c);
+                p.Session.Send(Tracked(p.Id, progression, board));
+            }
         }
         if (budget is { Spent: > 0 })
         {
@@ -213,11 +246,11 @@ public static class Destiny
     /// <summary>FinishedAchievement (151, aow): 0 player, 1 node, 2 the level just completed (0 for a plain node).</summary>
     public static FinishedAchievementEvent Finished(Player p, DestinyBoard.Step s) => new() { cac = p.Id, cad = s.Node, cae = s.Level };
 
-    /// <summary>FullTrackedAchievementInfo (154): the selected HUD node, also restored after every Join.</summary>
+    /// <summary>FullTrackedAchievementInfo (154): the entire selected HUD set, also restored after every Join.</summary>
     public static FullTrackedAchievementInfoEvent Tracked(long playerId, Progression progression, DestinyBoard? board) => new()
     {
         ddn = playerId,
-        cdr = progression.Tracked is { } id && board?.InProgress(progression, id) == true ? [id] : [],
+        cdr = [.. progression.TrackedNodes.Where(id => board?.InProgress(progression, id) == true)],
     };
 
     /// <summary>

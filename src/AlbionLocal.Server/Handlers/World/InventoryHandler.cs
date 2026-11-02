@@ -68,6 +68,23 @@ public sealed partial class WorldSession
     internal List<Item> GiveItem(Player player, ItemTemplate type, int count, int quality = 1, InventoryItem? saved = null)
     {
         var bag = player.Inventory.Bag;
+        return PutItems(bag, type, count, record =>
+        {
+            if (saved is null && Systems.OpeningTutorial.Active(player) && player.Character.Tutorial!.Stage == 21
+                && type.Name == "T1_MAIN_SWORD") record = record with { Active = [] };
+            return CreateItem(type, record, SpellUsable(player.Progression));
+        }, quality, saved, stack => SendEvent(CountEvent(stack)), (item, slot) =>
+        {
+            SendEvent(new InventoryPutItemEvent { ckw = item.Id, ckx = slot, cky = bag.Id });
+            world.Scripts.OnItemAdded(player, item);
+        });
+    }
+
+    /// <summary>The normal GiveItem placement, also usable on a detached bag before a transaction commits.
+    /// The caller checks Fits for the entire delivery; callbacks are optional and run only after each placement.</summary>
+    internal static List<Item> PutItems(Container bag, ItemTemplate type, int count, Func<InventoryItem, Item> create,
+        int quality = 1, InventoryItem? saved = null, Action<Item>? stackChanged = null, Action<Item, int>? added = null)
+    {
         var touched = new List<Item>();
         var max = MaxStack(type);
         // A journal goes onto a stack of the same fame only, and a partly filled one onto none (Item.StacksWith).
@@ -76,27 +93,20 @@ public sealed partial class WorldSession
             && !(type.Journal is { } j && fame > 0 && fame < j.MaxFame))
         {
             stack.Count += count;
-            SendEvent(CountEvent(stack));
+            stackChanged?.Invoke(stack);
             touched.Add(stack);
             return touched;
         }
         for (var left = count; left > 0;)
         {
             var slot = bag.FreeSlot();
-            if (slot < 0)
-            {
-                Log.Warn(Name, $"{left} x {type.Name} did not fit the inventory and are lost (the caller did not check)");
-                break;
-            }
+            if (slot < 0) throw new InvalidOperationException("item delivery does not fit the inventory");
             var n = Math.Min(left, max);
             left -= n;
             var record = (saved ?? new InventoryItem(type.Name, n)) with { Count = n, Quality = saved?.Quality ?? quality };
-            if (saved is null && Systems.OpeningTutorial.Active(player) && player.Character.Tutorial!.Stage == 21
-                && type.Name == "T1_MAIN_SWORD") record = record with { Active = [] };
-            var item = CreateItem(type, record, SpellUsable(player.Progression));
+            var item = create(record);
             bag.Put(slot, item);
-            SendEvent(new InventoryPutItemEvent { ckw = item.Id, ckx = slot, cky = bag.Id });
-            world.Scripts.OnItemAdded(player, item);
+            added?.Invoke(item, slot);
             touched.Add(item);
         }
         return touched;
@@ -316,11 +326,13 @@ public sealed partial class WorldSession
     /// <summary>
     /// Whether <paramref name="to"/> may take <paramref name="count"/> × <paramref name="type"/> more: always unless it is an
     /// open vault tab, whose weight limit (gamedata CityBank 100000) counts what lies there already (an item coming from the
-    /// same vault does not add).
+    /// same vault does not add). A swap removes <paramref name="replacing"/> from that vault before adding its replacement.
     /// </summary>
-    internal static bool VaultTakes(Player player, Container to, ItemTemplate type, int count, Container from)
+    internal static bool VaultTakes(Player player, Container to, ItemTemplate type, int count, Container from, Item? replacing = null)
     {
         if (to == from || player.OpenVaults.Values.FirstOrDefault(v => v.Container == to) is not { } vault) return true;
-        return Weight(to) + Weight(type) * count <= vault.WeightLimit;
+        var weight = Weight(to);
+        if (replacing is not null && to.Contains(replacing)) weight -= Weight(replacing.Template) * replacing.Count;
+        return weight + Weight(type) * count <= vault.WeightLimit;
     }
 }

@@ -17,6 +17,9 @@ public interface IGuildStore
     /// <summary>Stores only the account, the experience, the contracts and the guild goals of <paramref name="guild"/> (the frequent changes; no member rows).</summary>
     void SaveGuildProgress(Guild guild);
 
+    /// <summary>Stores shared loadouts only; simple stores may reuse their atomic guild save.</summary>
+    void SaveGuildLoadouts(Guild guild) => SaveGuild(guild);
+
     /// <summary>Deletes the guild and its member rows.</summary>
     void DeleteGuild(Guid id);
 
@@ -24,4 +27,14 @@ public interface IGuildStore
     DateTime? GuildLeftAt(Guid character);
 
     void SetGuildLeftAt(Guid character, DateTime at);
+}
+
+/// <summary>An atomic transfer between a character wallet and its guild account, including the account ledger.</summary>
+public interface IGuildAccountStore
+{
+    /// <summary>
+    /// Stores the prepared character, guild balance and progress in one transaction. False when the character or its
+    /// membership no longer exists. Call through SaveScheduler.Commit before publishing any of the prepared state.
+    /// </summary>
+    bool SaveGuildAccountTransfer(Guid guild, long silver, GuildProgress progress, Character character);
 }

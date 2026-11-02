@@ -88,6 +88,13 @@ public interface IMarketStore
     /// <summary>The sales of <paramref name="itemName"/> at <paramref name="location"/> since <paramref name="since"/> (quality 0 = any), newest first.</summary>
     IReadOnlyList<MarketSale> Sales(string location, string itemName, int quality, DateTime since);
 
+    /// <summary>
+    /// Executed sales of <paramref name="itemName"/> across this server's markets since <paramref name="since"/>,
+    /// for one exact quality (1-5; 0 is not "any"). Locations remain on each sale so the consumer can exclude special
+    /// markets. A store without global history returns no observations, rather than manufacturing an estimate.
+    /// </summary>
+    IReadOnlyList<MarketSale> SalesAcrossMarkets(string itemName, int quality, DateTime since) => [];
+
     /// <summary>The open orders whose end is at or before <paramref name="now"/>, oldest first (the expiry sweep, stageJ mail SPEC §4.2).</summary>
     IReadOnlyList<MarketOrder> ExpiredOrders(DateTime now);
 }

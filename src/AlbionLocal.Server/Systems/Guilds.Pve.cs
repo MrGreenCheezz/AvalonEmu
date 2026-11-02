@@ -92,11 +92,15 @@ public sealed partial class Guilds
     /// <summary>The guild of <paramref name="killer"/> when its members share kills without a party (Guilds:ShareWithoutParty); null otherwise.</summary>
     public Guild? SharingGuild(Player killer) => Config.GuildShareWithoutParty ? Of(killer.Character.Id) : null;
 
-    /// <summary>The guild a silver pickup of <paramref name="p"/> pays Guilds:SilverTax to; null = none (the economy's tax applies).</summary>
-    public Guild? TaxGuild(Player p) => Config.GuildSilverTax > 0 ? Of(p.Character.Id) : null;
+    /// <summary>The guild whose native tax applies to a member's silver pickup, including a zero-percent guild.
+    /// Without a guild, the separate economy pickup tax applies.</summary>
+    public Guild? TaxGuild(Player p) => Of(p.Character.Id);
 
-    /// <summary>GuildUpdate key 14 (the tax, 1500 = 15 %): Guilds:SilverTax when it is on, else the stored value.</summary>
-    private long TaxOf(Guild g) => Config.GuildSilverTax > 0 ? (long)Math.Round(Config.GuildSilverTax * 10000) : g.TaxA7m;
+    /// <summary>The common source for native display and pickup: the existing positive mode override, else the guild's saved fraction.</summary>
+    public double EffectiveTax(Guild g) => Config.GuildSilverTax > 0 ? Config.GuildSilverTax : Math.Clamp(g.TaxA7m, 0, 10000) / 10000.0;
+
+    /// <summary>GuildUpdate key 14 (1500 = 15 %), from the same effective tax used for silver pickups.</summary>
+    private long TaxOf(Guild g) => (long)Math.Round(EffectiveTax(g) * 10000);
 
     /// <summary><paramref name="a7m"/> into the account of <paramref name="g"/>; the members get GuildUpdate kind 2 at the next second.</summary>
     public void Deposit(Guild g, long a7m)
@@ -110,11 +114,16 @@ public sealed partial class Guilds
     /// <summary>
     /// GuildUpdate kind 2 (SPEC §2.2: the client sets the accounts from keys 11 and 12): 0 the guild, 10 kind 2, 11 the silver,
     /// 14 the tax, and the official later updates' scalars (15 the name, 16 / 28 / 32 / 34 / 36 ""); no arrays.
+    /// Build 345319 ignores key 14 for kind 2; a changed tax also needs TaxUpdate.
     /// </summary>
     public GuildUpdateEvent AccountUpdate(Guild g) => new()
     {
         cf1 = g.Id, cgb = 2, cgc = g.SilverA7m, cgf = TaxOf(g), cgg = g.Name, cgh = world.Alliances.PlateOf(world.Alliances.OfGuild(g.Id)), cgt = "", cgx = "", cgz = "", cg1 = "",
     };
+
+    /// <summary>345319 cxn.aft, 9F475F–9F478E: kind 4 copies key 14 into the guild's tax model,
+    /// then publishes c66 so GuildAccountView refreshes its label from that committed value.</summary>
+    public GuildUpdateEvent TaxUpdate(Guild g) => new() { cf1 = g.Id, cgb = 4, cgf = TaxOf(g) };
 
     /// <summary>
     /// .guild payout: <paramref name="by"/> (MASTER_OF_COIN or higher) pays <paramref name="silver"/> whole silver of its guild's account
@@ -129,19 +138,8 @@ public sealed partial class Guilds
         if (silver <= 0) return "give an amount of silver";
         if (silver > g.SilverA7m / 10000) return $"the guild account has {g.SilverA7m / 10000} silver";
         var a7m = silver * 10000;
-        g.SilverA7m -= a7m;
-        try { store?.SaveGuildProgress(g); }
-        catch (Exception ex)
-        {
-            g.SilverA7m += a7m; // nothing paid: the account keeps its silver
-            Log.Warn("guild", $"payout of guild '{g.Name}' not saved: {ex.Message}");
-            return "the guild account could not be saved, nothing paid";
-        }
-        _progressChanged.Remove(g);
-        _accountChanged.Add(g);
-        Wallet.Credit(to, a7m, $"guild payout by '{by.Character.Name}'");
+        if (WithdrawAccount(g, by, to, a7m) is { } error) return error;
         world.GuildGoals.PaidOut(g, m.Id, a7m); // stage I: the Member Logs' SILVERBALANCE
-        world.Saves.SaveNow(to.Character);
         Tell(g, $"[Guild] {by.Character.Name} paid {silver} silver of the guild account to {m.Name}");
         Mailer.GuildNotice(world, g, "Guild account payout", $"{by.Character.Name} paid {silver} silver of the guild account to {m.Name}.");
         Log.Info("guild", $"'{by.Character.Name}' pays {silver} silver of guild '{g.Name}' to '{m.Name}' ({g.SilverA7m / 10000} left)");

@@ -135,6 +135,9 @@ public static class Death
         var fame = killer is null ? 0 : KillFame(victim);
         var at = victim.PositionAt(DateTime.UtcNow);
         var look = victim.Inventory.EquipmentTypeIds(); // the corpse's gear (LootEquipmentChanged), before anything drops
+        var mobDeath = killer is null ? CharacterStatisticsRecorder.CaptureMobDeath(victim, killerId, ticks) : null;
+        PvpKill? statisticsResult = null;
+        string? statisticsDetails = null;
         Knockdown.Die(victim, killerId, killerText, ticks);
         // Died to every player of the map (a non-object event; its receivers were never captured).
         var died = new DiedEvent
@@ -153,9 +156,12 @@ public static class Death
         {
             var shares = Reward(killer, victim, fame, attackers, crime, ticks);
             // Stage I (pvp-goals SPEC §2.1): the PvP goals of the kill, the victim's journal death.
-            PvpGoals.OnPvpKill(world, new PvpKill(PvpActor.Of(killer), PvpActor.Of(victim), [.. attackers.Select(a => (PvpActor.Of(a.Player), a.Damage))], map,
-                PvpOutcome.Death, crime, fame, ticks, Math.Max(1, attackers.Count)) { FameShares = shares });
+            statisticsResult = new PvpKill(PvpActor.Of(killer), PvpActor.Of(victim), [.. attackers.Select(a => (PvpActor.Of(a.Player), a.Damage))], map,
+                PvpOutcome.Death, crime, fame, ticks, Math.Max(1, attackers.Count)) { FameShares = shares };
+            statisticsDetails = CharacterStatisticsRecorder.CapturePvpResult(statisticsResult);
+            PvpGoals.OnPvpKill(world, statisticsResult);
             PvpGoals.OnPvpDeath(victim, map, byBot: false);
+            world.Shop.PlayKillEmote(killer, victim, knockdown: false, ticks);
             world.Corrupted.Defeated(killer, victim); // stageL corrupted: one side of an invasion killed the other (the official preset's lethal ranks)
         }
         if (cause != Cause.NoLoss && rules.NoDeathLoss)
@@ -173,6 +179,9 @@ public static class Death
         }
         victim.PvpState.HitBy.Clear();
         victim.PvpState.DownCredits = null;
+        if (statisticsResult is not null && statisticsDetails is not null)
+            CharacterStatisticsRecorder.PvpResult(world, statisticsResult, statisticsDetails);
+        else if (mobDeath is not null) CharacterStatisticsRecorder.MobDeath(victim, mobDeath);
         world.PrefetchCluster(RespawnCluster(victim)); // the respawn finds it resolved
         Log.Info("pvp", $"'{victim.Character.Name}' died on {map.Cluster} ({cause}) by {(killer is null ? killerText : $"'{killer.Character.Name}'")}, {attackers.Count} attacker(s)");
     }

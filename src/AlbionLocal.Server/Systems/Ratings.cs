@@ -1,6 +1,7 @@
 using System.Globalization;
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Entities;
+using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Persistence;
 
 namespace AlbionLocal.Server.Systems;
@@ -161,7 +162,8 @@ public sealed class Ratings(World world)
         var rank = Math.Clamp(before.Rank, 0, data.Ranks.Count - 1);
         while (rank < data.Ranks.Count - 1 && points >= data.Ranks[rank].Promotion) rank++;
         while (rank > 0 && points < data.Ranks[rank].Demotion) rank--;
-        var after = before with { Season = Data.ArenaData.SeasonIndex, Rank = rank, Points = points, Updated = DateTime.UtcNow.Ticks };
+        var after = before with { Season = Data.ArenaData.SeasonIndex, Rank = rank, Points = points,
+            EarnedPeak = Math.Max(before.EarnedPeak, Math.Max(before.Peak, Math.Max(before.Rank, rank))), Updated = DateTime.UtcNow.Ticks };
         Save(after);
         return (before, after);
     }
@@ -172,8 +174,23 @@ public sealed class Ratings(World world)
         if (ArenaRank(character, category) is { } row && row.Peak < peak) Save(row with { Peak = peak });
     }
 
+    /// <summary>Called behind SaveScheduler.Commit, with a detached character snapshot. Publish the entitlement
+    /// only after its complete delivery and peak have committed together; failed/unsupported stores pay nothing.</summary>
+    internal bool CommitRankReward(RankRow expected, int peak, Character prepared, Mail? mail,
+        IReadOnlyList<InventoryItem> attachments, out long mailId)
+    {
+        mailId = 0;
+        if (ArenaRank(expected.Character, expected.Category) != expected || prepared.Id != expected.Character
+            || world.Characters is not IRankRewardStore store) return false;
+        var next = expected with { Peak = peak };
+        if (!store.SaveArenaRankReward(expected, next, prepared, mail, attachments, out mailId)) return false;
+        Ranks[(next.Character, next.Category)] = next;
+        return true;
+    }
+
     private void Save(RankRow row)
     {
+        row = row with { EarnedPeak = Math.Max(row.EarnedPeak, Math.Max(row.Rank, row.Peak)) };
         Ranks[(row.Character, row.Category)] = row;
         try { (world.Characters as IRankStore)?.SaveRanks([row]); }
         catch (Exception e) { Log.Warn("arena", $"the arena ranks could not be saved: {e.Message}"); }

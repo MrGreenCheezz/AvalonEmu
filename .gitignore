@@ -35,3 +35,14 @@ logs/
 /config.private/
 /src/AlbionLocal.Server/Properties/launchSettings.json
 /data/lab/
+
+# Local evaluation helpers and artwork exported from the installed game client
+/src/AlbionLocal.Server/Network/LoginSession.Evaluation.cs
+/content/shop-art/
+/content/shop-web/*.png
+/content/shop-web/*.jpg
+/content/shop-web/*.jpeg
+/content/shop-web/*.gif
+/content/shop-web/*.webp
+/content/shop-web/*.svg
+/content/shop-web/sources.json

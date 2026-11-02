@@ -137,6 +137,9 @@ public sealed class KnockedDownState(TimeSpan at, long killer, KnockdownKind kin
     /// <summary>KnockedDown key 3 of the causer (a player's name, "@" + a mob's namelocatag): Died key 10 when the player dies from it (E3).</summary>
     public string KillerText { get; init; } = "";
 
+    /// <summary>The actual PvE template observed at this knockdown, retained if its mob despawns before death.</summary>
+    public string? KillerMobName { get; init; }
+
     /// <summary>A death (<see cref="KnockdownKind.Dead"/>): the others have had its Leave (playervisibilityafterdeath) and get no NewCharacter of it.</summary>
     public bool Hidden { get; internal set; }
 

@@ -285,6 +285,65 @@ public sealed class Parties(World world)
         return 0;
     }
 
+    /// <summary>
+    /// A finder application accepted by its advertised leader. Reuses the party membership and native events, including
+    /// merging an applicant's existing group. Validate everyone before mutation; install the complete membership before
+    /// sending events. Companions and offline/transferring members cannot be recruited through the human-only finder.
+    /// </summary>
+    internal bool JoinFinder(Player host, Player applicant, int advertisedMaximum)
+    {
+        var target = Of(host.Character.Id);
+        var source = Of(applicant.Character.Id);
+        if (host.IsBot || applicant.IsBot || host.Character.Id == applicant.Character.Id
+            || target is not null && target.Leader != host.Character.Id
+            || source is not null && source.Leader != applicant.Character.Id
+            || target is not null && target == source) return false;
+        PartyMember[] incoming = source is null ? [MemberOf(applicant)] : [.. source.Members];
+        PartyMember[] existing = target is null ? [MemberOf(host)] : [.. target.Members];
+        if (incoming.Length + existing.Length > Math.Min(MaxSize, advertisedMaximum)
+            || incoming.Concat(existing).Any(m => m.Companion || Online(m.Id) is not { IsBot: false })) return false;
+
+        var created = target is null;
+        if (target is null)
+        {
+            target = new Party(++_lastId, host.Character.Id);
+            target.Members.AddRange(existing);
+            _parties.Add(target);
+        }
+        if (source is not null)
+        {
+            _parties.Remove(source);
+            source.Members.Clear();
+        }
+        target.Members.AddRange(incoming);
+        foreach (var m in target.Members)
+        {
+            _byMember[m.Id] = target;
+            _droppedAway.Remove(m.Id);
+            m.Missed = false;
+            m.OfflineSince = null;
+        }
+        foreach (var m in incoming) world.Expeditions.PartyLeft(m.Id);
+        foreach (var invite in _invites.Values.Where(i => incoming.Any(m => m.Id == i.Invitee || m.Id == i.Inviter)
+            || existing.Any(m => m.Id == i.Invitee)).ToArray())
+        {
+            _invites.Remove(invite.Invitee);
+            Online(invite.Invitee)?.Session.Send(new PartyInviteAbortedEvent { dh6 = invite.Inviter, dh7 = invite.InviterName });
+            Online(invite.Inviter)?.Session.Send(Answer(invite.InviteeName, false, true, Busy));
+        }
+        if (source is not null)
+            foreach (var m in incoming) Online(m.Id)?.Session.Send(new PartyDisbandedEvent { dfp = source.Id });
+        if (created) SendTo(target, Joined(target));
+        else
+        {
+            foreach (var m in existing)
+                foreach (var added in incoming) Online(m.Id)?.Session.Send(PlayerJoined(target, added));
+            foreach (var m in incoming) Online(m.Id)?.Session.Send(Joined(target));
+        }
+        Log.Info("party", $"finder joins {incoming.Length} player(s) to party {target.Id} of '{host.Character.Name}'");
+        return true;
+    }
+
     /// <summary>Flow 3, PartyLeave (229): not in a party 9161 [choice: "@PARTY_LEAVE_FAILED"]; else out (<see cref="Remove"/>).</summary>
     public short Leave(Player p)
     {

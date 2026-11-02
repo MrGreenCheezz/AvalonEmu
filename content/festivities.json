@@ -1,0 +1,20 @@
+{
+  // Dates are explicit published intervals, not inferred from the client's event catalogue or UI countdown.
+  // Americas/base catalogue; EVENT_HALLOWEEN_2026_END_HACK in times.bin independently confirms the end.
+  // The rotating calendar below is LOCAL. This seed/epoch do not claim to reproduce official event draws.
+  // Installed festivities.bin supplies weights, quantity, cooldowns, durations and the 24-hour preview.
+  // Local policy: one automated event at a time; cooldowns run from its end; daily craft categories are distinct.
+  "LocalCalendar": {
+    "Enabled": true,
+    "Seed": "avalon-local-festivities-v1",
+    "EpochUtc": "2026-01-01T10:00:00Z"
+  },
+  "FixedEvents": [
+    {
+      "Event": "HALLOWEEN2026",
+      "StartUtc": "2026-10-23T10:00:00Z",
+      "EndUtc": "2026-11-12T10:00:00Z",
+      "SourceURL": "https://albiononline.com/news/allhallows-2026"
+    }
+  ]
+}

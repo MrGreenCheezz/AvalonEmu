@@ -29,12 +29,20 @@ public sealed class CraftingModifiers
 
     /// <summary>
     /// The return bonus of an item of <paramref name="category"/> crafted in <paramref name="cluster"/>: the location's refining
-    /// bonus for a refining category, else its crafting bonus, plus the category's own modifier; 0 outside a crafting location.
+    /// bonus for a refining category, else its crafting bonus, plus the category's own modifier and any matching active
+    /// global production bonuses. Outside a crafting location only the global bonuses apply.
     /// </summary>
-    public double Bonus(string cluster, string category)
+    public double Bonus(string cluster, string category, IEnumerable<FestivitiesData.CraftBonus>? activeBonuses = null)
     {
-        if (!_locations.TryGetValue(cluster, out var at)) return 0;
-        return (IsRefining(category) ? at.Refining : at.Crafting) + at.Categories.GetValueOrDefault(category);
+        var bonus = _locations.TryGetValue(cluster, out var at)
+            ? (IsRefining(category) ? at.Refining : at.Crafting) + at.Categories.GetValueOrDefault(category)
+            : 0;
+        // 345319 dev.c(bdi), AE7680 -> AD70C0: sum each active effect whose category matches
+        // item.craftingcategory. Values are fractions (0.10 = +10 %), independent of crafting fame.
+        if (activeBonuses is not null)
+            foreach (var active in activeBonuses)
+                if (string.Equals(active.Category, category, StringComparison.OrdinalIgnoreCase)) bonus += active.Value;
+        return bonus;
     }
 
     public static CraftingModifiers Load(GameDataFile file) => From(file.Root());

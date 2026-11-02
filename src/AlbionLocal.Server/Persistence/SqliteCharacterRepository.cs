@@ -570,6 +570,54 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         """
         ALTER TABLE progression ADD COLUMN tracked INTEGER;
         """,
+        // v44: account-owned local shop wallet, entitlements and durable checkout receipts.
+        """
+        CREATE TABLE shop_accounts (
+            account TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+            state   TEXT NOT NULL
+        );
+        """,
+        // v45: manual Destiny HUD pins. NULL retains legacy auto-selection; [] preserves an explicit empty selection.
+        """
+        ALTER TABLE progression ADD COLUMN tracked_ids TEXT;
+        """,
+        // v46: character chat UI settings. NULL means the untouched defaults (or an explicit reset).
+        """
+        ALTER TABLE characters ADD COLUMN chat_settings TEXT;
+        """,
+        // v47: prospective Armory activity intervals. No inventory/history backfill.
+        """
+        CREATE TABLE armory_samples (
+            id TEXT PRIMARY KEY,
+            updated INTEGER NOT NULL,
+            state TEXT NOT NULL
+        );
+        CREATE INDEX armory_samples_updated ON armory_samples(updated);
+        """,
+        // v48: prospective statistics only. NULL preserves unknown history on existing characters.
+        """
+        ALTER TABLE characters ADD COLUMN statistics TEXT;
+        """,
+        // v49: guild-owned loadouts and their ordering revision. No character inventory or existing build is copied.
+        """
+        ALTER TABLE guilds ADD COLUMN loadouts TEXT;
+        """,
+        // v50: the character's own profile statement. Existing characters have never submitted one.
+        """
+        ALTER TABLE characters ADD COLUMN statement TEXT NOT NULL DEFAULT '';
+        """,
+
+        // v51: a failed rank-up delivery must remain earned even after a later demotion.
+        // Only the current rank and previously paid peak are known for existing rows; no historical maximum is inferred.
+        """
+        ALTER TABLE arena_ranks ADD COLUMN earned_peak INTEGER NOT NULL DEFAULT 0;
+        UPDATE arena_ranks SET earned_peak = MAX(rank, peak);
+        """,
+        // v52: ordered personal bank-tab metadata. Existing bank_items and their location/tab keys stay intact.
+        // NULL means the implicit default tab; an edited default or purchased extra tab is saved with the wallet.
+        """
+        ALTER TABLE characters ADD COLUMN bank_tabs TEXT;
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";
@@ -579,7 +627,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         + "direction, previous_cluster, last_left_at, last_city, pending_transfer, fame, silver, gold, effects, cooldowns, focus, mounted_since, mount_cooldown, "
         + "flag, faction, reputation, reputation_at, dungeon_return, journal_tracked, expeditions, goals, black_market, "
         + "focus_stamp, learning_points, lp_stamp, use_flags, autolearn, infamy, mist_standing, mist_favor, loadouts, "
-        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening";
+        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening, chat_settings, statistics, statement, bank_tabs";
 
     private readonly object _sync = new();
     private readonly SqliteConnection _db;
@@ -591,13 +639,23 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         // No pooling: Dispose closes the file, so a test can delete its folder and a second server can open it.
         _db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
-        _db.Open();
-        using (var fk = Command("PRAGMA foreign_keys = ON", null)) fk.ExecuteNonQuery(); // per connection; items follow their character
-        Migrate(path);
-        using (var add = Command("INSERT OR IGNORE INTO accounts (id, level, created) VALUES ($id, $level, $created)", null,
-                   ("$id", LocalAccountId.ToString()), ("$level", (int)localLevel), ("$created", DateTime.UtcNow.Ticks)))
-            add.ExecuteNonQuery();
-        Account = FindAccount(LocalAccountId)!;
+        try
+        {
+            _db.Open();
+            using (var fk = Command("PRAGMA foreign_keys = ON", null)) fk.ExecuteNonQuery(); // per connection; items follow their character
+            Migrate(path);
+            using (var add = Command("INSERT OR IGNORE INTO accounts (id, level, created) VALUES ($id, $level, $created)", null,
+                       ("$id", LocalAccountId.ToString()), ("$level", (int)localLevel), ("$created", DateTime.UtcNow.Ticks)))
+                add.ExecuteNonQuery();
+            Account = FindAccount(LocalAccountId)!;
+        }
+        catch
+        {
+            // A failed constructor never reaches its caller's using/Dispose. Release the file while preserving the
+            // actual migration/open exception, rather than leaking a handle and masking it with a cleanup IOException.
+            _db.Dispose();
+            throw;
+        }
     }
 
     public Account Account { get; }
@@ -686,6 +744,9 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
             using var tx = _db.BeginTransaction();
             using (var characters = Command("DELETE FROM characters WHERE account = $id", tx, ("$id", id.ToString())))
                 characters.ExecuteNonQuery(); // items and progression follow (ON DELETE CASCADE)
+            // The local account is reset rather than deleted: cascade alone cannot clear its purchases.
+            using (var shop = Command("DELETE FROM shop_accounts WHERE account = $id", tx, ("$id", id.ToString())))
+                shop.ExecuteNonQuery();
             using var account = id == LocalAccountId
                 ? Command("""
                     UPDATE accounts SET name = NULL, display_name = NULL, password = NULL, failed_logins = 0, locked_until = NULL,
@@ -695,6 +756,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                 : Command("DELETE FROM accounts WHERE id = $id", tx, ("$id", id.ToString()));
             var found = account.ExecuteNonQuery() == 1;
             tx.Commit();
+            _shopPremium.Remove(id);
             return found;
         }
     }
@@ -738,7 +800,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                             $direction, $previous, $left, $city, $transfer, $fame, $silver, $gold, $effects, $cooldowns, $focus, $mounted, $mountcd,
                             $flag, $faction, $reputation, $reputationat, $dungeon, $journal, $expeditions, $goals, $bm,
                             $focusstamp, $lp, $lpstamp, $useflags, $autolearn, $infamy, $miststanding, $mistfavor, $loadouts,
-                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial)
+                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial, $chat, $statistics, $statement, $banktabs)
                         """, tx, [("$account", c.Account.ToString()), .. CharacterValues(c)]))
                     insert.ExecuteNonQuery();
                 WriteContents(c, tx);
@@ -786,7 +848,8 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     focus_stamp = $focusstamp, learning_points = $lp, lp_stamp = $lpstamp, use_flags = $useflags, autolearn = $autolearn,
                     infamy = $infamy, mist_standing = $miststanding, mist_favor = $mistfavor, loadouts = $loadouts,
                     faction_standing = $fstanding, faction_points = $fpoints, faction_changed_at = $fchanged,
-                    vanity = $vanity, played_ms = $played, tutorial_opening = $tutorial
+                    vanity = $vanity, played_ms = $played, tutorial_opening = $tutorial, chat_settings = $chat, statistics = $statistics,
+                    statement = $statement, bank_tabs = $banktabs
                 WHERE id = $id
                 """, tx, CharacterValues(c)))
             if (update.ExecuteNonQuery() == 0) return false;
@@ -857,6 +920,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         ("$vanity", c.Vanity is { } v ? JsonSerializer.Serialize(v) : null),
         ("$played", c.PlayedMilliseconds),
         ("$tutorial", c.Tutorial is null ? null : JsonSerializer.Serialize(c.Tutorial)),
+        ("$chat", c.ChatTabs is null ? null : JsonSerializer.Serialize(c.ChatTabs)),
+        ("$statistics", c.Statistics is null ? null : JsonSerializer.Serialize(c.Statistics)),
+        ("$statement", c.Statement),
+        ("$banktabs", c.BankTabs.Count > 0 ? JsonSerializer.Serialize(c.BankTabs) : null),
     ];
 
     /// <summary>Inserts the items and the destiny board state of <paramref name="c"/> (the old rows are gone).</summary>
@@ -916,9 +983,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
             }
         }
         if (c.Progression is not { } progression) return;
-        using var put = Command("INSERT INTO progression (character, completed, levels, progress, tracked) VALUES ($id, $completed, $levels, $progress, $tracked)", tx,
+        using var put = Command("INSERT INTO progression (character, completed, levels, progress, tracked, tracked_ids) VALUES ($id, $completed, $levels, $progress, $tracked, $tracked_ids)", tx,
             ("$id", c.Id.ToString()), ("$completed", JsonSerializer.Serialize(progression.Completed)),
-            ("$levels", JsonSerializer.Serialize(progression.Levels)), ("$progress", JsonSerializer.Serialize(progression.Progress)), ("$tracked", progression.Tracked));
+            ("$levels", JsonSerializer.Serialize(progression.Levels)), ("$progress", JsonSerializer.Serialize(progression.Progress)), ("$tracked", progression.Tracked),
+            ("$tracked_ids", progression.TrackedIds is null ? null : JsonSerializer.Serialize(progression.TrackedIds)));
         put.ExecuteNonQuery();
     }
 
@@ -1022,13 +1090,41 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     Vanity = r.IsDBNull(46) ? null : JsonSerializer.Deserialize<VanityLog>(r.GetString(46)),
                     PlayedMilliseconds = r.GetInt64(47),
                     Tutorial = r.IsDBNull(48) ? null : JsonSerializer.Deserialize<OpeningTutorialProgress>(r.GetString(48)),
-                    Account = Guid.Parse(r.GetString(49)),
+                    ChatTabs = ReadChatTabs(r, 49),
+                    Statistics = r.IsDBNull(50) ? null : JsonSerializer.Deserialize<CharacterStatistics>(r.GetString(50)),
+                    Statement = r.GetString(51),
+                    BankTabs = r.IsDBNull(52) ? new(StringComparer.Ordinal)
+                        : JsonSerializer.Deserialize<Dictionary<string, List<BankTab>>>(r.GetString(52)) ?? new(StringComparer.Ordinal),
+                    Account = Guid.Parse(r.GetString(53)),
 
                 });
             }
         }
         foreach (var c in list) ReadContents(c);
         return list;
+    }
+
+    private static ChatTab[]? ReadChatTabs(SqliteDataReader r, int column)
+    {
+        if (r.IsDBNull(column)) return null;
+        var tabs = ChatSettings.Read(r.GetString(column));
+        if (tabs is null) Log.Warn("db", "invalid saved chat settings; using default tabs");
+        return tabs;
+    }
+
+    public CharacterCombatRecord? FindCombatRecord(Guid id)
+    {
+        if (id == Guid.Empty) return null;
+        lock (_sync)
+        {
+            // A bounded JSON record in either participant. Read no accounts, inventory or progression.
+            // Verify the actual record id after the textual prefilter; JSON fields may contain other GUIDs.
+            using var cmd = Command("SELECT statistics FROM characters WHERE instr(statistics, $id) > 0", null, ("$id", id.ToString()));
+            using var rows = cmd.ExecuteReader();
+            while (rows.Read())
+                if (JsonSerializer.Deserialize<CharacterStatistics>(rows.GetString(0))?.FindCombat(id) is { } found) return found;
+            return null;
+        }
     }
 
     /// <summary>A JSON a7m[6] column (v30 faction standing / points); NULL or another length reads as six zeros.</summary>
@@ -1092,7 +1188,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                 };
             }
         }
-        using var progression = Command("SELECT completed, levels, progress, tracked FROM progression WHERE character = $id", null, ("$id", c.Id.ToString()));
+        using var progression = Command("SELECT completed, levels, progress, tracked, tracked_ids FROM progression WHERE character = $id", null, ("$id", c.Id.ToString()));
         using var p = progression.ExecuteReader();
         if (p.Read())
             c.Progression = new Progression
@@ -1101,6 +1197,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                 Levels = JsonSerializer.Deserialize<SortedDictionary<int, int>>(p.GetString(1)) ?? [],
                 Progress = JsonSerializer.Deserialize<SortedDictionary<int, long>>(p.GetString(2)) ?? [],
                 Tracked = p.IsDBNull(3) ? null : p.GetInt32(3),
+                TrackedIds = p.IsDBNull(4) ? null : JsonSerializer.Deserialize<int[]>(p.GetString(4)),
             };
     }
 

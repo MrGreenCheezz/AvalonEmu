@@ -101,4 +101,55 @@ public sealed partial class WorldSession
     [Handles(OperationCodes.GetGuildEnergyDrainInfo, Status = SessionStatus.InWorld)]
     private AlbionResponse? GetGuildEnergyDrainInfo(GetGuildEnergyDrainInfoRequest req) =>
         Player is { } player ? new GetGuildEnergyDrainInfoResponse { axl = world.Guilds.Of(player.Character.Id)?.Id ?? Guid.Empty } : null;
+
+    /// <summary>Op 134: key 0 is bGold, key 1 is the a7m amount. The native guild account accepts silver.</summary>
+    [Handles(OperationCodes.DepositToGuildAccount, Status = SessionStatus.InWorld)]
+    private AlbionResponse? DepositToGuildAccount(DepositToGuildAccountRequest req)
+    {
+        if (Player is not { } player) return null;
+        var rc = world.Guilds.DepositAccount(player, req.jq, req.jr, out var error);
+        if (rc != 0) Systems.Expeditions.Tell(player, error);
+        return new GenericResponse { ReturnCode = rc, DebugMessage = rc == 0 ? null : error };
+    }
+
+    /// <summary>Op 135: key 0 bGold, key 1 a7m; withdraws only into the authenticated member's wallet.</summary>
+    [Handles(OperationCodes.WithdrawalFromAccount, Status = SessionStatus.InWorld)]
+    private AlbionResponse? WithdrawalFromAccount(WithdrawalFromAccountRequest req)
+    {
+        if (Player is not { } player) return null;
+        var rc = world.Guilds.WithdrawOwnAccount(player, req.ai5, req.ai6, out var error);
+        if (rc != 0) Systems.Expeditions.Tell(player, error);
+        return new GenericResponse { ReturnCode = rc, DebugMessage = rc == 0 ? null : error };
+    }
+
+    /// <summary>Op 137: key 0 is the raw fraction (10000 = 100 %), not the dialog's whole percentage.</summary>
+    [Handles(OperationCodes.ChangeGuildTax, Status = SessionStatus.InWorld)]
+    private AlbionResponse? ChangeGuildTax(ChangeGuildTaxRequest req)
+    {
+        if (Player is not { } player) return null;
+        var rc = world.Guilds.ChangeAccountTax(player, req.ey, out var error);
+        if (rc != 0)
+        {
+            Systems.Expeditions.Tell(player, error);
+            // OnSubmitTax updates the native label optimistically, without a request callback. Restore truth on failure.
+            if (world.Guilds.Of(player.Character.Id) is { } guild) SendEvent(world.Guilds.TaxUpdate(guild));
+        }
+        return new GenericResponse { ReturnCode = rc, DebugMessage = rc == 0 ? null : error };
+    }
+
+    /// <summary>Op 159: account history for the caller's own guild, with the native filters and pagination.</summary>
+    [Handles(OperationCodes.GetGuildAccountLogs, Status = SessionStatus.InWorld)]
+    private AlbionResponse? GetGuildAccountLogs(GetGuildAccountLogsRequest req) =>
+        Player is { } player ? world.Guilds.AccountLogs(player, req) : null;
+
+    /// <summary>Op 160 exports the same filtered ledger in ordered event-418 chunks for the native clipboard action.</summary>
+    [Handles(OperationCodes.GetGuildAccountLogsLargeAmount, Status = SessionStatus.InWorld)]
+    private AlbionResponse? GetGuildAccountLogsLargeAmount(GetGuildAccountLogsLargeAmountRequest req)
+    {
+        if (Player is not { } player) return null;
+        var rc = world.Guilds.ExportAccountLogs(player, req, out var error);
+        if (rc == 0) return null; // the native sender has no operation-response callback
+        Systems.Expeditions.Tell(player, error ?? "No se pudo exportar el historial del gremio.");
+        return new GenericResponse { ReturnCode = rc, DebugMessage = error };
+    }
 }

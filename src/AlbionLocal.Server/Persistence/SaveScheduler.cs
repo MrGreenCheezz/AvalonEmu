@@ -156,12 +156,37 @@ public sealed class SaveScheduler : IDisposable
 
     /// <summary>
     /// Waits until every queued snapshot is written or its latest write has failed (it stays queued for the retry).
-    /// Not under World.Sync (it would hold up the world meanwhile).
+    /// Ordinary callers release World.Sync first; <see cref="Commit{T}"/> deliberately holds it for its short transaction barrier.
     /// </summary>
     public void Flush()
     {
         lock (_gate)
             while (_order.Any(id => !_failures.ContainsKey(id))) Monitor.Wait(_gate);
+    }
+
+    /// <summary>
+    /// Under World.Sync: briefly blocks the world while all older character snapshots drain, then performs one
+    /// external atomic write (for example shop state plus silver). The writer never takes World.Sync, so it can
+    /// finish while this waits. An unsuccessful queued save refuses the transaction; its callback is not called.
+    /// Callers prepare copies and publish live state only after a successful commit. Holding _gate across the
+    /// callback prevents an old snapshot from being written after the external transaction.
+    /// </summary>
+    public T Commit<T>(Func<T> write)
+    {
+        ArgumentNullException.ThrowIfNull(write);
+        lock (_gate)
+        {
+            if (_stopping || _done) throw new InvalidOperationException("The save scheduler is stopping.");
+            if (_failures.Count != 0) throw new InvalidOperationException("A character save is awaiting retry; the transaction was not started.");
+        }
+        SaveAll();
+        Flush();
+        lock (_gate)
+        {
+            if (_stopping || _done || _queued.Count != 0 || _order.Count != 0 || _failures.Count != 0)
+                throw new InvalidOperationException("Character saves did not drain; the transaction was not started.");
+            return write();
+        }
     }
 
     /// <summary>

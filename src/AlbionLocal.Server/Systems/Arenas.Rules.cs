@@ -109,14 +109,24 @@ public sealed partial class Arenas
             var change = Ratings.RankPointChange(rank, factor, delta, world.Ratings.RatingOf(id, m.Mode.Name), score, Options);
             var (before, after) = world.Ratings.AddRankPoints(id, m.Mode.Category, data, change);
             var text = string.Create(CultureInfo.InvariantCulture, $" Rank {data.RankAt(after.Rank).Id}, {after.Points} RP ({change:+0;-0;0}).");
-            if (after.Rank > after.Peak && Online(id) is { } p)
+            if (after.EarnedPeak > after.Peak && Online(id) is { } p)
             {
-                var items = Enumerable.Range(after.Peak + 1, after.Rank - after.Peak)
-                    .SelectMany(i => data.Ranks[i].RankUpOf(category)).Where(l => l.Item.Length > 0).Select(l => (l.Item, l.Count));
-                var given = GiveItems(p, items, "the arena rank up");
-                world.Ratings.MarkPeak(id, m.Mode.Category, after.Rank);
-                world.Saves.MarkChanged(p.Character);
-                text += $" Rank up: {(given.Count > 0 ? string.Join(", ", given) : "no chest")}.";
+                var given = new List<string>();
+                var pending = false;
+                for (var rewardRank = after.Peak + 1; rewardRank <= after.EarnedPeak; rewardRank++)
+                {
+                    if (rewardRank >= data.Ranks.Count) { pending = true; break; }
+                    var items = data.Ranks[rewardRank].RankUpOf(category).Where(l => l.Item.Length > 0)
+                        .Select(l => (Name: l.Item, l.Count)).ToArray();
+                    if (!TryGiveRankReward(p, m, rewardRank, items, out var delivered))
+                    {
+                        pending = true;
+                        break;
+                    }
+                    given.AddRange(delivered);
+                }
+                text += $" Rank up: {(given.Count > 0 ? string.Join(", ", given) : "no chest delivered")}."
+                    + (pending ? " Remaining rank-up rewards stay pending until a complete delivery is possible." : "");
             }
             lines[id] = text;
             Log.Info("arena", $"{m}: '{m.Names.GetValueOrDefault(id)}' {data.RankAt(before.Rank).Id} {before.Points} → {data.RankAt(after.Rank).Id} {after.Points} RP");
@@ -150,6 +160,7 @@ public sealed partial class Arenas
     {
         var now = world.GameNow;
         if (Options.ItemPowerCap && p.RecalculateStats(now)) p.SendAround(Combat.PlayerCombo(p, now));
+        ObserveParticipant(m, p);
         if (!arrived || !Options.EnterBuffs || p.Map?.Template is not { SpawnBuffs.Count: > 0 } t) return;
         var given = SpawnBuffs.Give(p, t.SpawnBuffs, c => c == "isclusterchange", n => n.StartsWith("ARENA_", StringComparison.Ordinal), run: true);
         if (given.Count > 0) Log.Debug("arena", $"{m}: '{p.Character.Name}' enters with {string.Join(", ", given)}");
@@ -233,12 +244,17 @@ public sealed partial class Arenas
         var left = Math.Max(lethal ? 0 : 1, health - Combat.Rounded(target.Health.Max * share));
         if (left >= health) return;
         target.Health.Set(left, Math.Max(ticks, target.Health.Stamp));
+        RecordDamage(null, target, health - left);
         var update = Combat.HealthUpdate(target.Id, ticks, left - health, left, EffectType.Physical, HitOrigin.Direct, target.Id, -1);
         SpellEffects.Break(world, target, "damage", ticks);
         Damaged(target);
         var name = camp == 0 ? "the blue camp" : "the red camp";
         if (left > 0) target.SendAround(update);
-        else if (target.IsBot) BotDown(name, target, update);
+        else if (target.IsBot)
+        {
+            RecordDefeat(null, target);
+            BotDown(name, target, update);
+        }
         else Down(target.Id, name, target, update, ticks);
     }
 
@@ -251,6 +267,7 @@ public sealed partial class Arenas
         var points = RankedLines(p, won, m) is { } lines ? lines.Sum(l => l.Psp) : won ? premium ? winPremium : win : premium ? lossPremium : loss;
         if (points <= 0 || Seasons.Current(world, out _) is null) return "";
         Seasons.Gain(p, points * 10000L);
+        RewardReceipts(m, p.Character.Id).Add(new ArenaRewardReceipt(24, points));
         return string.Create(CultureInfo.InvariantCulture, $", {points} season points");
     }
 }

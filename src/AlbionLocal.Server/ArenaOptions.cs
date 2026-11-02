@@ -164,10 +164,10 @@ public sealed record ArenaOptions
     public bool OrbRoundLookup { get; init; }
 
     /// <summary>
-    /// Arena:MatchHud (false in both presets until captures R2/R3 confirm the fields; official true): the match HUD's partly decoded events:
-    /// OrbUpdate (131) on each orb change, MatchUpdate (121) on each ticket change, StartArenaMatchInfos (119) at the first countdown and
-    /// MatchNewCombatRound / MatchEndCombatRound (171/172) at the crystal orbs' 120 s cycles and the 1v1 rounds. False sends none of them (a wrong one may throw in the
-    /// client, as the empty GetArenaRankings did); the score stays in chat.
+    /// Arena:MatchHud gates only the still experimental OrbUpdate (131) and MatchEndCombatRound (172) fields.
+    /// The verified 345319 match presentation (118/119/120/121/171) follows the real match state independently:
+    /// countdown, own team, remaining time, tickets, round start and result. Enabling this option does not add
+    /// per-player statistics or a reward ledger that the match authority has not recorded.
     /// </summary>
     public bool MatchHud { get; init; }
 

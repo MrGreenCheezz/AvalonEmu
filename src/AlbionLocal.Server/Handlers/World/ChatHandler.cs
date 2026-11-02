@@ -1,5 +1,6 @@
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Commands;
+using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Protocol;
 
 namespace AlbionLocal.Server.Network;
@@ -128,24 +129,77 @@ public sealed partial class WorldSession
     }
 
     /// <summary>
-    /// UpdateChatSettings (event 217, a0w) with the official default tabs, sent on every Join right after the Join
+    /// UpdateChatSettings (event 217, a0w) with the character's saved tabs, or defaults, sent on every Join right after the Join
     /// response (captures: 15/15 Joins, before JoinFinished). The client's tab list starts empty and only this event fills
     /// it (dgb.c(g7s) 0x180b209c0); df9.l 0x180b190a0 keeps a chat line only in tabs whose channel set holds its channel,
     /// so without it every line is lost, SystemMessage replies and the client's own "Entering cluster" lines alike. Keys
     /// 1-3 must be at least as long as key 0 (indexed unchecked); key 4 = 0 leaves the player's tab selection alone. With
     /// Chat:WorldChannel the GENERAL tab also holds Global (0), so every client joins the one world channel (stageJ chat SPEC §2.5).
     /// </summary>
-    private void SendChatTabs() => SendEvent(new UpdateChatSettingsEvent
+    private void SendChatTabs(byte selection = 0)
     {
-        d2o = ["@CHAT_SETTINGS_TAB_NAME_GENERAL", "@CHAT_SETTINGS_TAB_NAME_HELP", "@CHAT_SETTINGS_TAB_NAME_LOOKING_FOR_GROUP",
-               "@CHAT_SETTINGS_TAB_NAME_COMBAT", "@CHAT_SETTINGS_TAB_NAME_RECRUIT", "@CHAT_SETTINGS_TAB_NAME_SOCIAL",
-               "@CHAT_SETTINGS_TAB_NAME_FACTION"],
-        // ChatChannelType per tab; 33 = System (command replies), 28 in every tab but Combat.
-        d2p = [world.Config.ChatWorldChannel ? [23, 0, 27, 31, 28, 38, 33] : [23, 27, 31, 28, 38, 33], [5, 28, 33], [3, 28, 33], [36, 37, 38, 39, 40, 41, 42, 43, 44], [2, 28, 33],
-               [26, 24, 25, 28, 33, 38], [29, 30, 28, 33]],
-        d2q = [true, true, true, true, true, true, true],
-        d2r = [true, true, true, false, true, true, true], // all but Combat
-    });
+        var tabs = Character?.ChatTabs ?? ChatSettings.Defaults(world.Config.ChatWorldChannel);
+        SendEvent(new UpdateChatSettingsEvent
+        {
+            d2o = tabs.Select(t => t.Name).ToArray(),
+            d2p = tabs.Select(t => t.Channels).ToArray(),
+            d2q = tabs.Select(t => t.ShowTimeStamps).ToArray(),
+            d2r = tabs.Select(t => t.ShowChannelNames).ToArray(),
+            d2s = selection,
+        });
+    }
+
+    /// <summary>
+    /// 345319 senders A68DE0/A7E8D0/A774B0/A7E7D0: 0 add, 1 delete, 2 edit, 3 reset; key 1 is the tab name,
+    /// not JSON. UI OnTabChanged 1350CE0 supplies timestamps (key 3) and channel names (key 4). Consumer B209C0
+    /// replaces the complete list from event 217, and selects key 4 minus one when nonzero. Return codes 5080-5086
+    /// are the client's RcOpChangeChatSettings errors. Saving uses the normal ordered character snapshot writer.
+    /// </summary>
+    [Handles(OperationCodes.ChangeChatSettings, Status = SessionStatus.InWorld)]
+    private AlbionResponse ChangeChatSettings(ChangeChatSettingsRequest req)
+    {
+        if (Character is not { } c) return new GenericResponse { ReturnCode = 5081 };
+        if (req.d9 is < 0 or > 3) return new GenericResponse { ReturnCode = 5080 };
+        var tabs = (c.ChatTabs ?? ChatSettings.Defaults(world.Config.ChatWorldChannel)).ToList();
+        byte selection = 0;
+        if (req.d9 == 3)
+        {
+            c.ChatTabs = null;
+            selection = 1;
+        }
+        else
+        {
+            var index = tabs.FindIndex(t => string.Equals(t.Name, req.ea, StringComparison.Ordinal));
+            if (req.d9 == 0)
+            {
+                if (!ChatSettings.ValidCustomName(req.ea)) return new GenericResponse { ReturnCode = 5082 };
+                if (index >= 0) return new GenericResponse { ReturnCode = 5083 };
+                if (tabs.Count >= ChatSettings.MaxTabs) return new GenericResponse { ReturnCode = 5085 };
+            }
+            else if (index < 0) return new GenericResponse { ReturnCode = 5084 };
+
+            if (req.d9 == 1)
+            {
+                tabs.RemoveAt(index);
+                selection = (byte)(tabs.Count == 0 ? 0 : Math.Min(index + 1, tabs.Count));
+            }
+            else
+            {
+                if (!ChatSettings.ValidChannels(req.eb)) return new GenericResponse { ReturnCode = 5086 };
+                var tab = new ChatTab(req.ea!, req.eb!.Distinct().ToArray(), req.ec, req.ed);
+                if (req.d9 == 0)
+                {
+                    tabs.Add(tab);
+                    selection = (byte)tabs.Count;
+                }
+                else tabs[index] = tab;
+            }
+            c.ChatTabs = tabs.ToArray();
+        }
+        world.Saves.SaveNow(c);
+        SendChatTabs(selection);
+        return new GenericResponse();
+    }
 
     /// <summary>
     /// A command reply as SystemMessage (event 79, client class azy: 0 text, 1 kind; ci7.xk → df9.k(g7s, short)

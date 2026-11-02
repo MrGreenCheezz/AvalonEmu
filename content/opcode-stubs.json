@@ -24,36 +24,23 @@
 // Since the vanity (stageN vanity SPEC): GetVanityUnlocks.
 {
   // ---- login server
-  "AccountSubscriptionInfo": {},      // c3d.j.c: key 0 (character Guids), keys 1/2 per entry; none = no flags
-  "GetSurveyLogs": {},                // c3d.cl: rows up to the shortest of keys 0-2; none = no surveys
+  // Intentional empty history: installed 345319 surveys.bin has no active surveys (only a commented TEST example).
+  // c3d.cl RVA A5B190 accepts zero rows; keys 0/1/2 are survey names, completion timestamps[] and associated Guid[].
+  "GetSurveyLogs": {},
 
   // ---- game server
-  "GetVanityConsumables": {},         // cjk.c.c → bh(bcm, ajg): keys 0/1 parallel; none = no consumables
-  "ArmoryItemUsageStatistics": {},    // ItemDetailsPopularBuildsView.OnSearchResult: empty key 0 = view stays hidden
-  "GoldMarketGetInfos": {},           // del.x: thirteen numbers kept as they are
-  "GoldMarketGetAverageInfo": {},     // del.a.c: keys 0/1 parallel price history; none = no history
-  "GoldMarketGetBuyOffer": {},        // GetGoldView: key 1 = 0 → "@GOLD_MARKET_NOT_AVAILABLE";
-                                      // PremiumStoreGui: silver price 0 → its silver buy button is off
-  "GoldMarketGetSellOffer": {},       // GetGoldView: as GoldMarketGetBuyOffer
   "GetMatches": {},                   // dd0.b: rows of key 1; none = no matches
-  "AuctionGetLowestOfferPrices": {},  // stage 6d: keys 0/1 parallel (item type, lowest price); none = no price shown
-  "GetClusterMapInfo": {},            // c32.n.b → the map's callback; the world map opened fine with it (2026-10-15)
 
   // ---- the empty answer the unhandled default sent already, kept as it is without the warning (ops-audit SPEC §1:
   // no PvP challenges, shop tiles, territories or guilds here yet; each becomes a handler with its feature;
   // QueryGuildPlayerStats and GetGuildEnergyDrainInfo did with the guilds, Handlers/World/GuildHandler; GetGvgSeasonRank,
   // GetGuildChallengePoints, GetGvgSeasonRankings, GetGvgSeasonContributionByActivity and GetGuildMightCategoryOverview with the
   // guild goals of stage I, Handlers/World/GuildSeasonHandler)
-  "GetPvpChallengeData": {},
-  "GetShopTilesForCategory": {},
-  "GetGuildAccountLogs": {},
+  // GetPvpChallengeData and its personal stats/weekly claim use the personal Conqueror log (PvpChallengeHandler).
   // (GvGSeasonPlayerGuildParticipationDetails since the territories' phase P2, Handlers/World/GuildSeasonHandler; GetMyTerritories since
   // phase P3, Handlers/World/TerritoryHandler)
 
-  // PremiumStoreGui.d.d: rc 0 = bought ("@PREMIUM_STORE_BUY_SILVER_RESULT_*" from key 0, though nothing was), 10521 =
-  // "@PAYMENT_NOT_ENOUGH_SILVER_PLAYER", 10522 = "@PREMIUM_STORE_OFFER_NO_LONGER_AVAILABLE"; after any answer the store
-  // asks for its offers again. Premium cannot be bought here, so the offer is gone.
-  "BuyPremium": { "ReturnCode": 10522 },
+  // Premium, gold quotes/exchange, subscription status and shop categories now use authenticated shop handlers.
 
   // GetArenaRankings: since stageP P7 a handler (Handlers/World/ArenaHandler.cs) in the official shape of the former stub.
 
@@ -62,24 +49,16 @@
   // (CastStart and RegisterToObject were here: since stage 5b/5c their handlers keep that silence, CombatHandler and LootHandler;
   // ActionOnBuildingStart too: since stage 6 its handler answers only a failure, BuildingActionHandler; ChangeUseFlag and
   // SetAchievementsAutoLearn since stageJ focus-lp, FocusHandler)
-  "QueryAllianceGuildStats": "silent", // 002835: 1 request (a guild without an alliance), no response
+  // QueryAllianceGuildStats now uses AllianceStatsHandler and the guilds' prospective season-point logs.
 
   // ---- answered with a bare rc-0 response by the official server, although the client has no response class
   // (002835; the unhandled default sent nothing): {253, 255} as official
-  "GetCharacterStats": "ack",                              // rc 0 with the request id, then a stats event (not sent here)
-  "PartyFinderRegisterApplicants": "ack",                  // 2 x rc 0 with the request id
-  "PartyFinderUnregisterApplicants": "ack-no-request-id",  // rc 0 without key 255, although the request had one
-  "DepositToGuildAccount": "ack",                          // rc 0; request and answer without a request id (guilds only)
+  // PartyFinder advertisements, applications and snapshots now use PartyFinderHandler.
 
   // ---- no response class and never answered officially (0 responses in all captures; ops-audit SPEC §1, §6): the
   // unhandled default's silence without its warning
   "ExtendedHardwareStats": "ignore",               // telemetry, 27 requests in the captures
   "ClientPerformanceStats": "ignore",              // telemetry, 22
   "ClientFrametimeSpike": "ignore",                // telemetry, 4
-  "ProductShopUserEvent": "ignore",                // shop telemetry, 2
-  "EventBasedPopupAddSeen": "ignore",              // store/marketing pop-up seen, 3
-  "PartyFinderRegisterForUpdates": "ignore",       // answered only by PartyFinder update events (no Party Finder here)
-  "PartyFinderUnregisterForUpdates": "ignore",
-  "PartyFinderRequestEquipmentSnapshot": "ignore",
-  "RequestEstimatedMarketValue": "ignore"          // its event EstimatedMarketValueUpdate was never seen, 5 requests
+  "ProductShopUserEvent": "ignore"                 // shop telemetry, 2
 }

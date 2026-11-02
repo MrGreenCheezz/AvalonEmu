@@ -25,6 +25,8 @@ public sealed class VanityCatalog
     /// </summary>
     public sealed record Unlock(short Id, UnlockType Type, string Name, string State, string AvailableVia, int Number, int Slot)
     {
+        /// <summary>Server-authoritative price from GameData, in a7m gold units.</summary>
+        public long GoldPrice { get; init; }
         /// <summary>Owned without being unlocked (state Unlocked).</summary>
         public bool Free => State == "Unlocked";
 
@@ -33,15 +35,23 @@ public sealed class VanityCatalog
 
     public IReadOnlyList<Unlock> All { get; }
 
+    /// <summary>Character portrait/ring ids are separate zero-based counters in avatars.xml, not vanity
+    /// unlock ids. Current 345319 reader 57AEC1/57B151 calls 80FEC0/810750 in XML element order.</summary>
+    public sealed record Portrait(int Id, string Name, bool Locked, bool Ring);
+    public IReadOnlyList<Portrait> Portraits { get; }
+    public IReadOnlyList<Portrait> PortraitRings { get; }
+
     /// <summary>mountskins.xml's &lt;mountcategory&gt; names by their index.</summary>
     public IReadOnlyList<string> MountCategories { get; }
 
     private readonly Dictionary<int, Unlock> _mountSkins = new(), _wardrobe = new();
     private readonly Dictionary<string, Unlock> _byName = new(StringComparer.OrdinalIgnoreCase);
 
-    private VanityCatalog(List<Unlock> all, List<string> categories)
+    private VanityCatalog(List<Unlock> all, List<string> categories, IReadOnlyList<Portrait>? portraits = null, IReadOnlyList<Portrait>? rings = null)
     {
         All = all;
+        Portraits = portraits ?? [];
+        PortraitRings = rings ?? [];
         MountCategories = categories;
         foreach (var u in all)
         {
@@ -56,6 +66,15 @@ public sealed class VanityCatalog
     public Unlock? Find(int id) => id >= 0 && id < All.Count ? All[id] : null;
 
     public Unlock? Find(string name) => _byName.GetValueOrDefault(name.Trim());
+
+    public Portrait? FindPortrait(int id, bool ring = false)
+    {
+        var list = ring ? PortraitRings : Portraits;
+        return id >= 0 && id < list.Count ? list[id] : null;
+    }
+
+    public Portrait? FindPortrait(string name, bool ring = false) =>
+        (ring ? PortraitRings : Portraits).FirstOrDefault(p => p.Name == name);
 
     /// <summary>The mount skin of number <paramref name="number"/> (GetMountSkins / SetMountSkin / NewMountObject key 2).</summary>
     public Unlock? MountSkin(int number) => _mountSkins.GetValueOrDefault(number);
@@ -88,7 +107,7 @@ public sealed class VanityCatalog
         {
             var gold = int.TryParse((string?)e.Attribute("goldprice"), out var g) ? g : 0;
             var state = (string?)e.Attribute("state") ?? (gold > 0 ? "Buyable" : "Unlocked");
-            all.Add(new Unlock((short)all.Count, type, name, state, (string?)e.Attribute("availablevia") ?? (gold > 0 ? "Gold" : "None"), number, slot));
+            all.Add(new Unlock((short)all.Count, type, name, state, (string?)e.Attribute("availablevia") ?? (gold > 0 ? "Gold" : "None"), number, slot) { GoldPrice = checked((long)gold * 10000) });
         }
         // characters.xml: the meshes of every customization's items, then the colours of every colour set (b3f, then b3e).
         if (characters.Element("Customizations") is { } cz)
@@ -138,6 +157,8 @@ public sealed class VanityCatalog
             Add(UnlockType.Avatar, (string?)a.Attribute("name") ?? "", a);
         foreach (var a in avatars.Element("peraccountavatarrings")?.Elements("avatarring") ?? [])
             Add(UnlockType.AvatarRing, (string?)a.Attribute("name") ?? "", a);
-        return new VanityCatalog(all, categories);
+        Portrait[] Portraits(bool ring) => (avatars.Element(ring ? "avatarrings" : "avatars")?.Elements(ring ? "avatarring" : "avatar") ?? [])
+            .Select((a, i) => new Portrait(i, (string?)a.Attribute("name") ?? "", (string?)a.Attribute("locked") == "true", ring)).ToArray();
+        return new VanityCatalog(all, categories, Portraits(false), Portraits(true));
     }
 }

@@ -216,6 +216,9 @@ public sealed class TerritoryRules
     /// <summary>gamedata Territory territoryclaimtimeinsec.</summary>
     public double ClaimSeconds { get; init; } = 15;
 
+    /// <summary>WATCHTOWER/OpenWorldAttackSettings MinTimeUntilNextOpenWorldAttackInMinutes (345319: 1200).</summary>
+    public double MinimumAttackNoticeMinutes { get; init; } = 1200;
+
     /// <summary>
     /// territorytypes GuardSettings respawntimeseconds (3600): how long a castle stays without its guards after a capture before they stand
     /// again (the server's reading of the fortification guards' respawn for the castles; castles.xml has no own value).
@@ -293,6 +296,8 @@ public sealed class TerritoryRules
             FirstClaimFame = guild is null ? f.FirstClaimFame : XmlAttr.Long(guild, "initialclaimterritoryguildfamerequirement", f.FirstClaimFame),
             FurtherClaimFame = guild is null ? f.FurtherClaimFame : XmlAttr.Long(guild, "claimterritoryguildfamerequirement", f.FurtherClaimFame),
             ClaimSeconds = territory is null ? f.ClaimSeconds : D(territory, "territoryclaimtimeinsec", f.ClaimSeconds),
+            MinimumAttackNoticeMinutes = tower?.Element("OpenWorldAttackSettings") is { } attack
+                ? D(attack, "MinTimeUntilNextOpenWorldAttackInMinutes", f.MinimumAttackNoticeMinutes) : f.MinimumAttackNoticeMinutes,
             GuardRespawnSeconds = territoryTypes?.Descendants("GuardSettings").FirstOrDefault() is { } guards
                 ? D(guards, "respawntimeseconds", f.GuardRespawnSeconds) : f.GuardRespawnSeconds,
             ChestSchedules = treasures is null ? new Dictionary<string, CastleChestSchedule>()

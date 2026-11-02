@@ -6,6 +6,7 @@ using System.Text;
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Commands;
 using AlbionLocal.Server.Commands.Builtin;
+using AlbionLocal.Server.Content;
 using AlbionLocal.Server.Persistence;
 
 namespace AlbionLocal.Server.Web;
@@ -17,7 +18,7 @@ namespace AlbionLocal.Server.Web;
 /// thread (<see cref="World.Post"/>) through the console's own account commands (<see cref="AccountCommands"/>), and is written
 /// to the log as an audit line; passwords and hashes never are.
 /// </summary>
-public sealed class WebPanel : IDisposable
+public sealed partial class WebPanel : IDisposable
 {
     private const string Cookie = "alp_session";
     private static readonly TimeSpan WorldTimeout = TimeSpan.FromSeconds(10);
@@ -27,6 +28,7 @@ public sealed class WebPanel : IDisposable
     private readonly string? _clientBuild;
     private readonly DateTime _started = DateTime.UtcNow;
     private readonly MiniHttp _http;
+    private readonly ShopArtwork _shopArtwork;
     private readonly ConcurrentDictionary<string, AdminSession> _sessions = new(StringComparer.Ordinal);
     private readonly RateLimit _registrations = new(5, TimeSpan.FromMinutes(10));
     private readonly RateLimit _logins = new(10, TimeSpan.FromMinutes(5));
@@ -48,7 +50,9 @@ public sealed class WebPanel : IDisposable
         _options = options;
         _backup = backup;
         _clientBuild = clientBuild;
+        _shopArtwork = world.Shop.Artwork;
         _http = new MiniHttp(new IPEndPoint(options.BindAddress, options.Port), Handle);
+        _world.Shop.BaseUrl = $"http://127.0.0.1:{EndPoint.Port}/shop";
         Log.Info("web", $"web panel on http://{(options.BindAddress.Equals(IPAddress.Any) ? "127.0.0.1" : options.BindAddress.ToString())}:{EndPoint.Port}/"
             + (IPAddress.IsLoopback(options.BindAddress) ? " (this PC only, Web:BindAddress)" : $" (bound to {options.BindAddress}: reachable from other PCs, plain HTTP)"));
     }
@@ -75,6 +79,7 @@ public sealed class WebPanel : IDisposable
         {
             if (r.Method is not ("GET" or "POST")) return Text(405, "GET and POST only");
             if (r.Method == "POST" && !SameOrigin(r)) return Text(403, "cross-site request refused");
+            if (r.Path == "/shop" || r.Path.StartsWith("/shop/", StringComparison.Ordinal)) return await HandleShop(r);
             switch (r.Method, r.Path)
             {
                 case ("GET", "/"): return await Status(r);
@@ -566,19 +571,19 @@ public sealed class WebPanel : IDisposable
 
     private static WebResponse Text(int status, string text) => Page(status == 404 ? "Not found" : "Refused", Note(text, true), null, status);
 
-    private static WebResponse Page(string title, string body, AdminSession? s, int status = 200, string head = "")
+    private static WebResponse Page(string title, string body, AdminSession? s, int status = 200, string head = "", string? navigation = null, string language = "en")
     {
-        var nav = s is null
-            ? "<a href=\"/\">Status</a><a href=\"/register\">Register</a><a href=\"/login\">Admin</a>"
+        var nav = navigation ?? (s is null
+            ? "<a href=\"/\">Status</a><a href=\"/shop\">Shop</a><a href=\"/register\">Register</a><a href=\"/login\">Admin</a>"
             : "<a href=\"/\">Status</a><a href=\"/admin/players\">Players</a><a href=\"/admin/accounts\">Accounts</a><a href=\"/admin/log\">Log</a><a href=\"/admin/backups\">Backups</a>"
-              + $"<form method=post action=\"/logout\" class=inline><input type=hidden name=csrf value=\"{s.Csrf}\"><button class=link>Log out {H(s.Name)}</button></form>";
+              + $"<form method=post action=\"/logout\" class=inline><input type=hidden name=csrf value=\"{s.Csrf}\"><button class=link>Log out {H(s.Name)}</button></form>");
         var flash = "";
         if (s?.Flash is { } f)
         {
             flash = Note(f, s.FlashError);
             s.Flash = null;
         }
-        var html = $"<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">{head}"
+        var html = $"<!doctype html><html lang=\"{H(language)}\"><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\">{head}"
             + $"<title>{H(title)} - AlbionLocal</title><style>{Css}</style></head><body><header><b>AlbionLocal</b><nav>{nav}</nav></header>"
             + $"<main>{flash}{body}</main></body></html>";
         return new WebResponse(status, html);

@@ -42,6 +42,7 @@ public sealed class World : IDisposable
         _rates = config.Rates;
         MobAi = config.MobAi;
         Parties = new Systems.Parties(this);
+        PartyFinder = new Systems.PartyFinder(this);
         Guilds = new Systems.Guilds(this, characters as IGuildStore);
         Alliances = new Systems.Alliances(this, characters as IAllianceStore);
         GuildGoals = new Systems.GuildGoals(this);
@@ -69,18 +70,25 @@ public sealed class World : IDisposable
         Bounties = new Systems.Bounties(this);
         Hunts = new Systems.Hunts(this);
         Vanity = new Systems.Vanity(this);
+        Shop = new Systems.Shop(this);
         Islands = new Systems.Islands(this, characters as IIslandStore);
         Hideouts = new Systems.Hideouts(this, characters as IHideoutStore);
         Chat = new Systems.ChatHub(this);
         Social = new Systems.Social(this, characters as ISocialStore);
         Bots = new Bots.BotManager(this);
         Companions = new Bots.Companions(this);
+        Armory = new Systems.ArmoryUsage(this, characters as IArmoryStore);
     }
 
     public ServerConfig Config { get; }
 
     /// <summary>The saved characters (copies); a joined character is loaded with <see cref="LoadCharacter"/>.</summary>
     public ICharacterRepository Characters { get; }
+
+    /// <summary>Local simulated purchases, account wallets and durable entitlements.</summary>
+    public Systems.Shop Shop { get; }
+
+    public Systems.ArmoryUsage Armory { get; }
 
     /// <summary>Saves the live characters: snapshot under <see cref="Sync"/>, write on its own thread.</summary>
     public SaveScheduler Saves { get; }
@@ -150,6 +158,9 @@ public sealed class World : IDisposable
     /// <summary>The parties and open party invitations (stageD party SPEC §7), by character Guid.</summary>
     public Systems.Parties Parties { get; }
 
+    /// <summary>The native finder of real local parties and their pending applications (session state).</summary>
+    public Systems.PartyFinder PartyFinder { get; }
+
     /// <summary>The guilds and open guild invitations (stageH guilds SPEC), loaded from the character database's guild tables.</summary>
     public Systems.Guilds Guilds { get; }
 
@@ -164,6 +175,9 @@ public sealed class World : IDisposable
     /// the files missing): local seasons with the built-in table only. A self-test sets it.
     /// </summary>
     public GvgSeasonData? GvgSeasons { get; set; }
+
+    /// <summary>Explicit native fixed-event calendar, loaded once at startup outside World.Sync.</summary>
+    public FestivitiesData Festivities { get; init; } = FestivitiesData.Empty;
 
     /// <summary>The duels and open challenges (stageE pvp SPEC §2, <see cref="Systems.Duels"/>).</summary>
     public Systems.Duels Duels { get; }
@@ -452,7 +466,9 @@ public sealed class World : IDisposable
         foreach (var map in Maps.Maps)
             foreach (var player in map.Players.Values)
                 if (player.Character.Id == id) return player.Character;
-        return Saves.Load(id);
+        var saved = Saves.Load(id);
+        if (saved is not null) Shop.Synchronize(saved);
+        return saved;
     }
 
     /// <summary>
@@ -532,15 +548,18 @@ public sealed class World : IDisposable
             foreach (var player in map.Players.Values)
                 player.Session.UpdateKeepalive(now);
         Parties.Update(now); // party invitations that time out, members whose cluster change never arrived
+        PartyFinder.Update(now);
         Guilds.Update(now); // guild invitations that time out
         Alliances.Update(now); // stageP: alliance leave protections that end
         GuildGoals.Update(); // stage I: a new guild season told to the members in game
+        Systems.Festivities.Tick(this); // native event 518 at a fixed/daily/rotating calendar boundary, without a relog
         Social.Update(now); // stageJ: characters whose cluster change never arrived log out for their friends and chat
         Duels.Update(); // challenges that time out, duel starts, areas and ends (stageE pvp SPEC §2)
         Trades.Update(); // stageJ: trade invitations that lapse, trades whose players are apart, offered items that left the bag
         Dungeons.UpdateExits(); // stageM exit: the click-and-channel entries at random dungeon portals (every tick)
         Hideouts.UpdateChannels(); // stageP hideouts: the 4 s channels into and out of a hideout
         Dungeons.Update(now); // stageG: exit rerolls, despawns and refills, dungeons that close
+        Armory.Update(); // only real activity intervals; never historical inventory snapshots
         Saves.Update(now);
         if (Config.MapIdleUnload > TimeSpan.Zero)
             // A floor of a live random dungeon stays until the dungeon closes (its own empty lifetime, RandomDungeons.Close).
@@ -682,6 +701,7 @@ public sealed class World : IDisposable
         {
             Guilds.Flush(); // the guilds' account, experience and contracts (saved every 30 s otherwise)
             Roads.Flush(); // stageL: the road network's changes since its last batch
+            Armory.Flush();
             // StageL roads phase B: an online character's LastLeftAt is its last cluster change; the shutdown is its logout (the thrown-out rule).
             foreach (var p in Maps.Maps.SelectMany(m => m.Players.Values).Where(p => !p.Character.Transient).ToList())
             {

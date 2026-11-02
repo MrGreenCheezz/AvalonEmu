@@ -48,7 +48,14 @@ public sealed partial class WorldSession
             Consumables.StartBatch(player, item, spell, 1, RequestId, RequestEncrypted, ticket);
             return null;
         }
-        if (!Consumables.Supported(spell, world.Spells)) return Refused($"{spell.Name} has an effect that does not run yet");
+        // Permanent personal avatar rewards use an atomic unlock + consume transaction, not the timed-buff batch.
+        if (Avatars.IsReward(spell)) return new UseConsumableFromInventoryResponse { ReturnCode = Avatars.Consume(player, item, spell) };
+        // Wardrobe/mount rewards belong to the account; their inventory decrement commits with the entire unlock set.
+        if (Vanity.IsUnlockItem(spell)) return new UseConsumableFromInventoryResponse { ReturnCode = world.Vanity.ConsumeUnlockItem(player, item, spell) };
+        // Repeatable charge vouchers use the ordinary cancelable batch, with one atomic account+item commit per use.
+        var chargeReward = Shop.IsVanityChargeReward(spell);
+        if (chargeReward ? !world.Shop.CanRedeemVanityChargeItem(spell) : !Consumables.Supported(spell, world.Spells))
+            return Refused($"{spell.Name} has an effect that does not run yet");
         // StageG: a dungeon map needs a free exit marker of its exit type here (stageG dungeons SPEC §10), else 14965.
         if (!world.Dungeons.MapCanPlace(player, spell))
         {
@@ -56,7 +63,8 @@ public sealed partial class WorldSession
             return new UseConsumableFromInventoryResponse { ReturnCode = Consumables.NoDungeonFound };
         }
         // A dungeon map is used one at a time, also on "use all" (SPEC §10: one exit per use) [assume].
-        var count = RandomDungeons.IsMap(spell) ? 1 : Math.Clamp((int)req.ah6, 1, item.Count);
+        var single = RandomDungeons.IsMap(spell) || string.Equals(item.Template.Attrs.GetValueOrDefault("allowfullstackusage"), "false", StringComparison.OrdinalIgnoreCase);
+        var count = single ? 1 : Math.Clamp((int)req.ah6, 1, item.Count);
         Consumables.StartBatch(player, item, spell, count, RequestId, RequestEncrypted);
         return null;
     }

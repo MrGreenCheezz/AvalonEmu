@@ -9,6 +9,9 @@ public sealed record ChallengeLevel(int Level, long Points, int SeasonPoints);
 /// <summary>A bracketsettings row: iron, bronze, silver, gold or crystal and the season points it starts at.</summary>
 public sealed record SeasonBracket(string Name, long Threshold)
 {
+    public double MightFactor { get; init; } = 1;
+    public double FavorFactor { get; init; } = 1;
+    public string? MightReward { get; init; }
     /// <summary>The brackets from the lowest (the order of gotguildmemberreward's minrank).</summary>
     public static readonly IReadOnlyList<string> Order = ["iron", "bronze", "silver", "gold", "crystal"];
 
@@ -77,6 +80,7 @@ public sealed record MightRules(IReadOnlyDictionary<string, MightFameRule> Fame,
 /// </summary>
 public sealed record GvgSeason(int? Index, string Key, DateTime Start, DateTime End, IReadOnlyList<ChallengeLevel> Levels, IReadOnlyList<SeasonBracket> Brackets)
 {
+    public double MinimumParticipation { get; init; } = 0.51;
     public IReadOnlyList<MightCategory> Might { get; init; } = [];
 
     /// <summary>
@@ -153,6 +157,8 @@ public sealed class GvgSeasonData
     /// <summary>The might sources of the region's pvpchallenge file (none without it).</summary>
     public MightRules Might { get; init; } = MightRules.None;
 
+    public PvpChallengeData PersonalChallenge { get; init; } = PvpChallengeData.None;
+
     /// <summary>The client season running at <paramref name="utc"/> (start &lt; now &lt; end, as the client's own check); null = none.</summary>
     public GvgSeason? ClientSeason(DateTime utc) => Seasons.FirstOrDefault(s => s.Start < utc && utc < s.End);
 
@@ -213,10 +219,16 @@ public sealed class GvgSeasonData
                 .Select(l => new ChallengeLevel(XmlAttr.Int(l, "level", 0), XmlAttr.Long(l, "challengepoints", 0), XmlAttr.Int(l, "seasonpoints", 0)))
                 .Where(l => l.Level > 0).OrderBy(l => l.Level).ToList() ?? [];
             var brackets = s.Element("bracketsettings")?.Elements("bracket")
-                .Select(b => new SeasonBracket(XmlAttr.Str(b, "level"), XmlAttr.Long(b, "pointsthreshold", 0))).ToList() ?? [];
+                .Select(b => new SeasonBracket(XmlAttr.Str(b, "level"), XmlAttr.Long(b, "pointsthreshold", 0))
+                {
+                    MightFactor = D(b, "mightfactor", 1), FavorFactor = D(b, "favorfactor", 1),
+                    MightReward = (string?)b.Attribute("mightreward"),
+                }).ToList() ?? [];
             list.Add(new GvgSeason(list.Count, name, DateTime.SpecifyKind(start, DateTimeKind.Utc), DateTime.SpecifyKind(end, DateTimeKind.Utc),
                 levels.Count > 0 ? levels : DefaultLevels, brackets.Count > 0 ? brackets : DefaultBrackets)
             {
+                MinimumParticipation = s.Element("guildmemberrewards") is { } memberRewards
+                    ? D(memberRewards, "minimumparticipationpercentage", 51) / 100 : 0.51,
                 Might = templates.GetValueOrDefault(XmlAttr.Str(s, "mightcategorytemplate", DefaultMightTemplate)) ?? [],
                 Schedule = Schedule(s.Element("seasontimes")),
                 Invader = s.Element("invadersettings")?.Elements("bossinvader").FirstOrDefault(b => XmlAttr.Str(b, "blocksterritoryclaim") == "true") is { } boss
@@ -224,7 +236,8 @@ public sealed class GvgSeasonData
                 TerritoryTypes = [.. (s.Element("territorytypes")?.Elements("territorytype") ?? []).Select(t => XmlAttr.Str(t, "type")).Where(t => t.Length > 0).Distinct()],
             });
         }
-        return new GvgSeasonData(list) { Might = pvpchallenge is not null ? Rules(pvpchallenge) : MightRules.None };
+        return new GvgSeasonData(list) { Might = pvpchallenge is not null ? Rules(pvpchallenge) : MightRules.None,
+            PersonalChallenge = PvpChallengeData.Load(pvpchallenge, times) };
     }
 
     /// <summary>The eventtimes of a seasontimes element (none without one); an unreadable day or time is skipped.</summary>

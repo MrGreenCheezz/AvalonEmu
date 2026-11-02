@@ -11,10 +11,9 @@ using UnlockType = AlbionLocal.Server.Data.VanityCatalog.UnlockType;
 namespace AlbionLocal.Server.Systems;
 
 /// <summary>
-/// StageN vanity (analysis/work/stageN/vanity/SPEC.md): cosmetics without purchases. The vanity store shows the client's catalogue; nothing in it
-/// is sold (BuyVanityUnlocks is refused with a line saying so). Wardrobe skins and mount skins drop very rarely from content (<see cref="VanityOptions"/>):
-/// a drop unlocks one for the character (event 408 and a chat line); the account owns the union of its characters' unlocks, as the client keeps
-/// them per account. An owned skin goes on with the client's own windows: the wardrobe (SetWardrobe 387 → UpdateWardrobe 416, Join 108,
+/// Account cosmetics from content, original unlock items and the optional local shop. Wardrobe and mount skins can also drop from
+/// content (<see cref="VanityOptions"/>). Account storage remains available when purchases are disabled; legacy character unlocks
+/// remain owned. An owned skin goes on with the client's own windows: the wardrobe (SetWardrobe 387 → UpdateWardrobe 416, Join 108,
 /// NewCharacter 55) and the mount skins (GetMountSkins 385, SetMountSkin 386, NewMountObject key 2, Mounted key 3). Under World.Sync.
 /// </summary>
 public sealed class Vanity(World world)
@@ -64,6 +63,7 @@ public sealed class Vanity(World world)
     public HashSet<short> Owned(Character c)
     {
         var set = new HashSet<short>(c.Vanity?.Unlocks ?? []);
+        if (!c.Transient && world.Shop.HasOwnershipStore) set.UnionWith(world.Shop.Owned(c.Account));
         if (c.Account != Guid.Empty)
             try
             {
@@ -86,9 +86,12 @@ public sealed class Vanity(World world)
     public bool Grant(Player p, Unlock u, string source)
     {
         if (Owned(p.Character).Contains(u.Id)) return false;
+        var accountStored = world.Shop.HasOwnershipStore && !p.Character.Transient;
+        if (accountStored && !world.Shop.GrantVanity(p.Character, u.Id)) return false;
         LogOf(p.Character).Unlocks.Add(u.Id);
         world.Saves.MarkChanged(p.Character);
-        p.Session.Send(new UnlockVanityUnlockEvent { d2f = true, Extra = new() { [0] = u.Id } });
+        if (accountStored) world.Shop.PublishVanityUnlocks(p.Character.Account, [u.Id]);
+        else p.Session.Send(new UnlockVanityUnlockEvent { d2f = true, Extra = new() { [0] = u.Id } });
         Expeditions.Tell(p, $"Cosmetic unlocked: {Describe(u)} ({source}). Apply it in the character window (vanity tab) or the vanity store.");
         Log.Info("vanity", $"'{p.Character.Name}' unlocked {u} ({source})");
         return true;
@@ -97,12 +100,34 @@ public sealed class Vanity(World world)
     /// <summary>Takes <paramref name="u"/> from <paramref name="c"/> (the GM's .vanity revoke) and off its wardrobe or mount skins. False when it had none.</summary>
     public bool Revoke(Character c, Unlock u)
     {
+        if (world.Shop.HasOwnershipStore && !c.Transient) return world.Shop.RevokeVanity(c, u);
         if (c.Vanity is not { } log || !log.Unlocks.Remove(u.Id)) return false;
         for (var i = 0; i < log.Wardrobe.Length; i++)
             if (u.Type == UnlockType.Skin && log.Wardrobe[i] == u.Number) log.Wardrobe[i] = -1;
         foreach (var k in log.MountSkins.Where(kv => u.Type == UnlockType.Mount && kv.Value == u.Number).Select(kv => kv.Key).ToList()) log.MountSkins.Remove(k);
         world.Saves.MarkChanged(c);
         return true;
+    }
+
+    public static bool IsUnlockItem(SpellTemplate spell) => spell.Effects.Any(e => e.Name.LocalName == "unlockvanityunlock");
+
+    /// <summary>345319 spells.bin uses self-targeted Mount/Skin unlocks, including rewards containing several skins.
+    /// Resolve the whole spell before consuming one item. Unsupported mixtures, unknown ids and fully owned rewards
+    /// are refused; a partially owned set awards its missing skins. "Use all" still consumes only one unlock item.</summary>
+    public short ConsumeUnlockItem(Player p, Item item, SpellTemplate spell)
+    {
+        if (spell.Effects.Any(e => e.Name.LocalName is not ("unlockvanityunlock" or "nop"))) return Consumables.GenericFailed;
+        var unlocks = new List<Unlock>();
+        foreach (var effect in spell.Effects.Where(e => e.Name.LocalName == "unlockvanityunlock"))
+        {
+            var kind = (string?)effect.Attribute("unlocktype");
+            var name = (string?)effect.Attribute("unlockname");
+            if (kind is not ("Mount" or "Skin") || (string?)effect.Attribute("target") != "self"
+                || string.IsNullOrWhiteSpace(name) || Catalog.Find(name) is not { } unlock
+                || unlock.Type != (kind == "Mount" ? UnlockType.Mount : UnlockType.Skin)) return Consumables.GenericFailed;
+            if (!unlocks.Contains(unlock)) unlocks.Add(unlock);
+        }
+        return unlocks.Count > 0 && world.Shop.ConsumeVanityItem(p, item, spell, unlocks) ? (short)0 : Consumables.GenericFailed;
     }
 
     public static string Describe(Unlock u) => u.Type switch
@@ -269,8 +294,18 @@ public sealed class Vanity(World world)
         return kept;
     }
 
-    /// <summary>GetMountSkins (op 385) key 0: the mount skin numbers chosen, one per category.</summary>
-    public static int[] MountSkins(Character c) => [.. (c.Vanity?.MountSkins ?? []).OrderBy(kv => kv.Key).Select(kv => kv.Value)];
+    /// <summary>GetMountSkins (op 385) key 0: mount skin numbers indexed by category, with -1 for no selection.
+    /// 345319 cjj.a (AB3CD5–AB3E0C) preserves this array's length/order; f6w.app (1C4C8D9)
+    /// indexes the resulting model by bed.a.c. A sparse list loses category identity and can crash the native view.</summary>
+    public int[] MountSkins(Character? c)
+    {
+        var selected = Enumerable.Repeat(-1, Catalog.MountCategories.Count).ToArray();
+        if (c?.Vanity is not { } log) return selected;
+        foreach (var (category, skin) in log.MountSkins)
+            if (category >= 0 && category < selected.Length && Catalog.MountSkin(skin) is { } unlock && unlock.Slot == category)
+                selected[category] = skin;
+        return selected;
+    }
 
     /// <summary>SetMountSkin (op 386 {0 category, 1 skin number or -1}): an owned skin of that category, or none. Null, or why not.</summary>
     public string? SetMountSkin(Player p, int category, int skin)
@@ -293,6 +328,13 @@ public sealed class Vanity(World world)
         var category = Catalog.MountCategory(mount.Attrs.GetValueOrDefault("mountcategory"));
         return category >= 0 && log.MountSkins.TryGetValue(category, out var skin) ? skin : -1;
     }
+
+    /// <summary>The selected skin's items.bin index for world events. Get/SetMountSkins and saved selections use
+    /// mountskins.xml ordinals; 345319 Mounted/A014F1 and NewMountObject/B58971 instead resolve their skin through
+    /// the ordinary ItemStore lookup6099F0. Sending the UI ordinal there resolves an unrelated item and loses the skin.</summary>
+    public int MountSkinItemIndexFor(Character c, ItemTemplate? mount) =>
+        Catalog.MountSkin(MountSkinFor(c, mount)) is { } skin && world.Items.Find(skin.Name) is { Kind: "mountskin" } item
+            ? item.Index : -1;
 
     /// <summary>.vanity list: the owned unlocks of <paramref name="c"/>'s account, or the catalogue entries whose name has <paramref name="filter"/>.</summary>
     public IEnumerable<string> Describe(Character c, string? filter)

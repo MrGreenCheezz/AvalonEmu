@@ -78,6 +78,16 @@ public sealed record EconomySettings
     public int BankSlots { get; init; } = 128;
     public double BankWeightLimit { get; init; } = 100000;
 
+    public string BankDefaultTabName { get; init; } = "@BUILDINGS_T1_BANK";
+    public string BankDefaultTabIcon { get; init; } = "icon_tag_chest";
+    public int BankDefaultTabColor { get; init; } = unchecked((int)0x2B2C29FF);
+
+    /// <summary>CityBank/TabCost, in purchase order and raw a7m silver (10,000 units per silver).</summary>
+    public IReadOnlyList<long> BankTabCosts { get; init; } =
+        [1500000000L, 2250000000L, 3750000000L, 6000000000L, 9000000000L, 13500000000L,
+         18000000000L, 22500000000L, 27000000000L, 30000000000L, 33000000000L, 36000000000L,
+         39000000000L, 42000000000L];
+
     /// <summary>MarketPlace TaxFactor setupfee (0.025): of an order's total, paid when it is created and kept (cfh.a 0x1808A9090).</summary>
     public double MarketSetupFee { get; init; } = 0.025;
 
@@ -115,6 +125,12 @@ public sealed record EconomySettings
         var rerollCost = gamedata.Descendants("RerollQuality").FirstOrDefault()?.Element("Items")?.Elements("CostModifier")
             .OrderBy(c => Num(c, "level", 0)).Select(c => Num(c, "silver", 0)).ToList();
         var bank = gamedata.Descendants("CityBank").FirstOrDefault();
+        var defaultTab = bank?.Element("DefaultTab");
+        var bankTabCosts = bank?.Elements("TabCost").Select(t =>
+            long.TryParse((string?)t.Attribute("cost"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cost)
+                && cost >= 0 && cost <= long.MaxValue / 10000 ? cost * 10000 : throw new InvalidDataException("Invalid CityBank/TabCost cost")).ToList();
+        var bankTabColor = uint.TryParse((string?)defaultTab?.Attribute("IconColorBg"), NumberStyles.HexNumber,
+            CultureInfo.InvariantCulture, out var rgba) ? unchecked((int)rgba) : d.BankDefaultTabColor;
         var fame = gamedata.Descendants("FameGainFactors").FirstOrDefault();
         // gamedata.xml has an empty <MarketPlace/> elsewhere too: the one with TaxValues counts.
         var market = gamedata.Descendants("MarketPlace").FirstOrDefault(m => m.Element("TaxValues") is not null);
@@ -144,6 +160,10 @@ public sealed record EconomySettings
             CraftFameFactor = Num(fame?.Element("CraftItem"), "factor", d.CraftFameFactor),
             BankSlots = (int)Num(bank, "size", d.BankSlots),
             BankWeightLimit = Num(bank, "weightlimit", d.BankWeightLimit),
+            BankDefaultTabName = (string?)defaultTab?.Attribute("Name") ?? d.BankDefaultTabName,
+            BankDefaultTabIcon = (string?)defaultTab?.Attribute("Icon") ?? d.BankDefaultTabIcon,
+            BankDefaultTabColor = bankTabColor,
+            BankTabCosts = bankTabCosts ?? d.BankTabCosts,
             MarketSetupFee = Num(Tax("setupfee"), "value", d.MarketSetupFee),
             MarketTax = Num(Tax("transactiontax"), "value", d.MarketTax),
             MarketMinimumTax = Num(Tax("minimumtax"), "value", d.MarketMinimumTax),

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Xml.Linq;
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
@@ -373,12 +374,14 @@ public static class Combat
             if (left <= 0)
             {
                 target.Health.Set(0, stamp);
+                world.Armory.Damage(attacker, null, Math.Max(0, had));
                 // StageN companions: a companion's kill is its owner's (fame, silver, the loot bag's rights), the owner on the map.
                 Kill(world, credit, target, ticks, hit is null ? [update] : [hit, update]);
             }
             else
             {
                 target.Health.Set(left, stamp);
+                world.Armory.Damage(attacker, null, Math.Max(0, had - left));
                 if (hit is not null) map.SendToObservers(target, hit);
                 map.SendToObservers(target, update);
                 if (damage > 0) SpellEffects.Break(world, target, "damage", ticks); // a stun or root with damagebreakseffect ends with the hit
@@ -437,6 +440,7 @@ public static class Combat
         if (damage > 0 || raw <= 0) // a hit of 0 still goes out; one all on a shield does not
         {
             target.Health.Set(left, Math.Max(ticks, target.Health.Stamp));
+            world.Armory.Damage(null, target, Math.Max(0, health - left));
             if (damage > 0) SpellEffects.Damaged(target, type, ticks);
             var e = HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
             target.Session.Send(e);
@@ -489,6 +493,7 @@ public static class Combat
         var before = target.Health.At(ticks);
         var after = Math.Min(target.Health.Max, before + Math.Max(0, origin == HitOrigin.OverTime ? (float)amount : Rounded(amount)));
         target.Health.Set(after, Math.Max(ticks, target.Health.Stamp));
+        target.World.Armory.Heal(caster, target, Math.Max(0, after - before));
         var e = HealthUpdate(target.Id, ticks, after - before, after, EffectType.Magic, origin, caster.Id, spell);
         target.Session.Send(e);
         target.SendToObservers(e);
@@ -501,27 +506,25 @@ public static class Combat
     /// <summary>
     /// The fame factor of <paramref name="p"/>'s fame buffs for a kill of <paramref name="mob"/> (mobfamebycategoryovertime, stageN
     /// spells-bosses): 1 + Σ value × stacks of the buffs in force whose category is the mob's mobs.xml category (roaming, static,
-    /// rd_veteran, avalon, …) and whose bindtoclusterarchetype, when set, is the map's archetype.
+    /// rd_veteran, avalon, …) and whose bindtoclusterarchetype, when set, is the map's archetype. Active calendar events use
+    /// those same authored spell effects, once each, without manufacturing a cast or a saved personal buff.
     /// </summary>
     public static double FameBuff(World world, Player p, Mob mob, Map map)
     {
-        if (p.Effects.Idle) return 1;
+        var now = world.GameNow;
         var category = mob.Template.FameCategory;
-        string? archetype = null;
-        var sum = 0.0;
-        foreach (var (spell, sub) in p.Effects.On(world.GameNow))
+        double Value(XElement node, int stacks)
         {
-            if (sub.Tag != "mobfamebycategoryovertime" || !category.Equals((string?)sub.Node.Attribute("category"), StringComparison.OrdinalIgnoreCase)) continue;
-            if ((string?)sub.Node.Attribute("bindtoclusterarchetype") is { } bound)
-            {
-                try { archetype ??= map.Template?.Info.Type is { } type ? world.Clusters?.Archetypes.Of(type).Archetype ?? "" : ""; }
-                catch (Exception x) when (x is InvalidDataException or IOException) { archetype = ""; }
-                if (!bound.Equals(archetype, StringComparison.OrdinalIgnoreCase)) continue;
-            }
-            sum += Data.SpellTemplate.Float(sub.Node, "value") * spell.Stacks;
+            if (node.Name.LocalName != "mobfamebycategoryovertime"
+                || !category.Equals((string?)node.Attribute("category"), StringComparison.OrdinalIgnoreCase)) return 0;
+            if (!FestivityBonuses.AppliesToMap(world, map, node)) return 0;
+            return Data.SpellTemplate.Float(node, "value") * stacks;
         }
+        var personal = p.Effects.On(now).ToArray();
+        var sum = personal.Sum(e => Value(e.Sub.Node, e.Spell.Stacks));
+        foreach (var node in FestivityBonuses.AdditionalEffects(p, now)) sum += Value(node, 1);
         // The elites' death spell MOB_ELITE_FAME_BUFF (buffovertime mobfamemodifier 0.005 a stack, up to 50, in the black zones): any mob.
-        return 1 + sum + p.Effects.Sum("mobfamemodifier", world.GameNow);
+        return 1 + sum + FestivityBonuses.Sum(p, "mobfamemodifier", now);
     }
 
     /// <summary>
@@ -624,6 +627,7 @@ public static class Combat
         // PVE-DESIGN step 11: the journal's killmob missions, the bounties and a boss's season bonus, for the killer and its fame group;
         // a world boss's for every contributor too (its looters: in an open-world fight most of them are not in the killer's party).
         IReadOnlyList<Player> credited = bossLooters is null ? group : [.. group.Union(bossLooters)];
+        foreach (var p in credited.Distinct()) world.Armory.MobKilled(p);
         AlbionJournal.Killed(map, killer, mob, credited);
         TutorialJourney.MobKilled(killer, mob);
         world.Bounties.Killed(map, killer, mob, credited);
@@ -653,9 +657,10 @@ public static class Combat
     private static void DropLoot(World world, Player killer, Mob mob, long ticks, DangerBonus? danger, Guid[]? looters = null, bool party = true)
     {
         var map = mob.Map!;
+        var activityBonus = Math.Max(0, 1 + FestivityBonuses.Sum(killer, "moblootmodifier", world.GameNow));
         IReadOnlyList<(string Item, int Amount)> drops = world.LootOverride?.Invoke(mob)
             ?? (mob.Template.Loot is { } loot && world.Clusters?.LootIfLoaded is { } tables
-                ? tables.RollMob(loot, map.Random, (danger?.MobLootFactor ?? 1) * (world.GameData?.GlobalMobLootFactor ?? 1) * (map.Difficulty?.Loot ?? 1) * world.Rates.Loot,
+                ? tables.RollMob(loot, map.Random, (danger?.MobLootFactor ?? 1) * (world.GameData?.GlobalMobLootFactor ?? 1) * (map.Difficulty?.Loot ?? 1) * activityBonus * world.Rates.Loot,
                     world.Config.LootBlackMarketChance,
                     name => LogOnce("loot:" + name, $"loot list {name} of {mob.Template.Name} is not in loot.xml"),
                     world.Config.LootTierCap ? mob.Template.Tier : 0, world.Config.LootBlackMarketSoftCap)

@@ -1,11 +1,12 @@
 using AlbionLocal.Server.Entities;
+using AlbionLocal.Server.Game;
 using AlbionLocal.Server.Protocol;
 
 namespace AlbionLocal.Server.Systems;
 
 /// <summary>
-/// Premium (analysis/work/stageJ/focus-lp/SPEC.md D1-D3, §5.2, §5.5): Premium:Mode None (official preset: nobody, there is no premium shop)
-/// or Free (pve preset: everyone, always, at no cost); a GM can switch one player for its session (<see cref="Set"/>). The client learns it
+/// Premium:Mode None uses the character's purchased expiry; Free gives everyone premium at no cost. A GM can
+/// override one player for its session (<see cref="Set"/>). The client learns it
 /// from Join key 90 (the end; it compares it with now, ctp.asj) and key 91 (the days), PremiumChanged (286) on a live change, and the
 /// character list's Login key 35; it then works out the halved market tax and its premium UI itself. The server applies the premium
 /// factors of characters.xml (each but the tax with a Premium:* key over it): the destiny board's share of fame, silver pickups, the
@@ -20,13 +21,16 @@ public static class Premium
     /// <summary>A Free premium end closer than this is pushed out again with a PremiumChanged (<see cref="Update"/>).</summary>
     public static readonly TimeSpan RefreshBefore = TimeSpan.FromDays(30);
 
-    /// <summary>Whether <paramref name="p"/> is premium: the GM's switch of its session, else Premium:Mode.</summary>
-    public static bool Is(Player p) => p.PremiumOverride ?? p.World.Config.PremiumMode == PremiumMode.Free;
+    /// <summary>The session override, then Free mode, then the persisted expiry against the world's UTC game clock.</summary>
+    public static bool Is(Player p) => End(p, p.World.GameNow) > 0;
 
-    /// <summary>Whether the character <paramref name="character"/> is premium: its player's state when it is online, else Premium:Mode.</summary>
-    public static bool Is(World world, Guid character) =>
-        world.Maps.Maps.SelectMany(m => m.Players.Values).FirstOrDefault(p => p.Character.Id == character) is { } online
-            ? Is(online) : world.Config.PremiumMode == PremiumMode.Free;
+    /// <summary>Online and offline sellers use the same per-character entitlement (including its expiry).</summary>
+    public static bool Is(World world, Guid character) => world.LoadCharacter(character) is { } c && End(world, c, world.GameNow) > 0;
+
+    private static bool? Override(World world, Guid character) =>
+        world.Maps.Maps.SelectMany(m => m.Players.Values).FirstOrDefault(p => p.Character.Id == character)?.PremiumOverride;
+
+    private static bool Unlimited(World world, bool? sessionOverride) => sessionOverride ?? world.Config.PremiumMode == PremiumMode.Free;
 
     /// <summary>
     /// Remaining premium days in the character list (Login key 35). The client converts days to its duration type;
@@ -34,15 +38,67 @@ public static class Premium
     /// </summary>
     public static long ListDays(ServerConfig config) => config.PremiumMode == PremiumMode.Free ? (long)FreeSpan.TotalDays : 0;
 
-    /// <summary>The premium end of <paramref name="p"/> (Join key 90, 286 key 1): <paramref name="now"/> + <see cref="FreeSpan"/> while premium, else 0 (left out).</summary>
-    public static long End(Player p, long now) => Is(p) ? now + FreeSpan.Ticks : 0;
+    /// <summary>Remaining days, rounded up so an active fraction of a day is visible in Login key 35.</summary>
+    public static long ListDays(World world, Character character, long? now = null)
+    {
+        var ticks = now ?? world.GameNow;
+        var end = End(world, character, ticks);
+        return end == 0 ? 0 : (long)Math.Ceiling((end - ticks) / (double)TimeSpan.TicksPerDay);
+    }
+
+    /// <summary>UTC expiry for the character list/subscription panels, or zero when inactive.</summary>
+    public static long End(World world, Character character, long now) => End(world, character, now, Override(world, character.Id));
+
+    /// <summary>Join key 90 / event 286 key 1: the real purchased expiry; only Free/GM premium gets a moving end.</summary>
+    public static long End(Player p, long now) => End(p.World, p.Character, now, p.PremiumOverride);
+
+    private static long End(World world, Character character, long now, bool? sessionOverride)
+    {
+        if (Unlimited(world, sessionOverride)) return now + FreeSpan.Ticks;
+        if (sessionOverride == false) return 0;
+        var end = world.Shop.PremiumEnd(character);
+        return end > now ? end : 0;
+    }
 
     /// <summary>
-    /// The premium days of <paramref name="p"/> (Join key 91, 286 key 2; ctp+0x3D0): Islands:PremiumDays (31 as captured; the island merchant
-    /// sells from 7 on and the season's boughtpremium rewards need more than 6) while premium or with Islands:BuyWithoutPremium (the temporary
-    /// rule of both presets: no premium can be had yet), else 0 (left out: the merchant offers no purchase); whether islands are on or not.
+    /// Settles a checkout's copy under the old entitlement, before it is extended. This neither saves nor sends
+    /// anything. Publishing the settled fields only after the transaction succeeds prevents free gains on failure.
     /// </summary>
-    public static int Days(Player p) => Is(p) || p.World.Config.IslandsBuyWithoutPremium ? p.World.Config.IslandsPremiumDays : 0;
+    public static void PreparePurchase(World world, Character snapshot, long now)
+    {
+        var sessionOverride = Override(world, snapshot.Id);
+        snapshot.CraftingFocus = Focus.Current(world, snapshot, now, sessionOverride);
+        snapshot.FocusStamp = now;
+        LearningPoints.AccrueSnapshot(world, snapshot, now, sessionOverride);
+    }
+
+    /// <summary>
+    /// Old premium remains accountable after it expires. Splitting at that boundary preserves earned resources
+    /// without charging the inactive interval at the premium rate. Purchases settle the copy before extending it.
+    /// </summary>
+    internal static IEnumerable<(long Start, long End, bool Active)> AccrualPeriods(World world, Character c, long from, long to, bool? sessionOverride)
+    {
+        if (to <= from) yield break;
+        if (Unlimited(world, sessionOverride))
+        {
+            yield return (from, to, true);
+            yield break;
+        }
+        var end = sessionOverride == false ? 0 : world.Shop.PremiumEnd(c);
+        if (from < end)
+        {
+            yield return (from, Math.Min(to, end), true);
+            from = Math.Min(to, end);
+        }
+        if (from < to) yield return (from, to, false);
+    }
+
+    /// <summary>
+    /// Lifetime purchased days (Join key 91, event 286 key 2), retained after expiry. Free/GM premium and the explicit
+    /// Islands:BuyWithoutPremium compatibility setting retain their configured eligibility.
+    /// </summary>
+    public static int Days(Player p) => Math.Max(p.World.Shop.PurchasedPremiumDays(p.Character),
+        Unlimited(p.World, p.PremiumOverride) || p.World.Config.IslandsBuyWithoutPremium ? p.World.Config.IslandsPremiumDays : 0);
 
     /// <summary>The destiny board's factor on a kill's or harvest's fame (UpdateFame key 5 sources; premiumdestinyboardprogressionfactor 1.5, Premium:FameFactor), 1 without premium.</summary>
     public static double FameFactor(Player p) => Is(p) ? p.World.Config.PremiumFameFactor ?? Defaults(p.World).PremiumFameFactor : 1;
@@ -80,14 +136,14 @@ public static class Premium
     /// </summary>
     public static bool Set(Player p, bool? on, long now)
     {
-        var before = Is(p);
+        var before = End(p, now) > 0;
         Focus.Settle(p, now);
         LearningPoints.Accrue(p, now, send: true);
         p.PremiumOverride = on;
-        if (Is(p) == before) return false;
+        if ((End(p, now) > 0) == before) return false;
         // Premium from now on: its accrual starts here (a stamp without accrual may be long ago). Switched off, the stamp stays: the
         // remainder carries if the state without premium accrues too, else its Accrue moves the stamp itself.
-        if (Is(p)) p.Character.LpStamp = now;
+        if (End(p, now) > 0) p.Character.LpStamp = now;
         p.World.Saves.MarkChanged(p.Character);
         Changed(p, now);
         return true;
@@ -102,10 +158,16 @@ public static class Premium
         p.Session.Send(new PremiumChangedEvent { ddn = p.Id, dru = p.PremiumEnd, drv = Days(p) });
     }
 
-    /// <summary>A Free premium whose end the client knows comes closer than <see cref="RefreshBefore"/>: a PremiumChanged with the end pushed out (<see cref="LearningPoints.Update"/>).</summary>
+    /// <summary>Stops both client accrual bars once on expiry; only an unlimited premium refreshes its moving end.</summary>
     public static void Update(Player p, long now)
     {
-        if (!Is(p) || p.PremiumEnd - now >= RefreshBefore.Ticks) return;
+        if (p.PremiumEnd > 0 && p.PremiumEnd <= now && End(p, now) == 0)
+        {
+            LearningPoints.Accrue(p, now, send: true);
+            Changed(p, now); // the focus bar settles at the old expiry before sending zero regeneration
+            return;
+        }
+        if (!Unlimited(p.World, p.PremiumOverride) || p.PremiumEnd - now >= RefreshBefore.Ticks) return;
         p.PremiumEnd = End(p, now);
         p.Session.Send(new PremiumChangedEvent { ddn = p.Id, dru = p.PremiumEnd, drv = Days(p) });
     }

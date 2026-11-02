@@ -26,6 +26,7 @@ public sealed partial class Hideouts
     private readonly World world;
     private readonly IHideoutStore? store;
     private readonly Dictionary<Guid, Hideout> _hideouts = [];
+    private readonly Dictionary<Guid, long> _surfaceIds = [];
     private HideoutData? _data;
     private TimeSpan _next;
     private int _spawns;
@@ -233,9 +234,23 @@ public sealed partial class Hideouts
         return h;
     }
 
+    /// <summary>
+    /// The surface object's runtime id, shared with GetClusterMapInfo key 42 even while its zone is unloaded.
+    /// Reserves only an id: no object, map load, timer advancement or persistence. Under World.Sync.
+    /// </summary>
+    public long SurfaceId(Hideout h)
+    {
+        if (_surfaceIds.TryGetValue(h.Id, out var id)) return id;
+        // Adopt an already published object's id before reserving one (also keeps existing loaded maps consistent).
+        var existing = world.Maps.Find(h.Cluster)?.Objects.Values.OfType<HideoutObject>().FirstOrDefault(o => o.Hideout.Id == h.Id);
+        id = existing?.Id ?? world.ObjectIds.Next();
+        _surfaceIds[h.Id] = id;
+        return id;
+    }
+
     /// <summary>The surface object of <paramref name="h"/> for <paramref name="map"/>.</summary>
     private HideoutObject Surface(Map map, Hideout h) =>
-        new(world.ObjectIds.Next(), HideoutObjectSpawn.At(map.Cluster, "hideout", _spawns++, HideoutData.Kit, h.Position, h.Rotation), h, BuildingType, Info);
+        new(SurfaceId(h), HideoutObjectSpawn.At(map.Cluster, "hideout", _spawns++, HideoutData.Kit, h.Position, h.Rotation), h, BuildingType, Info);
 
     /// <summary>The display name of a world.xml cluster (its id without one).</summary>
     public string ZoneName(string cluster) => world.Clusters?.WorldIfLoaded?.Find(cluster)?.DisplayName is { Length: > 0 } name ? name : cluster;
@@ -347,6 +362,7 @@ public sealed partial class Hideouts
     {
         Evict(h, why, "The hideout is gone.");
         _hideouts.Remove(h.Id);
+        _surfaceIds.Remove(h.Id);
         foreach (var c in _homes.Where(kv => kv.Value == h.Id).Select(kv => kv.Key).ToList()) _homes.Remove(c);
         store?.DeleteHideout(h.Id);
         if (world.Maps.Find(h.Cluster) is { } map)

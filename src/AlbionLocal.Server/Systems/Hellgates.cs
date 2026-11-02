@@ -78,6 +78,9 @@ public sealed class HellgateInstance
     public HellgateState State { get; set; } = HellgateState.Progress;
     public int Points { get; set; }
 
+    /// <summary>A GM advanced this run; completing the remaining fight must not create personal objective credit.</summary>
+    public bool AdministrativeProgress { get; set; }
+
     /// <summary>The quarters of the requirement told so far (hg.progress every 25 %).</summary>
     public int Told { get; set; }
 
@@ -733,7 +736,7 @@ public sealed partial class Hellgates(World world)
             ?? mobs?.Find(string.Create(CultureInfo.InvariantCulture, $"T{tier}_MOB_HG_DEMON_BRUTE{veteran}_BOSS")) ?? mobs?.Find($"T5_MOB_HG_DEMON_BRUTE{veteran}_BOSS");
         if (template is null)
         {
-            Defeated(i, map, "no guardian mob is known");
+            Defeated(i, map, "no guardian mob is known", rewardObjective: false);
             return;
         }
         var guardian = SpawnManager.SpawnAt(map, template, point?.Position ?? at, point?.Direction ?? 0, world, point?.Behavior ?? "GUARD", point?.Waypoints,
@@ -776,7 +779,7 @@ public sealed partial class Hellgates(World world)
     /// Objective 2 is won (state 3, 455): the objective chest at the HellgateObjectiveChest marker from the mode's pvp (an enemy team beaten) or
     /// pve chest spawnpoint, unlocked; the chat line; an unopened chest counts as claimed Hellgates:ClaimSeconds later.
     /// </summary>
-    private void Defeated(HellgateInstance i, Map map, string why)
+    private void Defeated(HellgateInstance i, Map map, string why, bool rewardObjective = true)
     {
         if (i.State is not (HellgateState.Progress or HellgateState.Defeat)) return;
         Status(i, HellgateState.Defeated);
@@ -799,7 +802,7 @@ public sealed partial class Hellgates(World world)
         }
         if (i.ObjectiveChest is null) Log.Warn("world", $"{i}: no objective chest ({spawnpoint})");
         foreach (var p in Inside(i).Where(p => !i.LostBy(p.Character.Id))) Expeditions.Tell(p, Settings.Text("hg.won"));
-        Won(i); // phase B: the area ends, the winners' infamy
+        Won(i, rewardObjective && !i.AdministrativeProgress); // phase B: area ends, winners' infamy and completed objective
         Log.Info("world", $"{i} won: {why}");
     }
 
@@ -840,6 +843,7 @@ public sealed partial class Hellgates(World world)
     /// <summary>.hg finish: objective 2 begins now (state 1), or is won now (state 2: the guardian or the team gone; a match: by the first party), or the reward claimed (state 3).</summary>
     public void Advance(HellgateInstance i, Map map)
     {
+        i.AdministrativeProgress = true;
         if (i.State == HellgateState.Progress)
         {
             i.Points = Math.Max(i.Points, i.Mode.PointsRequirement);

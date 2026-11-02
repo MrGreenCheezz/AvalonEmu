@@ -1,0 +1,1417 @@
+{
+  "Enabled": true,
+  "SilverPerGold": 5000,
+  "DefaultSkinGold": 2500,
+  "DefaultMountGold": 3500,
+  "PremiumGold": {
+    "7": 1000,
+    "30": 3750,
+    "90": 10500,
+    "180": 19500,
+    "360": 36000
+  },
+  "Offers": [
+    {
+      "Id": "gold.19000",
+      "Title": "19.000 de oro",
+      "Category": "gold",
+      "Currency": "cash",
+      "Price": 9995,
+      "Gold": 190000000,
+      "GoldBonus": 3000,
+      "Description": "Oro compartido por los personajes de tu cuenta local. El total indicado ya incluye el bono.",
+      "Artwork": {
+        "Native": "illu_offer_gold_05"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/gold"
+    },
+    {
+      "Id": "gold.9000",
+      "Title": "9.000 de oro",
+      "Category": "gold",
+      "Currency": "cash",
+      "Price": 4995,
+      "Gold": 90000000,
+      "GoldBonus": 1000,
+      "Description": "Oro compartido por los personajes de tu cuenta local. El total indicado ya incluye el bono.",
+      "Artwork": {
+        "Native": "illu_offer_gold_04"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/gold"
+    },
+    {
+      "Id": "gold.3500",
+      "Title": "3.500 de oro",
+      "Category": "gold",
+      "Currency": "cash",
+      "Price": 1995,
+      "Gold": 35000000,
+      "GoldBonus": 300,
+      "Description": "Oro compartido por los personajes de tu cuenta local. El total indicado ya incluye el bono.",
+      "Artwork": {
+        "Native": "illu_offer_gold_03"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/gold"
+    },
+    {
+      "Id": "gold.1700",
+      "Title": "1.700 de oro",
+      "Category": "gold",
+      "Currency": "cash",
+      "Price": 995,
+      "Gold": 17000000,
+      "GoldBonus": 100,
+      "Description": "Oro compartido por los personajes de tu cuenta local. El total indicado ya incluye el bono.",
+      "Artwork": {
+        "Native": "illu_offer_gold_02"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/gold"
+    },
+    {
+      "Id": "gold.800",
+      "Title": "800 de oro",
+      "Category": "gold",
+      "Currency": "cash",
+      "Price": 495,
+      "Gold": 8000000,
+      "GoldBonus": 0,
+      "Description": "Oro compartido por los personajes de tu cuenta local. El total indicado ya incluye el bono.",
+      "Artwork": {
+        "Native": "illu_offer_gold_01"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/gold"
+    },
+    {
+      "Id": "premium.360.cash",
+      "Title": "Premium · 360 días",
+      "Category": "premium",
+      "Currency": "cash",
+      "Price": 14340,
+      "PremiumDays": 360,
+      "Description": "Premium temporal para el personaje seleccionado, sin renovación automática.",
+      "Artwork": {
+        "Native": "illu_offer_premium_04"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/subscriptions"
+    },
+    {
+      "Id": "premium.180.cash",
+      "Title": "Premium · 180 días",
+      "Category": "premium",
+      "Currency": "cash",
+      "Price": 7770,
+      "PremiumDays": 180,
+      "Description": "Premium temporal para el personaje seleccionado, sin renovación automática.",
+      "Artwork": {
+        "Native": "illu_offer_premium_03"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/subscriptions"
+    },
+    {
+      "Id": "premium.90.cash",
+      "Title": "Premium · 90 días",
+      "Category": "premium",
+      "Currency": "cash",
+      "Price": 4185,
+      "PremiumDays": 90,
+      "Description": "Premium temporal para el personaje seleccionado, sin renovación automática.",
+      "Artwork": {
+        "Native": "illu_offer_premium_02"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/subscriptions"
+    },
+    {
+      "Id": "premium.30.cash",
+      "Title": "Premium · 30 días",
+      "Category": "premium",
+      "Currency": "cash",
+      "Price": 1495,
+      "PremiumDays": 30,
+      "Description": "Premium temporal para el personaje seleccionado, sin renovación automática.",
+      "Artwork": {
+        "Native": "illu_offer_premium_01"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/subscriptions"
+    },
+    {
+      "Id": "premium.7.cash",
+      "Title": "Premium · 7 días",
+      "Category": "premium",
+      "Currency": "cash",
+      "Price": 495,
+      "PremiumDays": 7,
+      "Description": "Premium temporal para el personaje seleccionado, sin renovación automática.",
+      "Artwork": {
+        "Native": "illu_offer_premium_00"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/subscriptions"
+    },
+    {
+      "Id": "learningpoints.10000",
+      "Title": "10.000 puntos de aprendizaje",
+      "Category": "learningpoints",
+      "Currency": "cash",
+      "Price": 9995,
+      "LearningPoints": 10000,
+      "Description": "Puntos de aprendizaje para el personaje seleccionado. El paquete debe caber completo en su límite.",
+      "Artwork": {
+        "Native": "illu_offer_learningpoints_04_top",
+        "Bottom": "illu_offer_learningpoints_04_bottom"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/learning-points"
+    },
+    {
+      "Id": "learningpoints.4000",
+      "Title": "4.000 puntos de aprendizaje",
+      "Category": "learningpoints",
+      "Currency": "cash",
+      "Price": 4995,
+      "LearningPoints": 4000,
+      "Description": "Puntos de aprendizaje para el personaje seleccionado. El paquete debe caber completo en su límite.",
+      "Artwork": {
+        "Native": "illu_offer_learningpoints_03"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/learning-points"
+    },
+    {
+      "Id": "learningpoints.1400",
+      "Title": "1.400 puntos de aprendizaje",
+      "Category": "learningpoints",
+      "Currency": "cash",
+      "Price": 1995,
+      "LearningPoints": 1400,
+      "Description": "Puntos de aprendizaje para el personaje seleccionado. El paquete debe caber completo en su límite.",
+      "Artwork": {
+        "Native": "illu_offer_learningpoints_02"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/learning-points"
+    },
+    {
+      "Id": "starter.ranger.360",
+      "Title": "Paquete inicial: Montaraz",
+      "Category": "starter",
+      "Currency": "cash",
+      "Price": 14340,
+      "Gold": 20000000,
+      "PremiumDays": 360,
+      "UnlockNames": [
+        "SKIN_COUGAR_RANGER",
+        "UNIQUE_HEAD_VANITY_RANGER_HOOD",
+        "UNIQUE_HEAD_VANITY_RANGER_MASK",
+        "UNIQUE_ARMOR_VANITY_RANGER",
+        "UNIQUE_SHOES_VANITY_RANGER",
+        "UNIQUE_CAPE_VANITY_RANGER"
+      ],
+      "Description": "360 días de Premium para el personaje, 2.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_starter_ranger_top",
+        "Bottom": "illu_offer_starter_ranger_bottom",
+        "Theme": "RANGER"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/starter-bundles"
+    },
+    {
+      "Id": "starter.druid.360",
+      "Title": "Paquete inicial: Druida",
+      "Category": "starter",
+      "Currency": "cash",
+      "Price": 14340,
+      "Gold": 20000000,
+      "PremiumDays": 360,
+      "UnlockNames": [
+        "SKIN_STAG_DRUID",
+        "UNIQUE_HEAD_VANITY_DRUID",
+        "UNIQUE_ARMOR_VANITY_DRUID",
+        "UNIQUE_SHOES_VANITY_DRUID",
+        "UNIQUE_CAPE_VANITY_DRUID"
+      ],
+      "Description": "360 días de Premium para el personaje, 2.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_starter_druid_top",
+        "Bottom": "illu_offer_starter_druid_bottom",
+        "Theme": "DRUID"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/starter-bundles"
+    },
+    {
+      "Id": "starter.paladin.360",
+      "Title": "Paquete inicial: Paladín",
+      "Category": "starter",
+      "Currency": "cash",
+      "Price": 14340,
+      "Gold": 20000000,
+      "PremiumDays": 360,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_PALADIN",
+        "UNIQUE_HEAD_VANITY_PALADIN",
+        "UNIQUE_ARMOR_VANITY_PALADIN",
+        "UNIQUE_SHOES_VANITY_PALADIN",
+        "UNIQUE_CAPE_VANITY_PALADIN",
+        "UNIQUE_ARMOR_VANITY_PALADIN_GUILD_COLORED",
+        "UNIQUE_CAPE_VANITY_PALADIN_GUILD_COLORED",
+        "SKIN_ARMORED_HORSE_PALADIN_GUILD_COLORED"
+      ],
+      "Description": "360 días de Premium para el personaje, 2.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_starter_paladin_top",
+        "Bottom": "illu_offer_starter_paladin_bottom",
+        "Theme": "PALADIN"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/starter-bundles"
+    },
+    {
+      "Id": "starter.demonicwarrior.360",
+      "Title": "Paquete inicial: Guerrero demoníaco",
+      "Category": "starter",
+      "Currency": "cash",
+      "Price": 14340,
+      "Gold": 20000000,
+      "PremiumDays": 360,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_DEMONICWARRIOR",
+        "UNIQUE_HEAD_VANITY_DEMONICWARRIOR",
+        "UNIQUE_ARMOR_VANITY_DEMONICWARRIOR",
+        "UNIQUE_SHOES_VANITY_DEMONICWARRIOR",
+        "UNIQUE_CAPE_VANITY_DEMONICWARRIOR"
+      ],
+      "Description": "360 días de Premium para el personaje, 2.000 de oro para la cuenta, Sabueso infernal ensillado, casco, armadura, botas y capa del Guerrero demoníaco. Las apariencias son desbloqueos permanentes de cuenta; la montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_starter_demonic_warrior_top",
+        "Bottom": "illu_offer_starter_demonic_warrior_bottom",
+        "Theme": "DEMONICWARRIOR"
+      },
+      "ReferencePrice": 18387,
+      "ReferenceScreenshot": "native-Screenshot_2026-10-31_23-37-07.png"
+    },
+    {
+      "Id": "starter.barbarian.180",
+      "Title": "Paquete inicial: Bárbaro",
+      "Category": "starter",
+      "Currency": "cash",
+      "Price": 7770,
+      "Gold": 10000000,
+      "PremiumDays": 180,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_BARBARIAN",
+        "UNIQUE_HEAD_VANITY_BARBARIAN",
+        "UNIQUE_ARMOR_VANITY_BARBARIAN",
+        "UNIQUE_SHOES_VANITY_BARBARIAN",
+        "UNIQUE_CAPE_VANITY_BARBARIAN",
+        "VANITY_BARBARIAN_01",
+        "AVATARRING_VANITY_BARBARIAN"
+      ],
+      "Description": "180 días de Premium para el personaje, 1.000 de oro para la cuenta, Bestia de guerra, casco, arnés, botas, capa, retrato y marco del Bárbaro. Las apariencias son desbloqueos permanentes de cuenta; la montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_starter_barbarian_top",
+        "Bottom": "illu_offer_starter_barbarian_bottom",
+        "Theme": "BARBARIAN"
+      },
+      "ReferenceScreenshot": "native-Screenshot_2026-10-31_23-35-03.png"
+    },
+    {
+      "Id": "value.titan.19000",
+      "Title": "Paquete de valor: Titán",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 10995,
+      "Gold": 190000000,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_TITAN",
+        "UNIQUE_HEAD_VANITY_TITAN",
+        "UNIQUE_ARMOR_VANITY_TITAN",
+        "UNIQUE_SHOES_VANITY_TITAN",
+        "UNIQUE_CAPE_VANITY_TITAN"
+      ],
+      "Description": "19.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_titan_top",
+        "Bottom": "illu_value_titan_bottom",
+        "Theme": "TITAN"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.priest.19000",
+      "Title": "Paquete de valor: Sacerdote",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 10995,
+      "Gold": 190000000,
+      "UnlockNames": [
+        "SKIN_HORSE_PRIEST_HOLY",
+        "UNIQUE_HEAD_VANITY_PRIEST_HOLY",
+        "UNIQUE_ARMOR_VANITY_PRIEST_HOLY",
+        "UNIQUE_SHOES_VANITY_PRIEST_HOLY",
+        "UNIQUE_CAPE_VANITY_PRIEST_HOLY"
+      ],
+      "Description": "19.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_priest_top",
+        "Bottom": "illu_value_priest_bottom",
+        "Theme": "PRIEST"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.reaver.19000",
+      "Title": "Paquete de valor: Saqueador",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 10995,
+      "Gold": 190000000,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_MARAUDER",
+        "UNIQUE_HEAD_VANITY_MARAUDER",
+        "UNIQUE_ARMOR_VANITY_MARAUDER",
+        "UNIQUE_SHOES_VANITY_MARAUDER",
+        "UNIQUE_CAPE_VANITY_MARAUDER"
+      ],
+      "Description": "19.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_reaver_top",
+        "Bottom": "illu_value_reaver_bottom",
+        "Theme": "REAVER"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.rogue.3500",
+      "Title": "Paquete de valor: Bandido aventurero",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 3995,
+      "Gold": 35000000,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_ROGUE",
+        "UNIQUE_VANITY_MAIN_POISONBOTTLE_ROGUE",
+        "UNIQUE_HEAD_VANITY_ROGUE",
+        "UNIQUE_ARMOR_VANITY_ROGUE",
+        "UNIQUE_SHOES_VANITY_ROGUE",
+        "UNIQUE_CAPE_VANITY_ROGUE",
+        "UNIQUE_ARMOR_VANITY_ROGUE_GUILD_COLORED",
+        "UNIQUE_CAPE_VANITY_ROGUE_GUILD_COLORED",
+        "SKIN_ARMORED_HORSE_ROGUE_GUILD_COLORED"
+      ],
+      "Description": "3.500 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_value_rogue_top",
+        "Bottom": "illu_offer_value_rogue_bottom",
+        "Theme": "ROGUE"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.monk.9000",
+      "Title": "Paquete de valor: Maestro de los puños",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 6495,
+      "Gold": 90000000,
+      "UnlockNames": [
+        "SKIN_HORSE_MONK",
+        "UNIQUE_HEAD_VANITY_MONK",
+        "UNIQUE_HEAD_VANITY_MONK_HAT",
+        "UNIQUE_HEAD_VANITY_MONK_MASK",
+        "UNIQUE_ARMOR_VANITY_MONK",
+        "UNIQUE_SHOES_VANITY_MONK",
+        "UNIQUE_CAPE_VANITY_MONK",
+        "UNIQUE_HEAD_VANITY_MONK_MASK_GUILD_COLORED",
+        "UNIQUE_ARMOR_VANITY_MONK_GUILD_COLORED"
+      ],
+      "Description": "9.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_master_of_fists_top",
+        "Bottom": "illu_value_master_of_fists_bottom",
+        "Theme": "MONK"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.frostmage.9000",
+      "Title": "Paquete de valor: Criomante",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 6495,
+      "Gold": 90000000,
+      "UnlockNames": [
+        "SKIN_COUGAR_FROSTMAGE",
+        "UNIQUE_HEAD_VANITY_FROSTMAGE",
+        "UNIQUE_ARMOR_VANITY_FROSTMAGE",
+        "UNIQUE_SHOES_VANITY_FROSTMAGE",
+        "UNIQUE_CAPE_VANITY_FROSTMAGE"
+      ],
+      "Description": "9.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_cryomancer_top",
+        "Bottom": "illu_value_cryomancer_bottom",
+        "Theme": "FROSTMAGE"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.firemage.9000",
+      "Title": "Paquete de valor: Piromante",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 6495,
+      "Gold": 90000000,
+      "UnlockNames": [
+        "SKIN_COUGAR_FIREMAGE",
+        "UNIQUE_HEAD_VANITY_FIREMAGE",
+        "UNIQUE_ARMOR_VANITY_FIREMAGE",
+        "UNIQUE_SHOES_VANITY_FIREMAGE",
+        "UNIQUE_CAPE_VANITY_FIREMAGE"
+      ],
+      "Description": "9.000 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_pyromancer_top",
+        "Bottom": "illu_value_pyromancer_bottom",
+        "Theme": "FIREMAGE"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.soulkeeper.3500",
+      "Title": "Paquete de valor: Guardián de almas",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 3995,
+      "Gold": 35000000,
+      "UnlockNames": [
+        "SKIN_STAG_SOULKEEPER",
+        "UNIQUE_VANITY_2H_PHYLACTERY_SOULKEEPER",
+        "UNIQUE_HEAD_VANITY_SOULKEEPER",
+        "UNIQUE_ARMOR_VANITY_SOULKEEPER",
+        "UNIQUE_SHOES_VANITY_SOULKEEPER",
+        "UNIQUE_CAPE_VANITY_SOULKEEPER"
+      ],
+      "Description": "3.500 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_soulkeeper_top",
+        "Bottom": "illu_value_soulkeeper_bottom",
+        "Theme": "SOULKEEPER"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.cursed-direboar.1700",
+      "Title": "Paquete de valor: Jabalí maldito",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 1995,
+      "Gold": 17000000,
+      "UnlockNames": [
+        "SKIN_DIREBOAR_OCCULT"
+      ],
+      "Description": "1.700 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_cursed_direboar_top",
+        "Bottom": "illu_value_cursed_direboar_bottom",
+        "Theme": "SKIN_DIREBOAR_OCCULT"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.armored-pony.1700",
+      "Title": "Paquete de valor: Poni blindado",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 1995,
+      "Gold": 17000000,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_PONY_NATIVE_CLIENT"
+      ],
+      "Description": "1.700 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_value_armored_pony_top",
+        "Bottom": "illu_value_armored_pony_bottom",
+        "Theme": "SKIN_ARMORED_HORSE_PONY_NATIVE_CLIENT"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "value.keeper-horse.320",
+      "Title": "Paquete de valor: Caballo de Guardián",
+      "Category": "value",
+      "Currency": "cash",
+      "Price": 295,
+      "Gold": 3200000,
+      "UnlockNames": [
+        "SKIN_HORSE_KEEPER"
+      ],
+      "Description": "320 de oro para la cuenta y todas las apariencias indicadas. La apariencia de montura requiere una montura compatible.",
+      "Artwork": {
+        "Native": "illu_offer_value_keeper_top",
+        "Bottom": "illu_offer_value_keeper_bottom",
+        "Theme": "SKIN_HORSE_KEEPER"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/vanity-value-bundles"
+    },
+    {
+      "Id": "bundle.duelist",
+      "Title": "Colección del Duelista",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "Gold": 10000000,
+      "PremiumDays": 30,
+      "UnlockNames": [
+        "SKIN_COUGAR_DUELIST",
+        "UNIQUE_HEAD_VANITY_DUELIST",
+        "UNIQUE_ARMOR_VANITY_DUELIST",
+        "UNIQUE_SHOES_VANITY_DUELIST",
+        "UNIQUE_CAPE_VANITY_DUELIST"
+      ],
+      "Description": "Apariencias del Duelista, 1.000 de oro y 30 días de premium. La apariencia de montura necesita una montura compatible."
+    },
+    {
+      "Id": "bundle.firemage",
+      "Title": "Colección del Mago de fuego",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_COUGAR_FIREMAGE",
+        "UNIQUE_HEAD_VANITY_FIREMAGE",
+        "UNIQUE_ARMOR_VANITY_FIREMAGE",
+        "UNIQUE_SHOES_VANITY_FIREMAGE",
+        "UNIQUE_CAPE_VANITY_FIREMAGE"
+      ],
+      "Description": "Colección de apariencias: cabeza, cuerpo, calzado, capa y montura del mismo conjunto. Desbloqueo permanente de cuenta; la apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_firemage_top",
+        "Bottom": "illu_offer_firemage_bottom",
+        "Theme": "FIREMAGE"
+      }
+    },
+    {
+      "Id": "bundle.frostmage",
+      "Title": "Colección del Mago de hielo",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_COUGAR_FROSTMAGE",
+        "UNIQUE_HEAD_VANITY_FROSTMAGE",
+        "UNIQUE_ARMOR_VANITY_FROSTMAGE",
+        "UNIQUE_SHOES_VANITY_FROSTMAGE",
+        "UNIQUE_CAPE_VANITY_FROSTMAGE"
+      ],
+      "Description": "Colección de apariencias: cabeza, cuerpo, calzado, capa y montura del mismo conjunto. Desbloqueo permanente de cuenta; la apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_frostmage_top",
+        "Bottom": "illu_offer_frostmage_bottom",
+        "Theme": "FROSTMAGE"
+      }
+    },
+    {
+      "Id": "bundle.alchemist",
+      "Title": "Colección del Alquimista",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREBOAR_ALCHEMIST",
+        "UNIQUE_HEAD_VANITY_ALCHEMIST",
+        "UNIQUE_ARMOR_VANITY_ALCHEMIST",
+        "UNIQUE_SHOES_VANITY_ALCHEMIST",
+        "UNIQUE_CAPE_VANITY_ALCHEMIST"
+      ],
+      "Description": "Colección de apariencias: cabeza, cuerpo, calzado, capa y montura del mismo conjunto. Desbloqueo permanente de cuenta; la apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_alchemist_top",
+        "Bottom": "illu_offer_alchemist_bottom",
+        "Theme": "ALCHEMIST"
+      }
+    },
+    {
+      "Id": "bundle.assassin",
+      "Title": "Colección del Asesino",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_COUGAR_ASSASSIN",
+        "UNIQUE_HEAD_VANITY_ASSASSIN",
+        "UNIQUE_ARMOR_VANITY_ASSASSIN",
+        "UNIQUE_SHOES_VANITY_ASSASSIN",
+        "UNIQUE_CAPE_VANITY_ASSASSIN"
+      ],
+      "Description": "Colección de apariencias: cabeza, cuerpo, calzado, capa y montura del mismo conjunto. Desbloqueo permanente de cuenta; la apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_assassin_top",
+        "Bottom": "illu_offer_assassin_bottom",
+        "Theme": "ASSASSIN"
+      }
+    },
+    {
+      "Id": "bundle.barbarian",
+      "Title": "Colección del Bárbaro",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_BARBARIAN",
+        "UNIQUE_HEAD_VANITY_BARBARIAN",
+        "UNIQUE_ARMOR_VANITY_BARBARIAN",
+        "UNIQUE_SHOES_VANITY_BARBARIAN",
+        "UNIQUE_CAPE_VANITY_BARBARIAN"
+      ],
+      "Description": "Colección de apariencias: cabeza, cuerpo, calzado, capa y montura del mismo conjunto. Desbloqueo permanente de cuenta; la apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_barbarian_top",
+        "Bottom": "illu_offer_barbarian_bottom",
+        "Theme": "BARBARIAN"
+      }
+    },
+    {
+      "Id": "bundle.tracker",
+      "Title": "Colección del Rastreador",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_HORSE_TRACKER",
+        "UNIQUE_HEAD_VANITY_TRACKER",
+        "UNIQUE_ARMOR_VANITY_TRACKER",
+        "UNIQUE_SHOES_VANITY_TRACKER",
+        "UNIQUE_CAPE_VANITY_TRACKER"
+      ],
+      "Description": "Colección de apariencias: cabeza, cuerpo, calzado, capa y montura del mismo conjunto. Desbloqueo permanente de cuenta; la apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_tracker_top",
+        "Bottom": "illu_offer_tracker_bottom",
+        "Theme": "TRACKER"
+      }
+    },
+    {
+      "Id": "bundle.arcanist",
+      "Title": "Colección: Arcano",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREBOAR_BATTLEMAGE",
+        "UNIQUE_HEAD_VANITY_BATTLEMAGE",
+        "UNIQUE_ARMOR_VANITY_BATTLEMAGE",
+        "UNIQUE_SHOES_VANITY_BATTLEMAGE",
+        "UNIQUE_CAPE_VANITY_BATTLEMAGE"
+      ],
+      "Description": "Colección de apariencias de Arcano. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_arcanist_top",
+        "Bottom": "illu_offer_arcanist_bottom",
+        "Theme": "BATTLEMAGE"
+      }
+    },
+    {
+      "Id": "bundle.paladin",
+      "Title": "Colección: Paladín",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_PALADIN",
+        "UNIQUE_HEAD_VANITY_PALADIN",
+        "UNIQUE_ARMOR_VANITY_PALADIN",
+        "UNIQUE_SHOES_VANITY_PALADIN",
+        "UNIQUE_CAPE_VANITY_PALADIN"
+      ],
+      "Description": "Colección de apariencias de Paladín. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_paladin_top",
+        "Bottom": "illu_offer_paladin_bottom",
+        "Theme": "PALADIN"
+      }
+    },
+    {
+      "Id": "bundle.frostknight",
+      "Title": "Colección: Caballero glacial",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_FROSTKNIGHT",
+        "UNIQUE_HEAD_VANITY_FROSTKNIGHT",
+        "UNIQUE_ARMOR_VANITY_FROSTKNIGHT",
+        "UNIQUE_SHOES_VANITY_FROSTKNIGHT",
+        "UNIQUE_CAPE_VANITY_FROSTKNIGHT"
+      ],
+      "Description": "Colección de apariencias de Caballero glacial. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_frostknight_top",
+        "Bottom": "illu_offer_frostknight_bottom",
+        "Theme": "FROSTKNIGHT"
+      }
+    },
+    {
+      "Id": "bundle.adventurer-druid",
+      "Title": "Colección: Druida",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_STAG_DRUID",
+        "UNIQUE_HEAD_VANITY_DRUID",
+        "UNIQUE_ARMOR_VANITY_DRUID",
+        "UNIQUE_SHOES_VANITY_DRUID",
+        "UNIQUE_CAPE_VANITY_DRUID"
+      ],
+      "Description": "Colección de apariencias de Druida. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_adventurer_druid_top",
+        "Bottom": "illu_offer_adventurer_druid_bottom",
+        "Theme": "DRUID"
+      }
+    },
+    {
+      "Id": "bundle.adventurer-knight",
+      "Title": "Colección: Caballero aventurero",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_KNIGHT",
+        "UNIQUE_HEAD_VANITY_KNIGHT",
+        "UNIQUE_ARMOR_VANITY_KNIGHT",
+        "UNIQUE_SHOES_VANITY_KNIGHT",
+        "UNIQUE_CAPE_VANITY_KNIGHT"
+      ],
+      "Description": "Colección de apariencias de Caballero aventurero. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_adventurer_knight_top",
+        "Bottom": "illu_offer_adventurer_knight_bottom",
+        "Theme": "KNIGHT"
+      }
+    },
+    {
+      "Id": "bundle.adventurer-mage",
+      "Title": "Colección: Mago aventurero",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_MAGE",
+        "UNIQUE_VANITY_2H_SPELLBOOK_MAGE",
+        "UNIQUE_HEAD_VANITY_MAGE",
+        "UNIQUE_ARMOR_VANITY_MAGE",
+        "UNIQUE_SHOES_VANITY_MAGE",
+        "UNIQUE_CAPE_VANITY_MAGE"
+      ],
+      "Description": "Colección de apariencias de Mago aventurero. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_adventurer_mage_top",
+        "Bottom": "illu_offer_adventurer_mage_bottom",
+        "Theme": "MAGE"
+      }
+    },
+    {
+      "Id": "bundle.adventurer-rogue",
+      "Title": "Colección: Bandido aventurero",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_ROGUE",
+        "UNIQUE_VANITY_MAIN_POISONBOTTLE_ROGUE",
+        "UNIQUE_HEAD_VANITY_ROGUE",
+        "UNIQUE_ARMOR_VANITY_ROGUE",
+        "UNIQUE_SHOES_VANITY_ROGUE",
+        "UNIQUE_CAPE_VANITY_ROGUE"
+      ],
+      "Description": "Colección de apariencias de Bandido aventurero. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_adventurer_rogue_top",
+        "Bottom": "illu_offer_adventurer_rogue_bottom",
+        "Theme": "ROGUE"
+      }
+    },
+    {
+      "Id": "bundle.dark-swamp-priest",
+      "Title": "Colección: Caminapantanos",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_LIZARD_PRIEST_DARK_SWAMP",
+        "UNIQUE_HEAD_VANITY_PRIEST_DARK_SWAMP",
+        "UNIQUE_ARMOR_VANITY_PRIEST_DARK_SWAMP",
+        "UNIQUE_SHOES_VANITY_PRIEST_DARK_SWAMP",
+        "UNIQUE_CAPE_VANITY_PRIEST_DARK_SWAMP"
+      ],
+      "Description": "Colección de apariencias de Caminapantanos. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_dark_swamp_priest_top",
+        "Bottom": "illu_offer_dark_swamp_priest_bottom",
+        "Theme": "PRIEST_DARK_SWAMP"
+      }
+    },
+    {
+      "Id": "bundle.demonhunter",
+      "Title": "Colección: Cazador de demonios",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_HORSE_DEMONHUNTER",
+        "UNIQUE_HEAD_VANITY_DEMONHUNTER",
+        "UNIQUE_ARMOR_VANITY_DEMONHUNTER",
+        "UNIQUE_SHOES_VANITY_DEMONHUNTER",
+        "UNIQUE_CAPE_VANITY_DEMONHUNTER"
+      ],
+      "Description": "Colección de apariencias de Cazador de demonios. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_demonhunter_top",
+        "Bottom": "illu_offer_demonhunter_bottom",
+        "Theme": "DEMONHUNTER"
+      }
+    },
+    {
+      "Id": "bundle.demonicwarrior",
+      "Title": "Colección: Guerrero demoníaco",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_DEMONICWARRIOR",
+        "UNIQUE_HEAD_VANITY_DEMONICWARRIOR",
+        "UNIQUE_ARMOR_VANITY_DEMONICWARRIOR",
+        "UNIQUE_SHOES_VANITY_DEMONICWARRIOR",
+        "UNIQUE_CAPE_VANITY_DEMONICWARRIOR"
+      ],
+      "Description": "Colección de apariencias de Guerrero demoníaco. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_demonicwarrior_top",
+        "Bottom": "illu_offer_demonicwarrior_bottom",
+        "Theme": "DEMONICWARRIOR"
+      }
+    },
+    {
+      "Id": "bundle.dragon-hunter",
+      "Title": "Colección: Cazador de dragones",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_STAG_DRAGONHUNTER",
+        "UNIQUE_HEAD_VANITY_DRAGONHUNTER",
+        "UNIQUE_ARMOR_VANITY_DRAGONHUNTER",
+        "UNIQUE_SHOES_VANITY_DRAGONHUNTER",
+        "UNIQUE_CAPE_VANITY_DRAGONHUNTER"
+      ],
+      "Description": "Colección de apariencias de Cazador de dragones. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_dragon_hunter_top",
+        "Bottom": "illu_offer_dragon_hunter_bottom",
+        "Theme": "DRAGONHUNTER"
+      }
+    },
+    {
+      "Id": "bundle.marauder",
+      "Title": "Colección: Saqueador",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_MARAUDER",
+        "UNIQUE_HEAD_VANITY_MARAUDER",
+        "UNIQUE_ARMOR_VANITY_MARAUDER",
+        "UNIQUE_SHOES_VANITY_MARAUDER",
+        "UNIQUE_CAPE_VANITY_MARAUDER"
+      ],
+      "Description": "Colección de apariencias de Saqueador. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_marauder_top",
+        "Bottom": "illu_offer_marauder_bottom",
+        "Theme": "MARAUDER"
+      }
+    },
+    {
+      "Id": "bundle.monk",
+      "Title": "Colección: Maestro de los puños",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_HORSE_MONK",
+        "UNIQUE_HEAD_VANITY_MONK",
+        "UNIQUE_HEAD_VANITY_MONK_HAT",
+        "UNIQUE_HEAD_VANITY_MONK_MASK",
+        "UNIQUE_ARMOR_VANITY_MONK",
+        "UNIQUE_SHOES_VANITY_MONK",
+        "UNIQUE_CAPE_VANITY_MONK"
+      ],
+      "Description": "Colección de apariencias de Maestro de los puños. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_monk_top",
+        "Bottom": "illu_offer_monk_bottom",
+        "Theme": "MONK"
+      }
+    },
+    {
+      "Id": "bundle.priest",
+      "Title": "Colección: Sacerdote",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_HORSE_PRIEST_HOLY",
+        "UNIQUE_HEAD_VANITY_PRIEST_HOLY",
+        "UNIQUE_ARMOR_VANITY_PRIEST_HOLY",
+        "UNIQUE_SHOES_VANITY_PRIEST_HOLY",
+        "UNIQUE_CAPE_VANITY_PRIEST_HOLY"
+      ],
+      "Description": "Colección de apariencias de Sacerdote. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_priest_top",
+        "Bottom": "illu_offer_priest_bottom",
+        "Theme": "PRIEST_HOLY"
+      }
+    },
+    {
+      "Id": "bundle.ranger",
+      "Title": "Colección: Montaraz",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_COUGAR_RANGER",
+        "UNIQUE_HEAD_VANITY_RANGER_HOOD",
+        "UNIQUE_HEAD_VANITY_RANGER_MASK",
+        "UNIQUE_ARMOR_VANITY_RANGER",
+        "UNIQUE_SHOES_VANITY_RANGER",
+        "UNIQUE_CAPE_VANITY_RANGER"
+      ],
+      "Description": "Colección de apariencias de Montaraz. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_ranger_top",
+        "Bottom": "illu_offer_ranger_bottom",
+        "Theme": "RANGER"
+      }
+    },
+    {
+      "Id": "bundle.soulkeeper",
+      "Title": "Colección: Guardián de almas",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2995,
+      "UnlockNames": [
+        "SKIN_STAG_SOULKEEPER",
+        "UNIQUE_VANITY_2H_PHYLACTERY_SOULKEEPER",
+        "UNIQUE_HEAD_VANITY_SOULKEEPER",
+        "UNIQUE_ARMOR_VANITY_SOULKEEPER",
+        "UNIQUE_SHOES_VANITY_SOULKEEPER",
+        "UNIQUE_CAPE_VANITY_SOULKEEPER"
+      ],
+      "Description": "Colección de apariencias de Guardián de almas. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_soulkeeper_top",
+        "Bottom": "illu_offer_soulkeeper_bottom",
+        "Theme": "SOULKEEPER"
+      }
+    },
+    {
+      "Id": "bundle.valkyrie",
+      "Title": "Colección: Valquiria",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREBEAR_VALKYRIE",
+        "UNIQUE_HEAD_VANITY_VALKYRIE",
+        "UNIQUE_ARMOR_VANITY_VALKYRIE",
+        "UNIQUE_SHOES_VANITY_VALKYRIE",
+        "UNIQUE_CAPE_VANITY_VALKYRIE"
+      ],
+      "Description": "Colección de apariencias de Valquiria. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_valkyrie_top",
+        "Bottom": "illu_offer_valkyrie_bottom",
+        "Theme": "VALKYRIE"
+      }
+    },
+    {
+      "Id": "bundle.zealot",
+      "Title": "Colección: Adepto",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_ZEALOT",
+        "UNIQUE_HEAD_VANITY_ZEALOT",
+        "UNIQUE_ARMOR_VANITY_ZEALOT",
+        "UNIQUE_SHOES_VANITY_ZEALOT",
+        "UNIQUE_CAPE_VANITY_ZEALOT"
+      ],
+      "Description": "Colección de apariencias de Adepto. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_zealot_top",
+        "Bottom": "illu_offer_zealot_bottom",
+        "Theme": "ZEALOT"
+      }
+    },
+    {
+      "Id": "bundle.corrupted-preacher",
+      "Title": "Colección: Predicador corrupto",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 1995,
+      "UnlockNames": [
+        "SKIN_OX_CORRUPTED_PREACHER",
+        "UNIQUE_HEAD_VANITY_CORRUPTED_PREACHER",
+        "UNIQUE_ARMOR_VANITY_CORRUPTED_PREACHER",
+        "UNIQUE_SHOES_VANITY_CORRUPTED_PREACHER",
+        "UNIQUE_CAPE_VANITY_CORRUPTED_PREACHER"
+      ],
+      "Description": "Colección de apariencias de Predicador corrupto. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_corrupted_preacher_top",
+        "Bottom": "illu_offer_corrupted_preacher_bottom",
+        "Theme": "CORRUPTED_PREACHER"
+      }
+    },
+    {
+      "Id": "bundle.faction-warfare-commander",
+      "Title": "Colección: Comandante",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_FW_COMMANDER",
+        "UNIQUE_HEAD_VANITY_FW_COMMANDER",
+        "UNIQUE_ARMOR_VANITY_FW_COMMANDER",
+        "UNIQUE_SHOES_VANITY_FW_COMMANDER",
+        "UNIQUE_CAPE_VANITY_FW_COMMANDER"
+      ],
+      "Description": "Colección de apariencias de Comandante. Incluye las piezas enumeradas de este conjunto y su apariencia de montura; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_faction_warfare_commander_top",
+        "Bottom": "illu_offer_faction_warfare_commander_bottom",
+        "Theme": "FW_COMMANDER"
+      }
+    },
+    {
+      "Id": "mount.darkfang",
+      "Title": "Colmillonegro",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_COUGAR_DARK"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_darkfang_top",
+        "Bottom": "illu_offer_darkfang_bottom",
+        "Theme": "SKIN_COUGAR_DARK"
+      }
+    },
+    {
+      "Id": "mount.cursed-direboar",
+      "Title": "Jabalí maldito",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_DIREBOAR_OCCULT"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_cursed_direboar_top",
+        "Bottom": "illu_offer_cursed_direboar_bottom",
+        "Theme": "SKIN_DIREBOAR_OCCULT"
+      }
+    },
+    {
+      "Id": "mount.shepherd",
+      "Title": "Perro pastor",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_SHEPHERD_TELLAFRIEND"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_shepherd_top",
+        "Bottom": "illu_offer_shepherd_bottom",
+        "Theme": "SKIN_DIREWOLF_SHEPHERD_TELLAFRIEND"
+      }
+    },
+    {
+      "Id": "mount.armored-pony",
+      "Title": "Poni blindado",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_PONY_NATIVE_CLIENT"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_armored_pony_top",
+        "Bottom": "illu_offer_armored_pony_bottom",
+        "Theme": "SKIN_ARMORED_HORSE_PONY_NATIVE_CLIENT"
+      }
+    },
+    {
+      "Id": "bundle.titan",
+      "Title": "Colección: Titán",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_TITAN",
+        "UNIQUE_HEAD_VANITY_TITAN",
+        "UNIQUE_ARMOR_VANITY_TITAN",
+        "UNIQUE_SHOES_VANITY_TITAN",
+        "UNIQUE_CAPE_VANITY_TITAN"
+      ],
+      "Description": "Colección de apariencias de Titán. Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_value_titan_top",
+        "Bottom": "illu_offer_value_titan_bottom",
+        "Theme": "TITAN"
+      }
+    },
+    {
+      "Id": "bundle.barbarian-anniversary",
+      "Title": "Colección: Bárbaro (aniversario)",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_BARBARIAN_ANNIVERSARY",
+        "UNIQUE_HEAD_VANITY_BARBARIAN_ANNIVERSARY",
+        "UNIQUE_ARMOR_VANITY_BARBARIAN_ANNIVERSARY",
+        "UNIQUE_SHOES_VANITY_BARBARIAN_ANNIVERSARY",
+        "UNIQUE_CAPE_VANITY_BARBARIAN_ANNIVERSARY"
+      ],
+      "Description": "Colección de apariencias de Bárbaro (aniversario). Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_dark_barbarian_top",
+        "Bottom": "illu_offer_dark_barbarian_bottom",
+        "Theme": "BARBARIAN_ANNIVERSARY"
+      }
+    },
+    {
+      "Id": "bundle.priest-anniversary",
+      "Title": "Colección: Sacerdote (aniversario)",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_HORSE_PRIEST_HOLY_ANNIVERSARY",
+        "UNIQUE_HEAD_VANITY_PRIEST_HOLY_ANNIVERSARY",
+        "UNIQUE_ARMOR_VANITY_PRIEST_HOLY_ANNIVERSARY",
+        "UNIQUE_SHOES_VANITY_PRIEST_HOLY_ANNIVERSARY",
+        "UNIQUE_CAPE_VANITY_PRIEST_HOLY_ANNIVERSARY"
+      ],
+      "Description": "Colección de apariencias de Sacerdote (aniversario). Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_dark_priest_top",
+        "Bottom": "illu_offer_dark_priest_bottom",
+        "Theme": "PRIEST_HOLY_ANNIVERSARY"
+      }
+    },
+    {
+      "Id": "bundle.paladin-anniversary",
+      "Title": "Colección: Paladín (aniversario)",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_PALADIN_ANNIVERSARY",
+        "UNIQUE_HEAD_VANITY_PALADIN_ANNIVERSARY",
+        "UNIQUE_ARMOR_VANITY_PALADIN_ANNIVERSARY",
+        "UNIQUE_SHOES_VANITY_PALADIN_ANNIVERSARY",
+        "UNIQUE_CAPE_VANITY_PALADIN_ANNIVERSARY"
+      ],
+      "Description": "Colección de apariencias de Paladín (aniversario). Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_paladin_anniversary_top",
+        "Bottom": "illu_offer_paladin_anniversary_bottom",
+        "Theme": "PALADIN_ANNIVERSARY"
+      }
+    },
+    {
+      "Id": "bundle.marauder-anniversary",
+      "Title": "Colección: Saqueador (aniversario)",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_ARMORED_HORSE_MARAUDER_ANNIVERSARY",
+        "UNIQUE_HEAD_VANITY_MARAUDER_ANNIVERSARY",
+        "UNIQUE_ARMOR_VANITY_MARAUDER_ANNIVERSARY",
+        "UNIQUE_SHOES_VANITY_MARAUDER_ANNIVERSARY",
+        "UNIQUE_CAPE_VANITY_MARAUDER_ANNIVERSARY"
+      ],
+      "Description": "Colección de apariencias de Saqueador (aniversario). Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_anniversary_reaver_top",
+        "Bottom": "illu_offer_anniversary_reaver_bottom",
+        "Theme": "MARAUDER_ANNIVERSARY"
+      }
+    },
+    {
+      "Id": "bundle.alchemist-anniversary",
+      "Title": "Colección: Alquimista (aniversario)",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_DIREBOAR_ALCHEMIST_ANNIVERSARY",
+        "UNIQUE_HEAD_VANITY_ALCHEMIST_ANNIVERSARY",
+        "UNIQUE_ARMOR_VANITY_ALCHEMIST_ANNIVERSARY",
+        "UNIQUE_SHOES_VANITY_ALCHEMIST_ANNIVERSARY",
+        "UNIQUE_CAPE_VANITY_ALCHEMIST_ANNIVERSARY"
+      ],
+      "Description": "Colección de apariencias de Alquimista (aniversario). Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_anniversary_alchemist_top",
+        "Bottom": "illu_offer_anniversary_alchemist_bottom",
+        "Theme": "ALCHEMIST_ANNIVERSARY"
+      }
+    },
+    {
+      "Id": "bundle.corrupted-preacher-anniversary",
+      "Title": "Colección: Predicador corrupto (aniversario)",
+      "Category": "bundles",
+      "Currency": "cash",
+      "Price": 2495,
+      "UnlockNames": [
+        "SKIN_OX_CORRUPTED_PREACHER_ANNIVERSARY",
+        "UNIQUE_HEAD_VANITY_CORRUPTED_PREACHER_ANNIVERSARY",
+        "UNIQUE_ARMOR_VANITY_CORRUPTED_PREACHER_ANNIVERSARY",
+        "UNIQUE_SHOES_VANITY_CORRUPTED_PREACHER_ANNIVERSARY",
+        "UNIQUE_CAPE_VANITY_CORRUPTED_PREACHER_ANNIVERSARY"
+      ],
+      "Description": "Colección de apariencias de Predicador corrupto (aniversario). Incluye cabeza, cuerpo, calzado, capa y apariencia de montura de esta variante; desbloqueo permanente para la cuenta. La apariencia de montura requiere una montura compatible. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_anniversary_corrupted_preacher_top",
+        "Bottom": "illu_offer_anniversary_corrupted_preacher_bottom",
+        "Theme": "CORRUPTED_PREACHER_ANNIVERSARY"
+      }
+    },
+    {
+      "Id": "mount.hell-mare",
+      "Title": "Yegua infernal",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_HORSE_HELL"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_hell_mare_top",
+        "Bottom": "illu_offer_hell_mare_bottom",
+        "Theme": "SKIN_HORSE_HELL"
+      }
+    },
+    {
+      "Id": "mount.mistbison",
+      "Title": "Bisonte de niebla",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 1495,
+      "UnlockNames": [
+        "SKIN_OX_MIST"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_mistbison_top",
+        "Bottom": "illu_offer_mistbison_bottom",
+        "Theme": "SKIN_OX_MIST"
+      }
+    },
+    {
+      "Id": "mount.mistcougar",
+      "Title": "Puma de niebla",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_COUGAR_MIST"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_mistcougar_top",
+        "Bottom": "illu_offer_mistcougar_bottom",
+        "Theme": "SKIN_COUGAR_MIST"
+      }
+    },
+    {
+      "Id": "mount.mistwolf",
+      "Title": "Lobo de niebla",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_MIST"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_mistwolf_top",
+        "Bottom": "illu_offer_mistwolf_bottom",
+        "Theme": "SKIN_DIREWOLF_MIST"
+      }
+    },
+    {
+      "Id": "mount.shadowcat",
+      "Title": "Gato sombrío",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 995,
+      "UnlockNames": [
+        "SKIN_COUGAR_SHADOWCAT"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_shadowcat_top",
+        "Bottom": "illu_offer_shadowcat_bottom",
+        "Theme": "SKIN_COUGAR_SHADOWCAT"
+      }
+    },
+    {
+      "Id": "mount.undead-direwolf",
+      "Title": "Lobo no muerto",
+      "Category": "mounts",
+      "Currency": "cash",
+      "Price": 1495,
+      "UnlockNames": [
+        "SKIN_DIREWOLF_UNDEAD"
+      ],
+      "Description": "Apariencia permanente para una montura compatible. Desbloqueo para todos los personajes de la cuenta; no incluye una montura como objeto. Precio de simulación local.",
+      "Artwork": {
+        "Native": "illu_offer_undead_direwolf_top",
+        "Bottom": "illu_offer_undead_direwolf_bottom",
+        "Theme": "SKIN_DIREWOLF_UNDEAD"
+      }
+    },
+    {
+      "Id": "bundle.essentials",
+      "Title": "Paquete Esenciales",
+      "Category": "featured",
+      "Currency": "cash",
+      "Price": 2995,
+      "Gold": 25000000,
+      "PremiumDays": 30,
+      "LearningPoints": 1000,
+      "Items": [
+        {
+          "Name": "T6_GENERAL_FAMEBUFF",
+          "Count": 3,
+          "Title": "Pergamino de Fama"
+        }
+      ],
+      "Description": "30 días de Premium para el personaje, 2.500 de oro para la cuenta, 1.000 puntos de aprendizaje y 3 Pergaminos de Fama. Cada pergamino concede un bonus de progreso del 15 % durante 3 horas. Se necesita espacio para recibir todo el contenido.",
+      "Artwork": {
+        "Native": "illu_offer_essentials_pack",
+        "Theme": "ESSENTIALS"
+      },
+      "ReferenceUrl": "https://albiononline.com/shop/#essentials-pack-nati"
+    }
+  ]
+}

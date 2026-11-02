@@ -58,6 +58,9 @@ public sealed record Account(Guid Id, AccountLevel Level)
 /// </summary>
 public interface ICharacterRepository : IDisposable
 {
+    /// <summary>A retained, observed combat snapshot. The SQLite implementation reads only statistics JSON.</summary>
+    CharacterCombatRecord? FindCombatRecord(Guid id) => List().Select(c => c.Statistics?.FindCombat(id)).FirstOrDefault(r => r is not null);
+
     /// <summary>
     /// The local account: the only one until stage 7, holding every character saved before it (the default character
     /// too); its name and level as when the repository was opened. A character created without an account goes into it.

@@ -8,6 +8,9 @@ namespace AlbionLocal.Server.Network;
 
 public sealed partial class LoginSession
 {
+    // Optional local development hook; the shared server does not create evaluation characters.
+    partial void PrepareEvaluationCharacter();
+
     /// <summary>
     /// Status/ping peers (c35/c36, AppId "Albion.StatusServer") connect to the status address of
     /// each region and send one empty request. c35.xk 0x180a95d90 unboxes event param 1 as a Byte (another type
@@ -48,6 +51,7 @@ public sealed partial class LoginSession
     {
         Log.Info(Name, $"login from {Peer.EndPoint}: client {req.aiu}.{req.aiv}.{req.aiw} build {req.aiy}");
         Account account;
+        LoginResponse r;
         try
         {
             if (Authenticate(req) is not { } ok)
@@ -60,6 +64,23 @@ public sealed partial class LoginSession
                 return _refusal!;
             }
             account = ok;
+            r = new LoginResponse
+            {
+                // Echo the client's version and prepare the reply before replacing live sessions.
+                bm1 = req.aiu, bm2 = req.aiv, bm3 = req.aiw, bm4 = req.aix, bm5 = req.aiy,
+                bej = account.Id,
+                bep = LoginWorld.Key57,
+                bfb = LoginWorld.Flags,
+                bfh = true,
+                bfv = LoginWorld.Features(),
+                // 345319 HandleResponseLogin16D71BD-16D71E5 copies key49 (ahw+180)
+                // through raw a7m.e729620 into LoginGui.AccountGold+120. Use the shared
+                // account wallet before character selection, just as Select/Join do.
+                beh = World?.Shop.Gold(account.Id) ?? 0,
+            };
+            // This durable counter can fail. Keep the previous sessions intact and return 206
+            // through the normal login error path instead of attaching a half-authenticated peer.
+            if (World is { } popupWorld) Systems.EventBasedPopups.FillLogin(popupWorld, account.Id, r);
         }
         catch (Exception e)
         {
@@ -79,16 +100,7 @@ public sealed partial class LoginSession
             foreach (var s in older) s.Close($"{account} logged in on another connection");
             world.Accounts.Attach(account.Id, this);
         }
-        var r = new LoginResponse
-        {
-            // ajb (VersionedOperation response): echo the client's version.
-            bm1 = req.aiu, bm2 = req.aiv, bm3 = req.aiw, bm4 = req.aix, bm5 = req.aiy,
-            bej = _account.Id,          // [51] stored in PhotonClient (account id; Join key 0)
-            bep = LoginWorld.Key57,     // [57] server session; compared on reconnect ("server was restarted"); seeds the open-world layout
-            bfb = LoginWorld.Flags,     // [79] event flags of the layout (none: an empty array, as FillEmpty sent it before)
-            bfh = true,                 // [85] when false during a reconnect the client auto-selects a character
-            bfv = LoginWorld.Features(), // [99] dew.a feature table, one entry per Features value
-        };
+        PrepareEvaluationCharacter();
         FillCharacterList(r, characters.List(_account.Id), World?.Guilds, Systems.Premium.ListDays(config), World);
         r.FillEmpty();
         // [78] GameTimeStamp time scaling, same as Join key 70: c3d.cl(ahw) 0x180a5bae0 passes it to

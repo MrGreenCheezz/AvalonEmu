@@ -19,9 +19,13 @@ public sealed partial class WorldSession
     [Handles(OperationCodes.SetNextTutorialState, Status = SessionStatus.InWorld)]
     private AlbionResponse NextTutorial(SetNextTutorialStateRequest req)
     {
-        // The timestamp-only request does not prove any mission condition. Movement/dialogue drives progress.
+        // This acknowledges an authored hint's completion, not a mission objective.
+        // Only the map introduction has a verified client-driven transition here.
         if (Player is { } p && Systems.OpeningTutorial.Active(p))
+        {
+            Systems.TutorialJourney.CompleteMapIntroduction(p);
             SendEvent(new TutorialUpdateEvent { d18 = p.Character.Tutorial!.TutorialState });
+        }
         return new GenericResponse();
     }
 }

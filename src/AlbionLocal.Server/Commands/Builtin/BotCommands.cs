@@ -101,6 +101,28 @@ public static class BotCommands
         ctx.Reply($"{names.Count} {r.ToString().ToLowerInvariant()} bot(s): {string.Join(", ", names)}");
     }
 
+    /// <summary>A GM's stationary development opponent: normal patrol gear, PvP and combat, with a one-stop route.
+    /// No result, damage, currency or reward is injected. The existing PvP rules still govern the encounter.</summary>
+    [Command("bot sparring", Level = AccountLevel.GameMaster,
+        Help = "puts one stationary development patrol near you, gear tier [tier]; normal PvP/combat rules still apply")]
+    public static void Sparring(CommandContext ctx, int tier = 1)
+    {
+        if (tier is < 1 or > 8) throw new CommandError($"tier: {tier} is not 1..8");
+        var player = ctx.RequirePlayer();
+        var bots = ctx.World.Bots;
+        if (!bots.Enabled) throw new CommandError("bots are off (.bot on)");
+        var map = MapOf(player);
+        if (!bots.PatrolsAllowed(map)) throw new CommandError($"no patrols on {map.Cluster}: its PvP rule keeps no Red player");
+        var nav = bots.NavOf(map) ?? throw new CommandError($"the walk grid of {map.Cluster} is being built; try again in a moment");
+        var at = player.PositionAt(DateTime.UtcNow);
+        var centre = nav.Grid.Nearest(at, 6) ?? throw new CommandError("nothing walkable within 6 m of you");
+        var spot = nav.Grid.RandomNear(bots.Random, centre, 3, 5) ?? centre;
+        var group = new BotGroup(new PatrolRoute([spot], Loop: true));
+        var bot = bots.Spawn(map, BotRole.Patrol, tier, spot, AI.MotionMaster.Facing(spot, at), group: group)
+            ?? throw new CommandError("no bot spawned (no free name)");
+        ctx.Reply(Inv($"development sparring: '{bot.Character.Name}' T{tier} (object {bot.Id}) at ({spot.X:0.#}, {spot.Y:0.#}); normal combat, no artificial outcome"));
+    }
+
     /// <summary>Every bot of the player's map (<paramref name="where"/> here) or of every map (all) goes (Leave); the slots refill after Bots:RespawnSeconds.</summary>
     [Command("bot clear", Level = AccountLevel.GameMaster, Help = "despawns the bots of this map (here) or of every map (all); the population refills later")]
     public static void Clear(CommandContext ctx, string where = "here")

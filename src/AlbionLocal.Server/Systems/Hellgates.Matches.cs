@@ -156,12 +156,18 @@ public sealed partial class Hellgates
     /// Objective 2 is won (<see cref="Defeated"/>): the restricted area ends; each winner inside gets Hellgates:InfamyWin × the chain factor of the
     /// mode's InfamyType (<see cref="Credit"/>).
     /// </summary>
-    private void Won(HellgateInstance i)
+    private void Won(HellgateInstance i, bool rewardObjective)
     {
         EndArea(i);
+        var winners = Inside(i).Where(p => !p.IsBot && i.Members.ContainsKey(p.Character.Id) && !i.LostBy(p.Character.Id)).ToList();
+        // Defeated changes the instance state before entering here, so a chest reopen, claim timeout or
+        // repeated team-death notification cannot repeat this reward. Normal mode data supplies zero
+        // Might/Favor in non-lethal gates. Missing guardians and GM advances never count as completion.
+        if (rewardObjective)
+            foreach (var p in winners) PvpChallenge.OnObjective(p, i.Mode.MightReward, winners.Count);
         var gain = (long)Math.Round(Options.InfamyWin * i.ChainFactor, MidpointRounding.AwayFromZero);
         if (gain <= 0 || i.Mode.InfamyType == 0) return;
-        foreach (var p in Inside(i).Where(p => i.Members.ContainsKey(p.Character.Id) && !i.LostBy(p.Character.Id)).ToList()) Credit(p, i.Mode.InfamyType, gain);
+        foreach (var p in winners) Credit(p, i.Mode.InfamyType, gain);
     }
 
     /// <summary>

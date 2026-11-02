@@ -5,14 +5,14 @@ using Microsoft.Data.Sqlite;
 namespace AlbionLocal.Server.Persistence;
 
 /// <summary><see cref="IGuildStore"/> in the character database (schema v17: guilds, guild_members, guild_left; v18: the contracts; v25: the guild goals).</summary>
-public sealed partial class SqliteCharacterRepository : IGuildStore
+public sealed partial class SqliteCharacterRepository : IGuildStore, IGuildAccountStore
 {
     public IReadOnlyList<Guild> LoadGuilds()
     {
         lock (_sync)
         {
             var guilds = new Dictionary<Guid, Guild>();
-            using (var select = Command("SELECT id, name, created, logo, banner, silver, tax, xp, tags, contracts, progress FROM guilds ORDER BY created, rowid", null))
+            using (var select = Command("SELECT id, name, created, logo, banner, silver, tax, xp, tags, contracts, progress, loadouts FROM guilds ORDER BY created, rowid", null))
             using (var r = select.ExecuteReader())
                 while (r.Read())
                 {
@@ -23,6 +23,7 @@ public sealed partial class SqliteCharacterRepository : IGuildStore
                         SilverA7m = r.GetInt64(5), TaxA7m = r.GetInt64(6), Xp = r.GetInt64(7),
                         Contracts = r.IsDBNull(9) ? null : JsonSerializer.Deserialize<GuildContracts>(r.GetString(9)),
                         Progress = (r.IsDBNull(10) ? null : JsonSerializer.Deserialize<GuildProgress>(r.GetString(10))) ?? new GuildProgress(),
+                        Loadouts = (r.IsDBNull(11) ? null : JsonSerializer.Deserialize<GuildLoadouts>(r.GetString(11))) ?? new GuildLoadouts(),
                     };
                     guilds[g.Id] = g;
                 }
@@ -47,13 +48,13 @@ public sealed partial class SqliteCharacterRepository : IGuildStore
         {
             using var tx = _db.BeginTransaction(); // disposed without Commit = rolled back
             using (var upsert = Command("""
-                       INSERT INTO guilds (id, name, created, logo, banner, silver, tax, xp, tags, contracts, progress)
-                       VALUES ($id, $name, $created, $logo, $banner, $silver, $tax, $xp, $tags, $contracts, $progress)
+                       INSERT INTO guilds (id, name, created, logo, banner, silver, tax, xp, tags, contracts, progress, loadouts)
+                       VALUES ($id, $name, $created, $logo, $banner, $silver, $tax, $xp, $tags, $contracts, $progress, $loadouts)
                        ON CONFLICT (id) DO UPDATE SET name = $name, logo = $logo, banner = $banner, silver = $silver, tax = $tax, xp = $xp, tags = $tags,
-                           contracts = $contracts, progress = $progress
+                           contracts = $contracts, progress = $progress, loadouts = $loadouts
                        """, tx, ("$id", g.Id.ToString()), ("$name", g.Name), ("$created", g.Created.Ticks), ("$logo", JsonSerializer.Serialize(g.Logo)),
                        ("$banner", g.Banner), ("$silver", g.SilverA7m), ("$tax", g.TaxA7m), ("$xp", g.Xp), ("$tags", JsonSerializer.Serialize(g.Tags)),
-                       ("$contracts", ContractsJson(g)), ("$progress", JsonSerializer.Serialize(g.Progress))))
+                       ("$contracts", ContractsJson(g)), ("$progress", JsonSerializer.Serialize(g.Progress)), ("$loadouts", JsonSerializer.Serialize(g.Loadouts))))
                 upsert.ExecuteNonQuery();
             using (var clear = Command("DELETE FROM guild_members WHERE guild = $id", tx, ("$id", g.Id.ToString()))) clear.ExecuteNonQuery();
             for (var i = 0; i < g.Members.Count; i++)
@@ -71,6 +72,16 @@ public sealed partial class SqliteCharacterRepository : IGuildStore
         }
     }
 
+    public void SaveGuildLoadouts(Guild g)
+    {
+        lock (_sync)
+        {
+            using var update = Command("UPDATE guilds SET loadouts = $loadouts WHERE id = $id", null,
+                ("$id", g.Id.ToString()), ("$loadouts", JsonSerializer.Serialize(g.Loadouts)));
+            if (update.ExecuteNonQuery() != 1) throw new InvalidOperationException("Guild no longer exists");
+        }
+    }
+
     public void SaveGuildProgress(Guild g)
     {
         lock (_sync)
@@ -78,6 +89,26 @@ public sealed partial class SqliteCharacterRepository : IGuildStore
             using var update = Command("UPDATE guilds SET silver = $silver, xp = $xp, contracts = $contracts, progress = $progress WHERE id = $id", null,
                 ("$id", g.Id.ToString()), ("$silver", g.SilverA7m), ("$xp", g.Xp), ("$contracts", ContractsJson(g)), ("$progress", JsonSerializer.Serialize(g.Progress)));
             update.ExecuteNonQuery();
+        }
+    }
+
+    public bool SaveGuildAccountTransfer(Guid guild, long silver, GuildProgress progress, Character character)
+    {
+        if (character.Transient || silver < 0 || character.Silver < 0) return false;
+        lock (_sync)
+        {
+            using var tx = _db.BeginTransaction();
+            using (var member = Command("""
+                       SELECT c.account FROM characters c JOIN guild_members m ON m.character = c.id
+                       WHERE c.id = $character AND m.guild = $guild
+                       """, tx, ("$character", character.Id.ToString()), ("$guild", guild.ToString())))
+                if (member.ExecuteScalar() is not string account || account != character.Account.ToString()) return false;
+            using (var update = Command("UPDATE guilds SET silver = $silver, progress = $progress WHERE id = $id", tx,
+                       ("$id", guild.ToString()), ("$silver", silver), ("$progress", JsonSerializer.Serialize(progress))))
+                if (update.ExecuteNonQuery() != 1) return false;
+            if (!Write(character, tx)) return false;
+            tx.Commit();
+            return true;
         }
     }
 

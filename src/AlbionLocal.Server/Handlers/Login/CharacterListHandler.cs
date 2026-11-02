@@ -37,7 +37,7 @@ public sealed partial class LoginSession
         r.bdh = Each(c => world?.Islands.WorldOf(c.Cluster) ?? world?.Hideouts.WorldOf(c.Cluster) ?? world?.Expeditions.WorldOf(c.Cluster)
             ?? world?.Corrupted.Find(c.Cluster)?.World ?? world?.Hellgates.WorldOf(c.Cluster) ?? c.Cluster); // [13] base world map
         r.bdi = Each(c => c.Template);        // [14] avatar lookup (creation key 1)
-        r.bdj = Ints();                       // [15] c.g  appearance lookup
+        r.bdj = Each(Systems.Avatars.Ring);    // [15] selected avatar ring
         r.bdk = new byte[n];                  // [16] c.h  FlaggingStatus
         r.bdl = Each(c => c.Appearance);      // [17] body template (creation key 2)
         r.bdm = Each(c => world?.GameData?.Looks.SelectionJson(c) ?? ""); // [18] cpr customization JSON for selection preview
@@ -48,7 +48,7 @@ public sealed partial class LoginSession
         r.bdv = new float[n]; r.bdw = new float[n];                                      // [27-28] guild logo
         r.bdx = Longs(); r.bdy = Longs(); r.bdz = Longs(); r.bd0 = Longs(); r.bd1 = Longs(); // [29-33] a7m values
         r.bd2 = Each(c => c.PlayedMilliseconds); // [34] c.s: played duration in milliseconds
-        r.bd3 = Each(c => premiumDays);       // [35] c.t: remaining premium duration in days
+        r.bd3 = Each(c => world is null ? premiumDays : Systems.Premium.ListDays(world, c, world.GameNow)); // [35] remaining days, per character
         r.bd4 = Ints();                       // [36] c.u
         // LoginGui.c stores head, armor, cape, mainhand, offhand, shoes in that wire order.
         r.bd5 = Each(c => SelectionEquipment(c, 2, world?.Items));

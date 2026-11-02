@@ -49,8 +49,8 @@ namespace AlbionLocal.Server.Systems;
 /// CORRUPTED …), summed per guild (GetGuildMightCategoryOverview 450, <see cref="MightOverview"/>; the members' list 449,
 /// <see cref="MightContribution"/>). The level is the progression rows reached (the client's own table); each row reached adds its
 /// seasonpoints (activity MightCategoryLevelUp@CATEGORY, no factor: the client's popup prints the table's value), a guild line and during a
-/// client season the client's popup (GameEvent 162 type 68). The Conqueror's Challenge (personal might, op 451) is not modelled; the might
-/// here exists only on the guild. Touched only under <see cref="World.Sync"/>.
+/// client season the client's popup (GameEvent 162 type 68). This might exists only on the guild; the Conqueror's Challenge
+/// (personal Might, op 451) is handled independently by <see cref="PvpChallenge"/>. Touched only under <see cref="World.Sync"/>.
 /// </para>
 /// </summary>
 public sealed class GuildGoals(World world)
@@ -200,19 +200,22 @@ public sealed class GuildGoals(World world)
     }
 
     /// <summary><paramref name="points"/> guild season points of <paramref name="activity"/> for <paramref name="g"/>; the members in game get the journal's reachseasonpoints.</summary>
-    private void AddPoints(Guild g, GuildSeasonState st, long points, string activity)
+    private void AddPoints(Guild g, GuildSeasonState st, long points, string activity, bool awardPersonal = true)
     {
         if (points <= 0) return;
+        var before = st.Points;
+        RecordSeasonPoints(g, points);
         st.Points += points;
         st.Activity[activity] = st.Activity.GetValueOrDefault(activity) + points;
         st.Updated = st.PointsAt = world.GameNow;
         world.Guilds.Touch(g);
+        if (awardPersonal) PvpChallenge.GuildPoints(world, g, st.Season, before, st.Points);
         foreach (var m in g.Members)
             if (world.Parties.Online(m.Id) is { } p) AlbionJournal.SeasonPoints(p, st.Points * 10000);
     }
 
     /// <summary>.guildgoal points: <paramref name="points"/> season points for <paramref name="g"/> (a GM's, activity ChallengeLevelUp, no factor).</summary>
-    public void GrantPoints(Guild g, long points) => AddPoints(g, StateOf(g, Season), points, ChallengeLevelUp);
+    public void GrantPoints(Guild g, long points) => AddPoints(g, StateOf(g, Season), points, ChallengeLevelUp, awardPersonal: false);
 
     /// <summary>
     /// <paramref name="points"/> season points of <paramref name="activity"/> (a GvgSeasonActivity name: <see cref="TerritoryHold"/> …) for
@@ -318,6 +321,7 @@ public sealed class GuildGoals(World world)
     /// </summary>
     public void OnObjective(Player p, string? objective)
     {
+        PvpChallenge.OnObjective(p, objective);
         if (MightFactor <= 0 || objective is null || GuildOf(p) is not { } g || !Data.Might.Objectives.TryGetValue(objective, out var o) || o.Might <= 0) return;
         AddMight(g, p.Character.Id, o.Type, o.Might * 10000 * MightFactor);
     }
@@ -499,6 +503,62 @@ public sealed class GuildGoals(World world)
             };
         }
         return new QueryGuildPlayerStatsResponse { bg7 = [.. g.Members.Select(m => m.Id)], bg8 = [.. g.Members.Select(m => Value(m.Id))] };
+    }
+
+    // ---- alliance guild logs (310)
+
+    private GuildSeasonPointLog SeasonPointLog(Guild g)
+    {
+        if (g.Progress.SeasonPointLog is { } log) return log;
+        g.Progress.SeasonPointLog = log = new GuildSeasonPointLog { CoveredSinceUtc = world.GameNow, Week = WeekStart };
+        world.Guilds.Touch(g);
+        Log.Info("guild", $"guild '{g.Name}' alliance season-point log starts at {UtcNow:O}; earlier lifetime and weekly history is unavailable");
+        return log;
+    }
+
+    private void RecordSeasonPoints(Guild g, long points)
+    {
+        var log = SeasonPointLog(g);
+        var week = WeekStart;
+        if (log.Week != week)
+        {
+            log.Last = log.Week == week - Week ? log.This : 0;
+            log.This = 0;
+            log.Week = week;
+        }
+        log.This += Math.Min(points, long.MaxValue - log.This);
+        log.All += Math.Min(points, long.MaxValue - log.All);
+        // AddPoints marks the guild dirty after updating both this log and the season: one JSON write persists both.
+    }
+
+    /// <summary>
+    /// QueryAllianceGuildStats (310): only the caller's current alliance members, in its membership order, with parallel non-null
+    /// arrays. The native selector exposes SeasonPoints (bex 0) and AllTime / ThisWeek / LastWeek (0 / 1 / 2). Values are a7m:
+    /// current 345319 UpdateList (109B520) preserves the raw long; its row renderer (10AA6C0) divides by 10000 via 943BC0.
+    /// AllTime covers only gains observed since each guild's SeasonPointLog.CoveredSinceUtc; old season totals are not backfilled
+    /// into unknown weeks or presented as a lifetime total. The protocol has no field for this coverage timestamp.
+    /// </summary>
+    public QueryAllianceGuildStatsResponse AllianceStats(Player p, int timeFrame, int stat)
+    {
+        if (stat != 0 || timeFrame is < 0 or > 2)
+            return new QueryAllianceGuildStatsResponse { ReturnCode = 1, bg5 = [], bg6 = [] };
+        if (world.Alliances.Of(p.Character.Id) is not { } alliance)
+            return new QueryAllianceGuildStatsResponse { bg5 = [], bg6 = [] };
+        var guilds = alliance.Guilds.Select(m => world.Guilds.ById(m.Guild)).OfType<Guild>().ToArray();
+        var week = WeekStart;
+        long Value(Guild guild)
+        {
+            var log = SeasonPointLog(guild);
+            var points = timeFrame switch
+            {
+                0 => log.All,
+                1 => log.Week == week ? log.This : 0,
+                2 => log.Week == week ? log.Last : log.Week == week - Week ? log.This : 0,
+                _ => 0,
+            };
+            return Math.Min(points, long.MaxValue / 10000) * 10000;
+        }
+        return new QueryAllianceGuildStatsResponse { bg5 = [.. guilds.Select(g => g.Id)], bg6 = [.. guilds.Select(Value)] };
     }
 
     // ---- weekly goals
@@ -1187,6 +1247,9 @@ public sealed class GuildGoals(World world)
     /// <summary>.guild season: <paramref name="g"/>'s season, challenge level and points, season points, bracket and rank.</summary>
     public IEnumerable<string> DescribeSeason(Guild g)
     {
+        if (g.Progress.SeasonPointLog is { } log)
+            yield return string.Create(CultureInfo.InvariantCulture,
+                $"Alliance statistics: {log.All} season points recorded since {new DateTime(log.CoveredSinceUtc, DateTimeKind.Utc):yyyy-MM-dd HH:mm} UTC; AllTime and weekly values exclude earlier unrecorded history (the first week may be partial)");
         if (!Enabled)
         {
             yield return "the guild goals are off on this server (Guild:Enabled in content/goals.json)";

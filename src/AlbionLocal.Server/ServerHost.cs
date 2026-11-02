@@ -60,6 +60,8 @@ public sealed class ServerHost : IDisposable
         Expeditions = ContentRules.Apply(config, ExpeditionSettings.Load(config.ExpeditionsPath));
         Goals = ContentRules.Apply(config, GoalSettings.Load(config.GoalsPath));
         GvgSeasons = LoadGvgSeasons(Client, Goals.Guild);
+        var festivities = Client.Clusters is { } festivityStore
+            ? FestivitiesData.Load(festivityStore.Folder, Path.Combine(config.ContentPath, "festivities.json")) : FestivitiesData.Empty;
         Bots = BotSettings.Load(config.BotsPath);
         Corrupted = CorruptedSettings.Load(config.CorruptedPath);
         Hellgates = HellgateSettings.Load(config.HellgatesPath);
@@ -120,6 +122,7 @@ public sealed class ServerHost : IDisposable
         World = new World(Config, Characters, Items, GameData, Spells, Scripts)
         {
             OpeningTutorial = opening,
+            Festivities = festivities,
             Sync = Sync, Clusters = Client.Clusters, Combat = Combat, Fishing = Fishing, DungeonSettings = Dungeons, Journals = Journals, BossSettings = Bosses, BossData = BossData, GvgSeasons = GvgSeasons, EventSettings = Events, ExpeditionSettings = Expeditions, Goals = Goals, BotSettings = Bots, CorruptedSettings = Corrupted, HellgateSettings = Hellgates, MistsSettings = Mists, Crafting = Client.Crafting, Legendary = Client.Legendary, Stations = StationSpawns.Load(Config.SpawnsPath),
             // Checked against the item table of real client data (spells.bin with it); a self-test's hand-made table lacks the kits' items.
             Kits = Config.Corrupted is { Enabled: true, MapsOpenDungeons: true } ? Kits.Load(Config.KitsPath, Spells is null ? null : Items).MoveTickets()
@@ -218,7 +221,8 @@ public sealed class ServerHost : IDisposable
     /// </summary>
     private static Data.GvgSeasonData? LoadGvgSeasons(ClientData client, GuildGoalSettings settings)
     {
-        if (!settings.Enabled || client.Clusters is not { } store) return null;
+        // The same calendar also feeds the personal Conqueror's Challenge, even with guild goals disabled.
+        if (client.Clusters is not { } store) return null;
         try
         {
             var data = Data.GvgSeasonData.Load(store.Folder, settings.Region);

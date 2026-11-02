@@ -219,7 +219,8 @@ public sealed partial class WorldSession
             return null;
         }
         if (!to.Fits(moved, req.rx) || !from.Fits(other, req.ru)
-            || !VaultTakes(player, to, moved.Template, moved.Count, from) || other is not null && !VaultTakes(player, from, other.Template, other.Count, to))
+            || !VaultTakes(player, to, moved.Template, moved.Count, from, other)
+            || other is not null && !VaultTakes(player, from, other.Template, other.Count, to, moved))
         {
             // Put the item back where it was so the client does not keep it in the target slot.
             Log.Info(Name, $"'{moved.Template.Name}' does not fit {req.ry}#{req.rx}");

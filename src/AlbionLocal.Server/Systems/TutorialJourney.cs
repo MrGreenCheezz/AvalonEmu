@@ -46,6 +46,21 @@ public static class TutorialJourney
         SendFull(p); SendProgress(p, false); RefreshNpcs(p);
     }
     public static void TrackerReady(Player p) { if (Active(p)) { SendFull(p); SendProgress(p, false); } }
+    public static void CompleteMapIntroduction(Player p)
+    {
+        if (!Active(p) || !Running(p)) return;
+        var state = State(p);
+        if (state.JourneyQuest != TutorialJourneyData.Prefix + "K" || state.JourneyTask != 2) return;
+        var tutorial = Data(p).Tutorial;
+        var introduction = tutorial.Find("MAPINTRO");
+        var cleared = tutorial.Find("MAPINTROCLEAR");
+        if (introduction is null || cleared is null || state.TutorialState != introduction.Id) return;
+        // hints.bin MAPINTRO_01B -> 02 -> 05 -> 06 ends with setnextstateonend=true.
+        // ct5.l (345319 RVA 0x9B2B90) sends opcode 379 for that hint completion.
+        // Clear its modal/input block without advancing K's FORESTINFOTRIGGER objective.
+        Store(p, state with { TutorialState = cleared.Id });
+        p.World.Saves.SaveNow(p.Character);
+    }
     public static void Update(Player p)
     {
         if (!Active(p)) return;
@@ -377,6 +392,11 @@ public static class TutorialJourney
     {
         if (State(p).JourneyPhase is not ("active" or "ready")) return;
         var counts = Counters(p); var missions = Missions(Task(p)); var ready = State(p).JourneyPhase == "ready";
+        // MA/MB/MC define no announcement policy for this objective. Build 345319's
+        // floating quest text does not expand [hotkey:AchievementBoard]; the native
+        // tracker does. Keep its progress/binding and omit only this duplicate popup.
+        if (missions.FirstOrDefault() is { } announcement && announcement.Name == "usefunction"
+            && Attr(announcement, "function") == "OpenDestinyBoard") announce = false;
         p.Session.Send(new QuestProgressInfoEvent { ddn = p.Id, dsd = State(p).JourneyTask,
             dse = JsonSerializer.Serialize(missions.Select((m, i) => m.Name == "haveplaytime"
                 ? new object[] { ready || counts.GetValueOrDefault(i.ToString()) > 0, PlayedTicks(p), p.World.GameNow }

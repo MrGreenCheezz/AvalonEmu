@@ -79,7 +79,13 @@ public static class Knockdown
         Mounts.KnockedDown(p, ticks); // a mount under way ends, a rider is thrown off, the mount object leaves (stageD mounts SPEC §4.4)
         Emotes.Stop(p, "knocked down"); // stageN qol: a looping emote ends for the observers
         var dead = kind == KnockdownKind.Dead;
-        c.Down = new KnockedDownState(world.Now, killer, kind) { KillerText = killerText };
+        c.Down = new KnockedDownState(world.Now, killer, kind)
+        {
+            KillerText = killerText,
+            KillerMobName = kind == KnockdownKind.Pve ? (map.Objects.GetValueOrDefault(killer) as Mob)?.Template.Name : null,
+        };
+        if (kind == KnockdownKind.Pve && map.Objects.GetValueOrDefault(killer) is Mob sourceMob)
+            CharacterStatisticsRecorder.MobKnockdown(p, sourceMob, ticks);
         world.Recaps.Freeze(p, ticks); // stageP: the death recap of this knockdown (or death)
         c.BuffDue = null;
         c.InvulnerableUntil = null;

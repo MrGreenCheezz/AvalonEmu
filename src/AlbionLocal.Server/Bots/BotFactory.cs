@@ -119,7 +119,9 @@ public sealed class BotFactory(World world)
                 break;
             case BotRole.Invader:
             case BotRole.Hellgate:
-                // StageL corrupted (SPEC §4.5): a patrol's gear at the difficulty's tier, no mount (allowmounts false inside); a hellgate's at its map's.
+            case BotRole.Arena:
+                // Encounter bots use their requested tier's armour, weapon/offhand and cape, without a mount.
+                // Arena passes this role directly through Make; omitting it left those opponents unequipped.
                 ArmourSet();
                 Weapon();
                 Piece(s.Cape, null);

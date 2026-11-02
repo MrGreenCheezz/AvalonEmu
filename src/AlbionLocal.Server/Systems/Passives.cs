@@ -367,9 +367,13 @@ public static class Passives
     /// </summary>
     public static double YieldBonus(Player p, string bufftype, string? resource, int tier)
     {
-        var sum = Of(p).Gathering.Where(g => g.Covers(bufftype, resource, tier)).Sum(g => g.Value);
-        foreach (var (entry, sub) in p.Effects.On(p.World.GameNow))
+        var now = p.World.GameNow;
+        var sum = Of(p).Gathering.Where(g => g.Covers(bufftype, resource, tier)).Sum(g => g.Value)
+            + FestivityBonuses.Sum(p, bufftype, now);
+        foreach (var (entry, sub) in p.Effects.On(now))
             if (sub.Tag == "resourcegatheringbuffovertime" && GatheringOf(sub.Node) is var g && g.Covers(bufftype, resource, tier)) sum += g.Value * entry.Stacks;
+        foreach (var node in FestivityBonuses.AdditionalEffects(p, now))
+            if (node.Name.LocalName == "resourcegatheringbuffovertime" && GatheringOf(node) is var g && g.Covers(bufftype, resource, tier)) sum += g.Value;
         return sum;
     }
 

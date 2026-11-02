@@ -16,9 +16,9 @@ public static class OpeningTutorial
     public const int Boundary = 27;
     public const string IntroSpell = "TUTORIAL_STUN";
 
-    /// <summary>Client-facing instance identity. a4l.b recognizes this prefix as TUTORIALSINGLE;
-    /// ciy.bv then enables the native quest tracker. Join uses the same identity to select a private
-    /// server map; persisted cluster and quest references retain the authored start cluster.</summary>
+    /// <summary>Client-facing tutorial instance identity. Join uses it to select the private server map;
+    /// persisted cluster and quest references retain the authored start cluster. The quest tracker
+    /// is initialized separately by FullQuestInfo/QuestProgressInfo and has its own client visibility state.</summary>
     public static string ClientCluster(Character c, World? world) => TutorialInstances.ClientCluster(c, world);
 
     public static bool Active(Player p) => TutorialJourney.Active(p) || p.Character.Tutorial is { Version: 1, Stage: >= 0 and <= Boundary }

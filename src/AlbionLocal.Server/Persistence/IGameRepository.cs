@@ -6,7 +6,7 @@ namespace AlbionLocal.Server.Persistence;
 /// A backend cannot silently omit market, mail, guild, island, social or road persistence.
 /// </summary>
 public interface IGameRepository : ICharacterRepository, IMarketStore, IMailStore, IGuildStore,
-    IIslandStore, ISocialStore, IRoadStore
+    IIslandStore, ISocialStore, IRoadStore, IShopStore
 {
 }
 

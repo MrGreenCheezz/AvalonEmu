@@ -196,7 +196,8 @@ public sealed partial class WorldSession
             s.Rod.DurabilityRaw = Math.Max(0, s.Rod.DurabilityRaw - (long)Math.Round(world.Fishing.RodWear * 10000));
             SendItemObject(s.Rod);                                                  // 1. the rod, key 8 = its new durability
         }
-        var factor = Combat.DangerOf(world, map)?.FishingFameFactor ?? 1;
+        var factor = (Combat.DangerOf(world, map)?.FishingFameFactor ?? 1)
+            * Math.Max(0, 1 + FestivityBonuses.Sum(player, "fishingfamemodifier", world.GameNow));
         foreach (var (item, amount, _) in gains)
         {
             // 2. fame (§9): as a harvest's, with fishingfame and fishingfamefactor; trash and seaweed have none.
