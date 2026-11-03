@@ -1,4 +1,4 @@
-# albion-local-server
+# AvalonEmu
 
 An educational server emulator, written in C# (.NET 10), for studying how an MMO client and server talk to each other
 (Photon UDP transport, Protocol18 serialization, encrypted handshakes, world simulation). It is designed to run on your
@@ -68,8 +68,8 @@ settings), `ActionBarsMod` (the extra action bars). They are BepInEx 6 plugins, 
 **Server** (needs the [.NET 10 SDK](https://dotnet.microsoft.com/) and a client installation you own):
 
 ```powershell
-git clone -b modifications https://github.com/MrGreenCheezz/albion-local-server.git
-cd albion-local-server
+git clone -b modifications https://github.com/MrGreenCheezz/AvalonEmu.git
+cd AvalonEmu
 powershell -ExecutionPolicy Bypass -File tools\start-server.ps1 -GameDir "C:\Games\Albion\game"
 ```
 
@@ -195,24 +195,29 @@ On start it prints the database schema version and the three listening ports. By
 only; see the "second PC" part of [docs/REFERENCE.md](docs/REFERENCE.md) for LAN settings (`Network:BindAddress`,
 `Network:PublicAddress`) and the firewall ports.
 
-Run the self-test. It reads the GameData folder from the fixed path `../game-local/Albion-Online_Data/StreamingAssets/GameData`
-next to the repository, so put a link there to your client installation (for example a directory junction or symlink
-named `game-local` next to this folder):
+Run the self-test. By default it reads the GameData folder from `../game-local/Albion-Online_Data/StreamingAssets/GameData`
+next to the repository (for example a directory junction or symlink named `game-local` to your client installation), or
+pass the folder yourself:
 
 ```bash
-dotnet run --project tests/AlbionLocal.SelfTest
+dotnet run --project tests/AlbionLocal.SelfTest -- --client-gamedata="C:/Games/AlbionOnline/game/Albion-Online_Data/StreamingAssets/GameData"
 ```
+
+`--only=<text>` runs the tests whose names contain the text, `--report=<file.json>` writes a JSON report, `--help` lists
+the options.
 
 Comparisons against generated "golden" data files are skipped, because those files are not published.
 
 ## Configuration
 
 - `config/*.jsonc` — five area files (common, login, world, chat, persistence). `Preset` is `official` by default
-  (the official rules, rates ×1); `pve` turns on PvP by consent, no full loot, rate multipliers and the server's PvE
-  additions. Any key can be overridden on the command line, e.g. `--Log:Level=Debug`.
+  (the official rules, rates ×1); `pve` turns on PvP by consent, no full loot and the server's PvE additions. Its rate
+  multipliers (for example fame ×2) apply only to the `Rates` keys you remove from `config/world.jsonc`, which sets them
+  all to 1. Any key can be overridden on the command line, e.g. `--Log:Level=Debug`.
 - `content/*.json` — gameplay content the server adds or tunes (events, bosses, dungeons, goals, bots, kits…).
-- Accounts: the first login creates the account (see "Accounts" in [docs/REFERENCE.md](docs/REFERENCE.md)); console
-  commands such as `.account create <name> <password>` manage them.
+- Accounts: unknown logins are refused while `Accounts:AutoRegister` is off (the default); register through the client
+  or the console (see "Accounts" in [docs/REFERENCE.md](docs/REFERENCE.md)). Console commands such as
+  `.account create <name> <password>` manage them.
 
 ## Status
 
@@ -223,5 +228,5 @@ its client or anti-cheat are not.
 ## License
 
 MIT (see [LICENSE](LICENSE)): you may use, change and share the code freely, as long as you keep the copyright
-notice, i.e. credit the original source (https://github.com/MrGreenCheezz/albion-local-server). The license covers this
+notice, i.e. credit the original source (https://github.com/MrGreenCheezz/AvalonEmu). The license covers this
 repository's own code only; it grants nothing about the game, its client, its data or its trademarks.
