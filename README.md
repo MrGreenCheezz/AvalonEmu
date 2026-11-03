@@ -3,6 +3,9 @@ An educational server emulator, written in C# (.NET 10), for studying how an MMO
 (Photon UDP transport, Protocol18 serialization, encrypted handshakes, world simulation). It is designed to run on your
 own machine or LAN, for one player or a few friends.
 
+**Setting up a server?** Follow the step-by-step [installation guide](docs/INSTALL.md): dependencies, compiling,
+configuration files, running, LAN play, backups, updating and troubleshooting.
+
 ## Disclaimer — please read
 
 - **Educational project.** This is a personal learning and research project about network protocols and game-server
@@ -93,6 +96,8 @@ may then fail to start or misbehave in game. At each start the server logs the b
 file it reads, keeps them in `data/clientdata.json`, and warns when they differ from the previous start.
 
 ## Build and run
+
+This is the short version; [docs/INSTALL.md](docs/INSTALL.md) has the full walkthrough.
 
 ```bash
 dotnet build
