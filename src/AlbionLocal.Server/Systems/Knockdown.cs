@@ -141,6 +141,7 @@ public static class Knockdown
         world.Duels.KnockedDown(p, killer); // stageE: a duelist's knockdown ends its duel (DuelEnded, the post's Leave)
         world.Trades.KnockedDown(p); // stageJ: and its trade
         Log.Info("combat", $"'{p.Character.Name}' {(dead ? "dies" : "is knocked down")} by {(killer == p.Id ? "itself" : map.Objects.GetValueOrDefault(killer)?.ToString() ?? $"object {killer}")}");
+        world.Modules.PlayerDown(p, killer, killerText, died: dead); // the modules' PlayerKnockedDown / PlayerDied
     }
 
     /// <summary>
@@ -170,6 +171,7 @@ public static class Knockdown
         p.Health.RegenPerSecond = 0;
         SendRegeneration(p, now);
         Log.Info("combat", $"'{p.Character.Name}' dies where it lay");
+        world.Modules.PlayerDown(p, killer, killerText, died: true); // the modules' PlayerDied
     }
 
     /// <summary>
@@ -292,6 +294,7 @@ public static class Knockdown
             c.BuffDue = world.Now + TimeSpan.FromSeconds(Settings(world).GetUpSeconds);
         }
         Log.Info("combat", string.Create(CultureInfo.InvariantCulture, $"'{p.Character.Name}' gets up at ({at.X:0.##}, {at.Y:0.##})"));
+        world.Modules.UnitEvent(world.Modules.Hooks.Revive, p); // Units.OnRevive
     }
 
     /// <summary>

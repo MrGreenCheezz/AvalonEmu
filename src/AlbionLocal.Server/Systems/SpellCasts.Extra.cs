@@ -271,7 +271,7 @@ public static partial class SpellCasts
     }
 
     /// <summary>interruptcast on a mob: its cast under way (not finished yet) is cancelled, CastCancel {1 true} (unless interruptiblebyspell="false").</summary>
-    private static void InterruptMob(Mob mob)
+    internal static void InterruptMob(Mob mob)
     {
         if (mob.AI is AI.BehaviourAI ai) ai.Interrupt();
     }

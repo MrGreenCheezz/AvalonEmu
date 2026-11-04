@@ -179,6 +179,15 @@ public sealed partial class WorldSession
                 Extra = { [1] = req.dx }, // [1] the slot, also 0 (must be a valid slot)
             };
         }
+        // The modules' formulas (cast time, energy cost) and Spells.OnBeforeCast: a refusal is answered as the engine's own.
+        var (gated, refusedBy) = world.Modules.CheckCast(player, cast);
+        if (refusedBy is not null)
+        {
+            Log.Info(Name, $"'{player.Character.Name}' CastStart of {cast.Spell.Name} in slot {req.dx} refused by a module: {refusedBy}");
+            if (refusedBy.Length > 0) player.Session.Send(new SystemMessageEvent { d0p = refusedBy, d0q = 1 });
+            return new CastStartResponse { ReturnCode = CastRefused, anl = req.d0, anq = req.d4, anr = req.d1, Extra = { [1] = req.dx } };
+        }
+        cast = gated;
         Knockdown.Acted(player, "casts");
         CancelAction(player, "the player casts", tellClient: true); // a station action (stage 6 SPEC §6a.1)
         if (mountSpell) Mounts.CastsMountSpell(player); // the mount's own ability: still mounted

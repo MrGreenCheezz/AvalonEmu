@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The stable module API (docs/modules/README.md). Modules reference only this assembly, never the server's: the server
+    implements these interfaces and loads each module in its own collectible AssemblyLoadContext, sharing this assembly with it.
+    No package references: it must build offline and stay small.
+    Module authors learn the API from IDE hints, so CS1591 is not suppressed: a public member without a doc comment is a build warning.
+    Nothing else about the build changes.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+</Project>

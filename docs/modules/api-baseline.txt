@@ -1,0 +1,1422 @@
+AbsorbArgs.Amount: Double { get; set; }
+AbsorbArgs.Attacker: IUnit { get; }
+AbsorbArgs.DamageLeft: Double { get; }
+AbsorbArgs.IsBroken: Boolean { get; }
+AbsorbArgs.IsDirectHit: Boolean { get; }
+AbsorbArgs.Origin: DamageOrigin { get; }
+AbsorbArgs.OriginalAmount: Double { get; }
+AbsorbArgs.Shield: IBuff { get; }
+AbsorbArgs.ShieldLeft: Double { get; }
+AbsorbArgs.Spell: SpellInfo { get; }
+AbsorbArgs.Target: IUnit { get; }
+AbsorbArgs.ctor(IUnit, IBuff, IUnit, DamageOrigin, SpellInfo, Double, Double, Double)
+AreaTickArgs.Area: IModuleArea { get; }
+AreaTickArgs.Inside: IReadOnlyList<IUnit> { get; }
+AreaTickArgs.Tick: Int32 { get; }
+AreaTickArgs.ctor(IModuleArea, IReadOnlyList<IUnit>, Int32)
+ArmorType.Cloth = 1
+ArmorType.Leather = 2
+ArmorType.None = 0
+ArmorType.Other = 4
+ArmorType.Plate = 3
+BeforeAggroArgs.Mob: IMob { get; }
+BeforeAggroArgs.Player: IPlayer { get; }
+BeforeAggroArgs.ctor(IMob, IPlayer)
+BeforeBuffArgs.Buff: SpellInfo { get; }
+BeforeBuffArgs.Caster: IUnit { get; }
+BeforeBuffArgs.Unit: IUnit { get; }
+BeforeBuffArgs.ctor(IUnit, SpellInfo, IUnit)
+BeforeCastArgs.ctor(IUnit, SpellInfo, Byte, ItemType, Boolean, IUnit, Single, Single)
+BeforeCommandArgs.Level: PlayerLevel { get; }
+BeforeCommandArgs.Line: String { get; }
+BeforeCommandArgs.Player: IPlayer { get; }
+BeforeCommandArgs.ctor(IPlayer, String, PlayerLevel)
+BeforeDamageArgs.Amount: Double { get; set; }
+BeforeDamageArgs.Attacker: IUnit { get; }
+BeforeDamageArgs.IsDirectHit: Boolean { get; }
+BeforeDamageArgs.IsLethal: Boolean { get; }
+BeforeDamageArgs.Kind: DamageKind { get; }
+BeforeDamageArgs.Magic: Boolean { get; }
+BeforeDamageArgs.Origin: DamageOrigin { get; }
+BeforeDamageArgs.OriginalAmount: Double { get; }
+BeforeDamageArgs.OverTime: Boolean { get; }
+BeforeDamageArgs.Spell: SpellInfo { get; }
+BeforeDamageArgs.Target: IUnit { get; }
+BeforeDamageArgs.TargetHealth: Single { get; }
+BeforeDamageArgs.ctor(IUnit, IUnit, DamageKind, DamageOrigin, Boolean, SpellInfo, Single, Double)
+BeforeHealArgs.Amount: Double { get; set; }
+BeforeHealArgs.Healer: IUnit { get; }
+BeforeHealArgs.Origin: DamageOrigin { get; }
+BeforeHealArgs.OriginalAmount: Double { get; }
+BeforeHealArgs.Spell: SpellInfo { get; }
+BeforeHealArgs.Target: IPlayer { get; }
+BeforeHealArgs.ctor(IUnit, IPlayer, DamageOrigin, SpellInfo, Double)
+BeforeLeaveCombatArgs.Detail: String { get; }
+BeforeLeaveCombatArgs.Mob: IMob { get; }
+BeforeLeaveCombatArgs.Reason: LeaveCombatReason { get; }
+BeforeLeaveCombatArgs.ctor(IMob, LeaveCombatReason, String)
+BeforeLootTakeArgs.Container: LootContainer { get; }
+BeforeLootTakeArgs.Count: Int32 { get; }
+BeforeLootTakeArgs.Item: ItemInfo { get; }
+BeforeLootTakeArgs.ctor(IPlayer, ItemInfo, Int32, LootContainer)
+BeforeMountArgs.Mount: ItemInfo { get; }
+BeforeMountArgs.Remount: Boolean { get; }
+BeforeMountArgs.ctor(IPlayer, ItemInfo, Boolean)
+BeforeRespawnArgs.Cluster: String { get; }
+BeforeRespawnArgs.Mob: MobType { get; }
+BeforeRespawnArgs.X: Single { get; }
+BeforeRespawnArgs.Y: Single { get; }
+BeforeRespawnArgs.ctor(MobType, String, Single, Single)
+BeforeThinkArgs.DeltaSeconds: Double { get; }
+BeforeThinkArgs.Mob: IMob { get; }
+BeforeThinkArgs.ctor(IMob, Double)
+BreakCause.Death = 0
+BreakCause.Fishing = 3
+BreakCause.Gathering = 2
+BreakCause.Knockdown = 1
+BuffArgs.Buff: IBuff { get; }
+BuffArgs.IsNew: Boolean { get; }
+BuffArgs.Unit: IUnit { get; }
+BuffArgs.ctor(IUnit, IBuff, Boolean)
+BuffEnd.Cleared = 2
+BuffEnd.Expired = 0
+BuffEnd.Removed = 1
+BuffRemoveArgs.How: BuffEnd { get; }
+BuffRemoveArgs.ctor(IUnit, IBuff, BuffEnd)
+BuffScript.OnApply(BuffArgs): Void
+BuffScript.OnBeforeApply(BeforeBuffArgs): Void
+BuffScript.OnRemove(BuffRemoveArgs): Void
+BuffScript.OnStackChange(BuffStackArgs): Void
+BuffScript.OnTick(BuffArgs): Void
+BuffScript.ctor()
+BuffStackArgs.After: Int32 { get; }
+BuffStackArgs.Before: Int32 { get; }
+BuffStackArgs.ctor(IUnit, IBuff, Int32)
+BuildingActionArgs.Accepted: Boolean { get; }
+BuildingActionArgs.Action: StationActionKind { get; }
+BuildingActionArgs.Building: String { get; }
+BuildingActionArgs.ctor(IPlayer, String, StationActionKind, Boolean)
+CancellableArgs.Cancel(String): Void
+CancellableArgs.CancelReason: String { get; }
+CancellableArgs.CancelledBy: String { get; }
+CancellableArgs.IsCancelled: Boolean { get; }
+CancellableArgs.Uncancel(): Void
+CancellableArgs.ctor()
+CancellablePlayerArgs.Cancel(String): Void
+CancellablePlayerArgs.CancelReason: String { get; }
+CancellablePlayerArgs.CancelledBy: String { get; }
+CancellablePlayerArgs.IsCancelled: Boolean { get; }
+CancellablePlayerArgs.Uncancel(): Void
+CancellablePlayerArgs.ctor(IPlayer)
+CancellableSpellArgs.Cancel(String): Void
+CancellableSpellArgs.CancelReason: String { get; }
+CancellableSpellArgs.CancelledBy: String { get; }
+CancellableSpellArgs.IsCancelled: Boolean { get; }
+CancellableSpellArgs.Uncancel(): Void
+CancellableSpellArgs.ctor(IUnit, SpellInfo, Byte, ItemType, Boolean, IUnit, Single, Single)
+ChatArgs.Text: String { get; set; }
+ChatArgs.ctor(IPlayer, String)
+ChestLootArgs.Chest: String { get; }
+ChestLootArgs.Cluster: String { get; }
+ChestLootArgs.Items: LootList { get; }
+ChestLootArgs.ctor(IPlayer, String, String, LootList)
+CombatScript.OnAfterAbsorb(AbsorbArgs): Void
+CombatScript.OnAfterDamage(HealthChangeArgs): Void
+CombatScript.OnAfterHeal(HealthChangeArgs): Void
+CombatScript.OnBeforeAbsorb(AbsorbArgs): Void
+CombatScript.OnBeforeDamage(BeforeDamageArgs): Void
+CombatScript.OnBeforeHeal(BeforeHealArgs): Void
+CombatScript.OnHitAvoided(HitAvoidedArgs): Void
+CombatScript.ctor()
+ConsumableType.Food = 1
+ConsumableType.None = 0
+ConsumableType.Other = 5
+ConsumableType.Potion = 2
+ConsumableType.SilverBag = 4
+ConsumableType.Tome = 3
+CustomSpell.OnCast: Action<CustomSpellContext> { get; set; }
+CustomSpell.OnHit: Action<CustomSpellContext> { get; set; }
+CustomSpell.OnTick: Action<CustomSpellContext> { get; set; }
+CustomSpell.ReplaceEffects: Boolean { get; set; }
+CustomSpell.ctor()
+CustomSpellContext.AbilityPower: Double { get; }
+CustomSpellContext.Caster: IUnit { get; }
+CustomSpellContext.Game: IGameplay { get; }
+CustomSpellContext.Item: ItemType { get; }
+CustomSpellContext.Player: IPlayer { get; }
+CustomSpellContext.Slot: SpellSlot { get; }
+CustomSpellContext.SlotIndex: Byte { get; }
+CustomSpellContext.Spell: SpellInfo { get; }
+CustomSpellContext.Target: IUnit { get; }
+CustomSpellContext.Tick: Int32 { get; }
+CustomSpellContext.X: Single { get; }
+CustomSpellContext.Y: Single { get; }
+CustomSpellContext.ctor(IUnit, SpellInfo, Byte, ItemType, IUnit, Single, Single, Double, Int32, IGameplay)
+DamageKind.MobToPlayer = 1
+DamageKind.PlayerToMob = 0
+DamageKind.PlayerToPlayer = 2
+DamageOrigin.Area = 3
+DamageOrigin.Direct = 2
+DamageOrigin.MeleeAutoAttack = 0
+DamageOrigin.OnHitPassive = 4
+DamageOrigin.OverTime = 5
+DamageOrigin.RangedAutoAttack = 1
+DamageOrigin.Reflected = 6
+EquipArgs.AtLogin: Boolean { get; }
+EquipArgs.Item: ItemInfo { get; }
+EquipArgs.Slot: EquipSlot { get; }
+EquipArgs.ctor(IPlayer, ItemInfo, Boolean)
+EquipSlot.Armor = 3
+EquipSlot.Bag = 5
+EquipSlot.Cape = 6
+EquipSlot.Food = 9
+EquipSlot.Head = 2
+EquipSlot.MainHand = 0
+EquipSlot.Mount = 7
+EquipSlot.None = -1
+EquipSlot.OffHand = 1
+EquipSlot.Potion = 8
+EquipSlot.Shoes = 4
+FameGainedArgs.Amount: Double { get; }
+FameGainedArgs.Item: ItemType { get; }
+FameGainedArgs.Pvp: Boolean { get; }
+FameGainedArgs.Source: FameSource { get; }
+FameGainedArgs.ctor(IPlayer, Double, FameSource, ItemType, Boolean)
+FameSource.Craft = 3
+FameSource.Farm = 6
+FameSource.Fishing = 5
+FameSource.Harvest = 2
+FameSource.Kill = 1
+FameSource.Other = 0
+FameSource.Tome = 4
+ForIdAttribute.Id: String { get; }
+ForIdAttribute.ctor(String)
+FormulaScript.OnCalcCastTime(SpellFormulaArgs): Void
+FormulaScript.OnCalcCooldown(SpellFormulaArgs): Void
+FormulaScript.OnCalcEnergyCost(SpellFormulaArgs): Void
+FormulaScript.OnCalcFame(UnitFormulaArgs): Void
+FormulaScript.OnCalcHeal(SpellFormulaArgs): Void
+FormulaScript.OnCalcItemPower(ItemFormulaArgs): Void
+FormulaScript.OnCalcSilver(UnitFormulaArgs): Void
+FormulaScript.OnCalcThreat(UnitFormulaArgs): Void
+FormulaScript.ctor()
+GamePreset.Official = 0
+GamePreset.Pve = 1
+GoalArgs.Description: String { get; }
+GoalArgs.Kind: GoalKind { get; }
+GoalArgs.ctor(IPlayer, GoalKind, String)
+GoalKind.Bounty = 1
+GoalKind.Corrupted = 3
+GoalKind.Expedition = 2
+GoalKind.Other = 0
+HarvestArgs.Count: Int32 { get; }
+HarvestArgs.Item: ItemType { get; }
+HarvestArgs.Kind: HarvestKind { get; }
+HarvestArgs.ctor(IPlayer, ItemType, Int32, HarvestKind)
+HarvestKind.Fish = 1
+HarvestKind.Gather = 0
+HealthChangeArgs.After: Single { get; }
+HealthChangeArgs.Amount: Single { get; }
+HealthChangeArgs.Before: Single { get; }
+HealthChangeArgs.IsDirectHit: Boolean { get; }
+HealthChangeArgs.Lethal: Boolean { get; }
+HealthChangeArgs.Max: Single { get; }
+HealthChangeArgs.Origin: DamageOrigin { get; }
+HealthChangeArgs.Source: IUnit { get; }
+HealthChangeArgs.Spell: SpellInfo { get; }
+HealthChangeArgs.Unit: IUnit { get; }
+HealthChangeArgs.ctor(IUnit, Single, Single, Single, IUnit, SpellInfo, DamageOrigin)
+HitAvoidReason.Cancelled = 6
+HitAvoidReason.Evading = 4
+HitAvoidReason.Invincible = 0
+HitAvoidReason.KnockedDown = 3
+HitAvoidReason.NotAllowed = 5
+HitAvoidReason.NotHittable = 1
+HitAvoidReason.SpellImmunity = 2
+HitAvoidedArgs.Amount: Double { get; }
+HitAvoidedArgs.Attacker: IUnit { get; }
+HitAvoidedArgs.Detail: String { get; }
+HitAvoidedArgs.IsDirectHit: Boolean { get; }
+HitAvoidedArgs.Origin: DamageOrigin { get; }
+HitAvoidedArgs.ProtectedBy: IBuff { get; }
+HitAvoidedArgs.Reason: HitAvoidReason { get; }
+HitAvoidedArgs.Spell: SpellInfo { get; }
+HitAvoidedArgs.Target: IUnit { get; }
+HitAvoidedArgs.ctor(IUnit, IUnit, HitAvoidReason, DamageOrigin, SpellInfo, Double, IBuff, String)
+HookAttribute.Name: String { get; }
+HookAttribute.ctor(String)
+HookPriority.Early = -100
+HookPriority.First = -200
+HookPriority.Last = 200
+HookPriority.Late = 100
+HookPriority.Monitor = 1000
+HookPriority.Normal = 0
+IBuff.Caster: IUnit { get; }
+IBuff.CasterId: Int64 { get; }
+IBuff.Data`1(): T
+IBuff.GetData`1(String, Func<T>): T
+IBuff.SecondsLeft: Double { get; }
+IBuff.SetData`1(String, T): Void
+IBuff.Spell: SpellInfo { get; }
+IBuff.Stacks: Int32 { get; }
+IBuffHooks.OnApply(Action<BuffArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnApply(String, Action<BuffArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnBeforeApply(Action<BeforeBuffArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnBeforeApply(String, Action<BeforeBuffArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnRemove(Action<BuffRemoveArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnRemove(String, Action<BuffRemoveArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnStackChange(Action<BuffStackArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnStackChange(String, Action<BuffStackArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnTick(Action<BuffArgs>, HookPriority): IHookRegistration
+IBuffHooks.OnTick(String, Action<BuffArgs>, HookPriority): IHookRegistration
+ICancellableArgs.Cancel(String): Void
+ICancellableArgs.CancelReason: String { get; }
+ICancellableArgs.CancelledBy: String { get; }
+ICancellableArgs.IsCancelled: Boolean { get; }
+ICancellableArgs.Uncancel(): Void
+ICombatHooks.OnAfterAbsorb(Action<AbsorbArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnAfterAbsorb(String, Action<AbsorbArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnAfterDamage(Action<HealthChangeArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnAfterDamage(String, Action<HealthChangeArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnAfterHeal(Action<HealthChangeArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnAfterHeal(String, Action<HealthChangeArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnBeforeAbsorb(Action<AbsorbArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnBeforeAbsorb(String, Action<AbsorbArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnBeforeDamage(Action<BeforeDamageArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnBeforeDamage(String, Action<BeforeDamageArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnBeforeHeal(Action<BeforeHealArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnHitAvoided(Action<HitAvoidedArgs>, HookPriority): IHookRegistration
+ICombatHooks.OnHitAvoided(String, Action<HitAvoidedArgs>, HookPriority): IHookRegistration
+ICommandCall.Args: String { get; }
+ICommandCall.DoubleArg(Int32, Double): Double
+ICommandCall.Error(String): Void
+ICommandCall.FromConsole: Boolean { get; }
+ICommandCall.IntArg(Int32, Int32): Int32
+ICommandCall.ItemArg(Int32): ItemType
+ICommandCall.Level: PlayerLevel { get; }
+ICommandCall.Player: IPlayer { get; }
+ICommandCall.PlayerArg(Int32): IPlayer
+ICommandCall.Reply(String): Void
+ICommandCall.SpellArg(Int32): SpellInfo
+ICommandCall.Word(Int32): String
+ICommandCall.Words: IReadOnlyList<String> { get; }
+IFormulaHooks.OnCalcCastTime(Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcCastTime(String, Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcCooldown(Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcCooldown(String, Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcEnergyCost(Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcEnergyCost(String, Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcFame(Action<UnitFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcFame(String, Action<UnitFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcHeal(Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcHeal(String, Action<SpellFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcItemPower(Action<ItemFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcItemPower(String, Action<ItemFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcSilver(Action<UnitFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcSilver(String, Action<UnitFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcThreat(Action<UnitFormulaArgs>, HookPriority): IHookRegistration
+IFormulaHooks.OnCalcThreat(String, Action<UnitFormulaArgs>, HookPriority): IHookRegistration
+IGameplay.ApplyBuff(IUnit, String, IUnit, Double, Int32, Double): Boolean
+IGameplay.Buffs(IUnit): IReadOnlyList<IBuff>
+IGameplay.CastSpell(IMob, String, IUnit, Single?, Single?): Boolean
+IGameplay.CastSpell(IPlayer, String, IUnit, Single?, Single?): Boolean
+IGameplay.ClearModifier(IUnit, String, String): Boolean
+IGameplay.CooldownLeft(IPlayer, String): Double
+IGameplay.CreateArea(IUnit, Single, Single, Single, TimeSpan, TimeSpan, Action<AreaTickArgs>, String): IModuleArea
+IGameplay.Damage(IUnit, IUnit, Double, Boolean, String): Double
+IGameplay.Dash(IUnit, Single, Single, Single): Boolean
+IGameplay.FindBuff(IUnit, String): IBuff
+IGameplay.Heal(IUnit, IUnit, Double, String): Double
+IGameplay.Interrupt(IUnit): Boolean
+IGameplay.IsEnemy(IUnit, IUnit): Boolean
+IGameplay.Knockback(IUnit, Single, Single, Single, Single): Boolean
+IGameplay.Pull(IUnit, Single, Single, Single, Single): Boolean
+IGameplay.RemoveBuff(IUnit, String, Int32): Boolean
+IGameplay.ResetCooldowns(IPlayer): Boolean
+IGameplay.SetCooldown(IPlayer, String, Double): Boolean
+IGameplay.SetModifier(IUnit, String, String, Double): Void
+IGameplay.Stats(IUnit): UnitStats
+IGameplay.Summon(IUnit, String, Single, Single, TimeSpan?): IMob
+IGameplay.Teleport(IUnit, Single, Single): Boolean
+IGameplay.UnitsAround(String, Single, Single, Single): IReadOnlyList<IUnit>
+IHookRegistration.Id: String { get; }
+IHookRegistration.ReceiveCancelled(): IHookRegistration
+IHooks.Buffs: IBuffHooks { get; }
+IHooks.Combat: ICombatHooks { get; }
+IHooks.Formulas: IFormulaHooks { get; }
+IHooks.Items: IItemHooks { get; }
+IHooks.Maps: IMapHooks { get; }
+IHooks.Mobs: IMobHooks { get; }
+IHooks.Mounts: IMountHooks { get; }
+IHooks.Network: INetworkHooks { get; }
+IHooks.Players: IPlayerHooks { get; }
+IHooks.Server: IServerHooks { get; }
+IHooks.Social: ISocialHooks { get; }
+IHooks.Spells: ISpellHooks { get; }
+IHooks.Units: IUnitHooks { get; }
+IItemHooks.OnBeforeLootTake(Action<BeforeLootTakeArgs>, HookPriority): IHookRegistration
+IItemHooks.OnBeforeLootTake(String, Action<BeforeLootTakeArgs>, HookPriority): IHookRegistration
+IItemHooks.OnBreak(Action<ItemBreakArgs>, HookPriority): IHookRegistration
+IItemHooks.OnBreak(String, Action<ItemBreakArgs>, HookPriority): IHookRegistration
+IItemHooks.OnCalcPassives(Action<PassiveArgs>, HookPriority): IHookRegistration
+IItemHooks.OnCalcPassives(String, Action<PassiveArgs>, HookPriority): IHookRegistration
+IItemHooks.OnChestLootRolled(Action<ChestLootArgs>, HookPriority): IHookRegistration
+IItemHooks.OnChestLootRolled(String, Action<ChestLootArgs>, HookPriority): IHookRegistration
+IItemHooks.OnCrafted(Action<ItemCraftedArgs>, HookPriority): IHookRegistration
+IItemHooks.OnCrafted(String, Action<ItemCraftedArgs>, HookPriority): IHookRegistration
+IItemHooks.OnEquip(Action<EquipArgs>, HookPriority): IHookRegistration
+IItemHooks.OnEquip(String, Action<EquipArgs>, HookPriority): IHookRegistration
+IItemHooks.OnHarvested(Action<HarvestArgs>, HookPriority): IHookRegistration
+IItemHooks.OnHarvested(String, Action<HarvestArgs>, HookPriority): IHookRegistration
+IItemHooks.OnStationAction(Action<BuildingActionArgs>, HookPriority): IHookRegistration
+IItemHooks.OnStationAction(String, Action<BuildingActionArgs>, HookPriority): IHookRegistration
+IItemHooks.OnUnequip(Action<EquipArgs>, HookPriority): IHookRegistration
+IItemHooks.OnUnequip(String, Action<EquipArgs>, HookPriority): IHookRegistration
+IItemHooks.OnUsed(Action<ItemUsedArgs>, HookPriority): IHookRegistration
+IItemHooks.OnUsed(String, Action<ItemUsedArgs>, HookPriority): IHookRegistration
+IItemHooks.OnWeaponSwap(Action<WeaponSwapArgs>, HookPriority): IHookRegistration
+IItemHooks.OnWeaponSwap(String, Action<WeaponSwapArgs>, HookPriority): IHookRegistration
+IMapHooks.OnLoaded(Action<MapArgs>, HookPriority): IHookRegistration
+IMapHooks.OnLoaded(String, Action<MapArgs>, HookPriority): IHookRegistration
+IMapHooks.OnUnloaded(Action<MapArgs>, HookPriority): IHookRegistration
+IMapHooks.OnUnloaded(String, Action<MapArgs>, HookPriority): IHookRegistration
+IMob.AddThreat(IPlayer, Double): Boolean
+IMob.Attack(IPlayer): Boolean
+IMob.CastSpell(String, IUnit, Single?, Single?, Double?): Boolean
+IMob.Category: MobCategory { get; }
+IMob.CurrentSpell: SpellInfo { get; }
+IMob.Despawn(Boolean): Boolean
+IMob.FaceTo(Single, Single): Boolean
+IMob.Fame: Double { get; }
+IMob.InReach(IUnit): Boolean
+IMob.IsCasting: Boolean { get; }
+IMob.IsEventMob: Boolean { get; }
+IMob.IsMoving: Boolean { get; }
+IMob.IsWorldBoss: Boolean { get; }
+IMob.MoveTo(Single, Single): Boolean
+IMob.SetTarget(IPlayer): Boolean
+IMob.Stop(): Boolean
+IMob.Target: IUnit { get; }
+IMob.Threat: IReadOnlyList<ThreatEntry> { get; }
+IMob.Tier: Int32 { get; }
+IMob.Type: MobType { get; }
+IMobHooks.OnAggro(Action<MobAggroArgs>, HookPriority): IHookRegistration
+IMobHooks.OnAggro(String, Action<MobAggroArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeAggro(Action<BeforeAggroArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeAggro(String, Action<BeforeAggroArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeLeaveCombat(Action<BeforeLeaveCombatArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeLeaveCombat(String, Action<BeforeLeaveCombatArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeRespawn(Action<BeforeRespawnArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeRespawn(String, Action<BeforeRespawnArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeThink(Action<BeforeThinkArgs>, HookPriority): IHookRegistration
+IMobHooks.OnBeforeThink(String, Action<BeforeThinkArgs>, HookPriority): IHookRegistration
+IMobHooks.OnDied(Action<MobDeathArgs>, HookPriority): IHookRegistration
+IMobHooks.OnDied(String, Action<MobDeathArgs>, HookPriority): IHookRegistration
+IMobHooks.OnLeaveCombat(Action<MobLeaveCombatArgs>, HookPriority): IHookRegistration
+IMobHooks.OnLeaveCombat(String, Action<MobLeaveCombatArgs>, HookPriority): IHookRegistration
+IMobHooks.OnLootRolled(Action<LootArgs>, HookPriority): IHookRegistration
+IMobHooks.OnLootRolled(String, Action<LootArgs>, HookPriority): IHookRegistration
+IMobHooks.OnSpawned(Action<MobArgs>, HookPriority): IHookRegistration
+IMobHooks.OnSpawned(String, Action<MobArgs>, HookPriority): IHookRegistration
+IModuleArea.Cluster: String { get; }
+IModuleArea.Ended: Boolean { get; }
+IModuleArea.Owner: IUnit { get; }
+IModuleArea.Radius: Single { get; set; }
+IModuleArea.X: Single { get; set; }
+IModuleArea.Y: Single { get; set; }
+IModuleCommands.Register(String, PlayerLevel, String, Action<ICommandCall>): Void
+IModuleConfig.Bind`1(): T
+IModuleConfig.Get`1(String, T): T
+IModuleConfig.Reload(): Void
+IModuleConfig.Root: JsonElement { get; }
+IModuleContext.AddScript(ModuleScript): Void
+IModuleContext.Commands: IModuleCommands { get; }
+IModuleContext.Config: IModuleConfig { get; }
+IModuleContext.DataDirectory: String { get; }
+IModuleContext.Game: IGameplay { get; }
+IModuleContext.Hooks: IHooks { get; }
+IModuleContext.Log: IModuleLog { get; }
+IModuleContext.ModuleDirectory: String { get; }
+IModuleContext.Name: String { get; }
+IModuleContext.Post(Action): Void
+IModuleContext.Server: IServer { get; }
+IModuleContext.Storage: IModuleStorage { get; }
+IModuleContext.Timers: IModuleTimers { get; }
+IModuleLog.Debug(String): Void
+IModuleLog.Error(String): Void
+IModuleLog.Info(String): Void
+IModuleLog.Warn(String): Void
+IModuleStorage.Contains(String): Boolean
+IModuleStorage.Get`1(String, T): T
+IModuleStorage.Keys: IReadOnlyCollection<String> { get; }
+IModuleStorage.Remove(String): Boolean
+IModuleStorage.Save(): Void
+IModuleStorage.Set`1(String, T): Void
+IModuleTimers.After(TimeSpan, Action): IDisposable
+IModuleTimers.Every(TimeSpan, Action): IDisposable
+IMountHooks.OnBeforeMount(Action<BeforeMountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnBeforeMount(String, Action<BeforeMountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnCalcMountDamage(Action<MountDamageArgs>, HookPriority): IHookRegistration
+IMountHooks.OnCalcMountDamage(String, Action<MountDamageArgs>, HookPriority): IHookRegistration
+IMountHooks.OnDismount(Action<MountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnDismount(String, Action<MountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMountCancel(Action<MountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMountCancel(String, Action<MountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMountSpell(Action<SpellCastArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMountSpell(String, Action<SpellCastArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMountStart(Action<MountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMountStart(String, Action<MountArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMounted(Action<MountedArgs>, HookPriority): IHookRegistration
+IMountHooks.OnMounted(String, Action<MountedArgs>, HookPriority): IHookRegistration
+INetworkHooks.EventNames: IReadOnlyCollection<String> { get; }
+INetworkHooks.OnEvent(Action<OutgoingArgs>, HookPriority): IHookRegistration
+INetworkHooks.OnEvent(String, Action<OutgoingArgs>, HookPriority): IHookRegistration
+INetworkHooks.OnRequest(Action<RequestArgs>, HookPriority): IHookRegistration
+INetworkHooks.OnRequest(String, Action<RequestArgs>, HookPriority): IHookRegistration
+INetworkHooks.OnResponse(Action<OutgoingArgs>, HookPriority): IHookRegistration
+INetworkHooks.OnResponse(String, Action<OutgoingArgs>, HookPriority): IHookRegistration
+INetworkHooks.OperationNames: IReadOnlyCollection<String> { get; }
+IPlayer.ApplyBuff(String): Boolean
+IPlayer.Armor: ItemInfo { get; }
+IPlayer.Bag: ItemInfo { get; }
+IPlayer.Cape: ItemInfo { get; }
+IPlayer.CharacterId: Guid { get; }
+IPlayer.CountItem(String): Int32
+IPlayer.Equipment: IReadOnlyList<ItemInfo> { get; }
+IPlayer.Fame: Int64 { get; }
+IPlayer.Food: ItemInfo { get; }
+IPlayer.GiveFame(Int64, Int32): Boolean
+IPlayer.GiveItem(String, Int32, ItemQuality): Int32
+IPlayer.GiveSilver(Int64): Boolean
+IPlayer.HasBuff(String): Boolean
+IPlayer.Head: ItemInfo { get; }
+IPlayer.Inventory: IReadOnlyList<ItemInfo> { get; }
+IPlayer.IsBot: Boolean { get; }
+IPlayer.IsInPartyWith(IPlayer): Boolean
+IPlayer.IsOnline: Boolean { get; }
+IPlayer.IsWearing(String): Boolean
+IPlayer.Level: PlayerLevel { get; }
+IPlayer.MainHand: ItemInfo { get; }
+IPlayer.Mount: ItemInfo { get; }
+IPlayer.OffHand: ItemInfo { get; }
+IPlayer.Potion: ItemInfo { get; }
+IPlayer.RemoveBuff(String): Boolean
+IPlayer.SendMessage(String, Boolean): Boolean
+IPlayer.Shoes: ItemInfo { get; }
+IPlayer.Silver: Int64 { get; }
+IPlayer.TakeItem(String, Int32): Boolean
+IPlayer.TakeSilver(Int64): Boolean
+IPlayer.Teleport(Single, Single, Single): Boolean
+IPlayer.TeleportTo(String, Single?, Single?): Boolean
+IPlayer.Worn(EquipSlot): ItemInfo
+IPlayerHooks.OnBeforeCommand(Action<BeforeCommandArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnDied(Action<PlayerDownArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnEnterZone(Action<ZoneArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnEnterZone(String, Action<ZoneArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnFameGained(Action<FameGainedArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnGoalCompleted(Action<GoalArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnGoalCompleted(String, Action<GoalArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnKnockedDown(Action<PlayerDownArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnLeaveZone(Action<ZoneArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnLeaveZone(String, Action<ZoneArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnLogin(Action<PlayerLoginArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnLogout(Action<PlayerArgs>, HookPriority): IHookRegistration
+IPlayerHooks.OnSilverChanged(Action<SilverChangedArgs>, HookPriority): IHookRegistration
+IServer.Broadcast(String): Void
+IServer.DefineMob(String, String, Action<MobDefinition>): MobType
+IServer.EventKinds: IReadOnlyList<String> { get; }
+IServer.FindPlayer(String): IPlayer
+IServer.Item(String): ItemType
+IServer.Item(String, Int32, Int32): ItemType
+IServer.ItemExists(String): Boolean
+IServer.Items: IReadOnlyList<ItemType> { get; }
+IServer.LoadedClusters: IReadOnlyList<String> { get; }
+IServer.Mob(String): MobType
+IServer.Mobs(String): IReadOnlyList<IMob>
+IServer.OnlinePlayers: IReadOnlyList<IPlayer> { get; }
+IServer.PopulatedClusters: IReadOnlyList<String> { get; }
+IServer.Preset: GamePreset { get; }
+IServer.SendToZone(String, String): Void
+IServer.SpawnBoss(String, String, Single, Single, Single): IMob
+IServer.SpawnMob(String, String, Single, Single, Single): IMob
+IServer.Spell(String): SpellInfo
+IServer.StartEvent(String, String, Single, Single, Int32): String
+IServer.UtcNow: DateTime { get; }
+IServer.Zone(String): ZoneInfo
+IServerHooks.OnStarted(Action<ServerArgs>, HookPriority): IHookRegistration
+IServerHooks.OnStopping(Action<ServerArgs>, HookPriority): IHookRegistration
+IServerHooks.OnTick(Action<TickArgs>, HookPriority): IHookRegistration
+ISocialHooks.OnBeforeChat(Action<ChatArgs>, HookPriority): IHookRegistration
+ISocialHooks.OnPartyJoined(Action<PartyArgs>, HookPriority): IHookRegistration
+ISocialHooks.OnPartyLeft(Action<PartyArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAfterDamage(Action<SpellDamageArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAfterDamage(String, Action<SpellDamageArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAfterHit(Action<SpellHitArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAfterHit(String, Action<SpellHitArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAreaCreate(Action<SpellAreaArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAreaCreate(String, Action<SpellAreaArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAreaTick(Action<SpellAreaArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnAreaTick(String, Action<SpellAreaArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeCast(Action<BeforeCastArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeCast(String, Action<BeforeCastArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeDamage(Action<SpellDamageArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeDamage(String, Action<SpellDamageArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeEffect(Action<SpellEffectArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeEffect(String, Action<SpellEffectArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeHit(Action<SpellHitArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeHit(String, Action<SpellHitArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeTrigger(Action<SpellTriggerArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnBeforeTrigger(String, Action<SpellTriggerArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnCancel(Action<SpellCancelArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnCancel(String, Action<SpellCancelArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnCast(Action<SpellCastArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnCast(String, Action<SpellCastArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnTick(Action<SpellTickArgs>, HookPriority): IHookRegistration
+ISpellHooks.OnTick(String, Action<SpellTickArgs>, HookPriority): IHookRegistration
+ISpellHooks.Register(String, CustomSpell): IHookRegistration
+IUnit.AddTimer(TimeSpan, Int32, Action<IUnitTimer>, String): IUnitTimer
+IUnit.Buffs: IReadOnlyList<IBuff> { get; }
+IUnit.Cluster: String { get; }
+IUnit.Data`1(): T
+IUnit.Energy: Single { get; }
+IUnit.GetData`1(String, Func<T>): T
+IUnit.Health: Single { get; }
+IUnit.InCombat: Boolean { get; }
+IUnit.IsAlive: Boolean { get; }
+IUnit.IsPlayer: Boolean { get; }
+IUnit.MaxEnergy: Single { get; }
+IUnit.MaxHealth: Single { get; }
+IUnit.Name: String { get; }
+IUnit.ObjectId: Int64 { get; }
+IUnit.RemoveData(String): Boolean
+IUnit.RemoveData`1(): Boolean
+IUnit.RemoveTimer(String): Boolean
+IUnit.SetData`1(String, T): Void
+IUnit.X: Single { get; }
+IUnit.Y: Single { get; }
+IUnit.Zone: ZoneInfo { get; }
+IUnitHooks.OnEnergyChange(Action<UnitValueArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnEnterCombat(Action<UnitArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnHealthChange(Action<UnitValueArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnHealthChange(String, Action<UnitValueArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnLeaveCombat(Action<UnitArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnReload(Action<UnitArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnReload(String, Action<UnitArgs>, HookPriority): IHookRegistration
+IUnitHooks.OnRevive(Action<UnitArgs>, HookPriority): IHookRegistration
+IUnitTimer.Cancelled: Boolean { get; }
+IUnitTimer.Fired: Int32 { get; }
+IUnitTimer.Name: String { get; }
+ItemBreakArgs.Cause: BreakCause { get; }
+ItemBreakArgs.Item: ItemInfo { get; }
+ItemBreakArgs.ctor(IPlayer, ItemInfo, BreakCause)
+ItemCategory.Armor = 4
+ItemCategory.Artefact = 14
+ItemCategory.Bag = 6
+ItemCategory.Cape = 7
+ItemCategory.Consumable = 9
+ItemCategory.Farming = 12
+ItemCategory.Furniture = 13
+ItemCategory.Gathering = 11
+ItemCategory.Head = 3
+ItemCategory.Mount = 8
+ItemCategory.OffHand = 2
+ItemCategory.Other = 0
+ItemCategory.Resource = 10
+ItemCategory.Shoes = 5
+ItemCategory.Vanity = 15
+ItemCategory.Weapon = 1
+ItemCraftedArgs.Count: Int32 { get; }
+ItemCraftedArgs.Item: ItemType { get; }
+ItemCraftedArgs.Station: String { get; }
+ItemCraftedArgs.ctor(IPlayer, ItemType, Int32, String)
+ItemFormulaArgs.Item: ItemInfo { get; }
+ItemFormulaArgs.OriginalValue: Double { get; }
+ItemFormulaArgs.Player: IPlayer { get; }
+ItemFormulaArgs.Value: Double { get; set; }
+ItemFormulaArgs.ctor(IPlayer, ItemInfo, Double)
+ItemInfo.Count: Int32 { get; }
+ItemInfo.Durability: Double { get; }
+ItemInfo.IsBroken: Boolean { get; }
+ItemInfo.Quality: ItemQuality { get; }
+ItemQuality.Excellent = 4
+ItemQuality.Good = 2
+ItemQuality.Masterpiece = 5
+ItemQuality.Normal = 1
+ItemQuality.Outstanding = 3
+ItemScript.OnBeforeLootTake(BeforeLootTakeArgs): Void
+ItemScript.OnBreak(ItemBreakArgs): Void
+ItemScript.OnCalcPassives(PassiveArgs): Void
+ItemScript.OnChestLootRolled(ChestLootArgs): Void
+ItemScript.OnCrafted(ItemCraftedArgs): Void
+ItemScript.OnEquip(EquipArgs): Void
+ItemScript.OnHarvested(HarvestArgs): Void
+ItemScript.OnStationAction(BuildingActionArgs): Void
+ItemScript.OnUnequip(EquipArgs): Void
+ItemScript.OnUsed(ItemUsedArgs): Void
+ItemScript.OnWeaponSwap(WeaponSwapArgs): Void
+ItemScript.ctor()
+ItemType.Armor: ArmorType { get; }
+ItemType.Attribute(String): String
+ItemType.BaseName: String { get; }
+ItemType.Category: ItemCategory { get; }
+ItemType.Consumable: ConsumableType { get; }
+ItemType.Enchantment: Int32 { get; }
+ItemType.Equals(ItemType): Boolean
+ItemType.Equals(Object): Boolean
+ItemType.Family: String { get; }
+ItemType.GetHashCode(): Int32
+ItemType.Is(String): Boolean
+ItemType.IsArmor: Boolean { get; }
+ItemType.IsTool: Boolean { get; }
+ItemType.IsTwoHanded: Boolean { get; }
+ItemType.IsWeapon: Boolean { get; }
+ItemType.ItemPower: Double { get; }
+ItemType.MaxDurability: Double { get; }
+ItemType.MaxQuality: ItemQuality { get; }
+ItemType.MaxStack: Int32 { get; }
+ItemType.Name: String { get; }
+ItemType.OffHand: OffHandType { get; }
+ItemType.Slot: EquipSlot { get; }
+ItemType.Subcategory: String { get; }
+ItemType.Tier: Int32 { get; }
+ItemType.ToString(): String
+ItemType.Tool: ToolType { get; }
+ItemType.Weapon: WeaponType { get; }
+ItemUsedArgs.FromSlot: Boolean { get; }
+ItemUsedArgs.Item: ItemType { get; }
+ItemUsedArgs.ctor(IPlayer, ItemType, Boolean)
+LeaveCombatReason.AiOff = 3
+LeaveCombatReason.NoTarget = 1
+LeaveCombatReason.Other = 0
+LeaveCombatReason.OutOfSight = 4
+LeaveCombatReason.TooFar = 2
+LootArgs.Items: LootList { get; }
+LootArgs.Killer: IPlayer { get; }
+LootArgs.ctor(IMob, IPlayer, LootList)
+LootContainer.Bag = 0
+LootContainer.Chest = 1
+LootContainer.Other = 2
+LootItem.<Clone>$(): LootItem
+LootItem.Count: Int32 { get; set; }
+LootItem.Deconstruct(ItemType&, Int32&): Void
+LootItem.Equals(LootItem): Boolean
+LootItem.Equals(Object): Boolean
+LootItem.GetHashCode(): Int32
+LootItem.Item: ItemType { get; set; }
+LootItem.ToString(): String
+LootItem.ctor(ItemType, Int32)
+LootList.Add(String, Int32): Boolean
+MapArgs.Instance: String { get; }
+MapArgs.Zone: ZoneInfo { get; }
+MapArgs.ctor(ZoneInfo, String)
+MapScript.OnLoaded(MapArgs): Void
+MapScript.OnUnloaded(MapArgs): Void
+MapScript.ctor()
+MobAggroArgs.Player: IPlayer { get; }
+MobAggroArgs.ctor(IMob, IPlayer)
+MobArgs.Mob: IMob { get; }
+MobArgs.ctor(IMob)
+MobCategory.Boss = 5
+MobCategory.Champion = 3
+MobCategory.Chest = 9
+MobCategory.Critter = 7
+MobCategory.Environment = 8
+MobCategory.Harmless = 10
+MobCategory.MiniBoss = 4
+MobCategory.None = 0
+MobCategory.Other = 12
+MobCategory.Standard = 1
+MobCategory.Summon = 6
+MobCategory.Trash = 2
+MobCategory.Vanity = 11
+MobDeathArgs.Credited: IReadOnlyList<IPlayer> { get; }
+MobDeathArgs.Killer: IPlayer { get; }
+MobDeathArgs.ctor(IMob, IPlayer, IReadOnlyList<IPlayer>)
+MobDefinition.AbilityPower: Single? { get; set; }
+MobDefinition.AggroRadius: Single? { get; set; }
+MobDefinition.AlertRadius: Single? { get; set; }
+MobDefinition.Armor: Single? { get; set; }
+MobDefinition.AttackDamage: Single? { get; set; }
+MobDefinition.AttackRange: Single? { get; set; }
+MobDefinition.AttackSpeed: Single? { get; set; }
+MobDefinition.CrowdControlResist: Single? { get; set; }
+MobDefinition.EnergyRegen: Single? { get; set; }
+MobDefinition.Fame: Double? { get; set; }
+MobDefinition.HealthRegen: Single? { get; set; }
+MobDefinition.ImmuneToForcedMovement: Boolean? { get; set; }
+MobDefinition.KeepsHealthOnReset: Boolean? { get; set; }
+MobDefinition.KeepsPositionOnReset: Boolean? { get; set; }
+MobDefinition.MagicResist: Single? { get; set; }
+MobDefinition.MaxEnergy: Single? { get; set; }
+MobDefinition.MaxHealth: Single? { get; set; }
+MobDefinition.NoDeathSpells: Boolean { get; set; }
+MobDefinition.NoLoot: Boolean { get; set; }
+MobDefinition.NoRotation: Boolean { get; set; }
+MobDefinition.PursuitRadius: Single? { get; set; }
+MobDefinition.RunSpeed: Single? { get; set; }
+MobDefinition.SilverFactor: Single? { get; set; }
+MobDefinition.Title: String { get; set; }
+MobDefinition.WalkSpeed: Single? { get; set; }
+MobDefinition.ctor()
+MobFaction.Avalon = 5
+MobFaction.Critter = 7
+MobFaction.Demon = 6
+MobFaction.Heretic = 3
+MobFaction.Keeper = 1
+MobFaction.Morgana = 4
+MobFaction.Other = 0
+MobFaction.Undead = 2
+MobLeaveCombatArgs.Detail: String { get; }
+MobLeaveCombatArgs.Reason: LeaveCombatReason { get; }
+MobLeaveCombatArgs.ctor(IMob, LeaveCombatReason, String)
+MobScript.OnAggro(MobAggroArgs): Void
+MobScript.OnBeforeAggro(BeforeAggroArgs): Void
+MobScript.OnBeforeLeaveCombat(BeforeLeaveCombatArgs): Void
+MobScript.OnBeforeRespawn(BeforeRespawnArgs): Void
+MobScript.OnBeforeThink(BeforeThinkArgs): Void
+MobScript.OnDied(MobDeathArgs): Void
+MobScript.OnLeaveCombat(MobLeaveCombatArgs): Void
+MobScript.OnLootRolled(LootArgs): Void
+MobScript.OnSpawned(MobArgs): Void
+MobScript.ctor()
+MobType.Category: MobCategory { get; }
+MobType.Equals(MobType): Boolean
+MobType.Equals(Object): Boolean
+MobType.Faction: MobFaction { get; }
+MobType.FactionName: String { get; }
+MobType.Fame: Double { get; }
+MobType.GetHashCode(): Int32
+MobType.Is(String): Boolean
+MobType.IsElite: Boolean { get; }
+MobType.MaxHealth: Single { get; }
+MobType.Name: String { get; }
+MobType.Tier: Int32 { get; }
+MobType.ToString(): String
+Module.ctor()
+ModuleApi.Major: Int32
+ModuleApi.Minor: Int32
+ModuleApi.Supports(String, String&): Boolean
+ModuleApi.Version: String { get; }
+ModuleScript.Commands: IModuleCommands { get; }
+ModuleScript.Config: IModuleConfig { get; }
+ModuleScript.Context: IModuleContext { get; }
+ModuleScript.Game: IGameplay { get; }
+ModuleScript.Hooks: IHooks { get; }
+ModuleScript.Log: IModuleLog { get; }
+ModuleScript.OnLoad(): Void
+ModuleScript.OnUnload(): Void
+ModuleScript.Server: IServer { get; }
+ModuleScript.Storage: IModuleStorage { get; }
+ModuleScript.Timers: IModuleTimers { get; }
+ModuleScript.ctor()
+MountArgs.Detail: String { get; }
+MountArgs.Mount: ItemType { get; }
+MountArgs.Reason: MountReason { get; }
+MountArgs.ctor(IPlayer, ItemType, MountReason, String)
+MountDamageArgs.Amount: Double { get; set; }
+MountDamageArgs.Attacker: IUnit { get; }
+MountDamageArgs.IsDirectHit: Boolean { get; }
+MountDamageArgs.Origin: DamageOrigin { get; }
+MountDamageArgs.OriginalAmount: Double { get; }
+MountDamageArgs.Spell: SpellInfo { get; }
+MountDamageArgs.ctor(IPlayer, ItemType, Double, IUnit, DamageOrigin, SpellInfo)
+MountReason.Cancelled = 8
+MountReason.Damage = 5
+MountReason.Dismount = 4
+MountReason.KnockedDown = 9
+MountReason.Logout = 6
+MountReason.Mount = 1
+MountReason.MountDied = 10
+MountReason.Mounted = 3
+MountReason.Other = 0
+MountReason.Remount = 2
+MountReason.Walked = 7
+MountScript.OnBeforeMount(BeforeMountArgs): Void
+MountScript.OnCalcMountDamage(MountDamageArgs): Void
+MountScript.OnDismount(MountArgs): Void
+MountScript.OnMountCancel(MountArgs): Void
+MountScript.OnMountSpell(SpellCastArgs): Void
+MountScript.OnMountStart(MountArgs): Void
+MountScript.OnMounted(MountedArgs): Void
+MountScript.ctor()
+MountedArgs.GallopBuff: SpellInfo { get; set; }
+MountedArgs.ctor(IPlayer, ItemType, SpellInfo)
+NetworkMessageArgs.As`1(): T
+NetworkMessageArgs.Code: Int32 { get; }
+NetworkMessageArgs.Message: Object { get; set; }
+NetworkMessageArgs.Name: String { get; }
+NetworkMessageArgs.Player: IPlayer { get; }
+NetworkMessageArgs.ctor(IPlayer, String, Int32, Object)
+NetworkScript.OnEvent(OutgoingArgs): Void
+NetworkScript.OnRequest(RequestArgs): Void
+NetworkScript.OnResponse(OutgoingArgs): Void
+NetworkScript.ctor()
+OffHandType.Book = 2
+OffHandType.None = 0
+OffHandType.Other = 4
+OffHandType.Shield = 1
+OffHandType.Torch = 3
+OutgoingArgs.Replace(Object): Void
+OutgoingArgs.ctor(IPlayer, String, Int32, Object)
+PartyArgs.CharacterId: Guid { get; }
+PartyArgs.Members: Int32 { get; }
+PartyArgs.Name: String { get; }
+PartyArgs.PartyId: Int32 { get; }
+PartyArgs.Player: IPlayer { get; }
+PartyArgs.Reason: PartyChange { get; }
+PartyArgs.ctor(Guid, String, IPlayer, Int32, Int32, PartyChange)
+PartyChange.Created = 0
+PartyChange.Disconnected = 4
+PartyChange.Invited = 1
+PartyChange.Kicked = 3
+PartyChange.Left = 2
+PassiveArgs.Add(String, Double): Void
+PassiveArgs.Item: ItemInfo { get; }
+PassiveArgs.Worn: IReadOnlyList<ItemInfo> { get; }
+PassiveArgs.ctor(IPlayer, IReadOnlyList<ItemInfo>, Action<String, Double>)
+PlayerArgs.Player: IPlayer { get; }
+PlayerArgs.ctor(IPlayer)
+PlayerDownArgs.Killer: IUnit { get; }
+PlayerDownArgs.KillerName: String { get; }
+PlayerDownArgs.ctor(IPlayer, String, IUnit)
+PlayerLevel.Admin = 2
+PlayerLevel.GameMaster = 1
+PlayerLevel.Player = 0
+PlayerLoginArgs.FirstLogin: Boolean { get; }
+PlayerLoginArgs.ctor(IPlayer, Boolean)
+PlayerScript.OnBeforeCommand(BeforeCommandArgs): Void
+PlayerScript.OnDied(PlayerDownArgs): Void
+PlayerScript.OnEnterZone(ZoneArgs): Void
+PlayerScript.OnFameGained(FameGainedArgs): Void
+PlayerScript.OnGoalCompleted(GoalArgs): Void
+PlayerScript.OnKnockedDown(PlayerDownArgs): Void
+PlayerScript.OnLeaveZone(ZoneArgs): Void
+PlayerScript.OnLogin(PlayerLoginArgs): Void
+PlayerScript.OnLogout(PlayerArgs): Void
+PlayerScript.OnSilverChanged(SilverChangedArgs): Void
+PlayerScript.ctor()
+PriorityAttribute.Priority: HookPriority { get; }
+PriorityAttribute.ctor(HookPriority)
+ReceiveCancelledAttribute.ctor()
+RequestArgs.Drop(String): Void
+RequestArgs.Parameters: IReadOnlyDictionary<Byte, Object> { get; }
+RequestArgs.Reject(Int32, String): Void
+RequestArgs.RejectCode: Int32? { get; }
+RequestArgs.Respond(Object): Void
+RequestArgs.Response: Object { get; }
+RequestArgs.ctor(IPlayer, String, Int32, Object, IReadOnlyDictionary<Byte, Object>)
+Roll.Chance(Double): Boolean
+Roll.Pick`1(IReadOnlyList<T>): T
+ServerArgs.ctor()
+ServerScript.OnStarted(ServerArgs): Void
+ServerScript.OnStopping(ServerArgs): Void
+ServerScript.OnTick(TickArgs): Void
+ServerScript.ctor()
+SilverChangedArgs.Delta: Double { get; }
+SilverChangedArgs.Reason: String { get; }
+SilverChangedArgs.Total: Double { get; }
+SilverChangedArgs.ctor(IPlayer, Double, Double, String)
+SocialScript.OnBeforeChat(ChatArgs): Void
+SocialScript.OnPartyJoined(PartyArgs): Void
+SocialScript.OnPartyLeft(PartyArgs): Void
+SocialScript.ctor()
+SpellAreaArgs.AreaId: Int64 { get; }
+SpellAreaArgs.Effect: SpellInfo { get; }
+SpellAreaArgs.Inside: IReadOnlyList<IUnit> { get; }
+SpellAreaArgs.Owner: IUnit { get; }
+SpellAreaArgs.Radius: Single { get; }
+SpellAreaArgs.Seconds: Double { get; }
+SpellAreaArgs.Spell: SpellInfo { get; }
+SpellAreaArgs.X: Single { get; }
+SpellAreaArgs.Y: Single { get; }
+SpellAreaArgs.ctor(IUnit, SpellInfo, SpellInfo, Int64, Single, Single, Single, Double, IReadOnlyList<IUnit>)
+SpellArgsBase.Caster: IUnit { get; }
+SpellArgsBase.Item: ItemType { get; }
+SpellArgsBase.MountSpell: Boolean { get; }
+SpellArgsBase.Player: IPlayer { get; }
+SpellArgsBase.Slot: SpellSlot { get; }
+SpellArgsBase.SlotIndex: Byte { get; }
+SpellArgsBase.Spell: SpellInfo { get; }
+SpellArgsBase.Target: IUnit { get; }
+SpellArgsBase.X: Single { get; }
+SpellArgsBase.Y: Single { get; }
+SpellArgsBase.ctor(IUnit, SpellInfo, Byte, ItemType, Boolean, IUnit, Single, Single)
+SpellCancelArgs.Interrupted: Boolean { get; }
+SpellCancelArgs.ctor(IUnit, SpellInfo, Byte, ItemType, Boolean, IUnit, Single, Single, Boolean)
+SpellCastArgs.ctor(IUnit, SpellInfo, Byte, ItemType, Boolean, IUnit, Single, Single)
+SpellCategory.Buff = 5
+SpellCategory.CrowdControl = 7
+SpellCategory.Damage = 3
+SpellCategory.DamageShield = 12
+SpellCategory.Debuff = 6
+SpellCategory.FoodBuff = 10
+SpellCategory.ForcedMovement = 8
+SpellCategory.Heal = 4
+SpellCategory.HealingSickness = 14
+SpellCategory.Instant = 2
+SpellCategory.Invisibility = 13
+SpellCategory.MountBuff = 11
+SpellCategory.MovementBuff = 9
+SpellCategory.None = 0
+SpellCategory.Other = 1
+SpellDamageArgs.Amount: Double { get; set; }
+SpellDamageArgs.Area: Boolean { get; }
+SpellDamageArgs.Caster: IUnit { get; }
+SpellDamageArgs.HealthLeft: Single { get; }
+SpellDamageArgs.IsEnergy: Boolean { get; }
+SpellDamageArgs.IsHeal: Boolean { get; }
+SpellDamageArgs.Magic: Boolean { get; }
+SpellDamageArgs.OriginalAmount: Double { get; }
+SpellDamageArgs.OverTime: Boolean { get; }
+SpellDamageArgs.Spell: SpellInfo { get; }
+SpellDamageArgs.Target: IUnit { get; }
+SpellDamageArgs.ctor(IUnit, SpellInfo, IUnit, Double, Boolean, Boolean, Boolean, Boolean, Boolean)
+SpellEffectArgs.Caster: IUnit { get; }
+SpellEffectArgs.FromArea: Boolean { get; }
+SpellEffectArgs.RootSpell: SpellInfo { get; }
+SpellEffectArgs.Spell: SpellInfo { get; }
+SpellEffectArgs.Unit: IUnit { get; }
+SpellEffectArgs.ctor(IUnit, SpellInfo, SpellInfo, IUnit, Boolean)
+SpellFormulaArgs.Caster: IUnit { get; }
+SpellFormulaArgs.OriginalValue: Double { get; }
+SpellFormulaArgs.Spell: SpellInfo { get; }
+SpellFormulaArgs.Target: IUnit { get; }
+SpellFormulaArgs.Value: Double { get; set; }
+SpellFormulaArgs.ctor(IUnit, SpellInfo, IUnit, Double)
+SpellHitArgs.Projectile: Boolean { get; }
+SpellHitArgs.UnitsHit: Int32 { get; }
+SpellHitArgs.ctor(IUnit, SpellInfo, Byte, ItemType, Boolean, IUnit, Single, Single, Boolean, Int32)
+SpellInfo.CastTime: Double { get; }
+SpellInfo.Category: SpellCategory { get; }
+SpellInfo.CategoryName: String { get; }
+SpellInfo.Cooldown: Double { get; }
+SpellInfo.Equals(Object): Boolean
+SpellInfo.Equals(SpellInfo): Boolean
+SpellInfo.GetHashCode(): Int32
+SpellInfo.Id: Int32 { get; }
+SpellInfo.Is(String): Boolean
+SpellInfo.IsChanneled: Boolean { get; }
+SpellInfo.IsProjectile: Boolean { get; }
+SpellInfo.Kind: SpellKind { get; }
+SpellInfo.Name: String { get; }
+SpellInfo.Range: Single { get; }
+SpellInfo.StackLimit: Int32 { get; }
+SpellInfo.Target: SpellTarget { get; }
+SpellInfo.ToString(): String
+SpellKind.Active = 1
+SpellKind.Other = 0
+SpellKind.Passive = 2
+SpellKind.Toggle = 3
+SpellScript.OnAfterDamage(SpellDamageArgs): Void
+SpellScript.OnAfterHit(SpellHitArgs): Void
+SpellScript.OnAreaCreate(SpellAreaArgs): Void
+SpellScript.OnAreaTick(SpellAreaArgs): Void
+SpellScript.OnBeforeCast(BeforeCastArgs): Void
+SpellScript.OnBeforeDamage(SpellDamageArgs): Void
+SpellScript.OnBeforeEffect(SpellEffectArgs): Void
+SpellScript.OnBeforeHit(SpellHitArgs): Void
+SpellScript.OnBeforeTrigger(SpellTriggerArgs): Void
+SpellScript.OnCancel(SpellCancelArgs): Void
+SpellScript.OnCast(SpellCastArgs): Void
+SpellScript.OnTick(SpellTickArgs): Void
+SpellScript.ctor()
+SpellSlot.Armor = 3
+SpellSlot.E = 2
+SpellSlot.Food = 13
+SpellSlot.Head = 4
+SpellSlot.Other = 255
+SpellSlot.Potion = 12
+SpellSlot.Q = 0
+SpellSlot.Shoes = 5
+SpellSlot.W = 1
+SpellSlots.FromIndex(Byte): SpellSlot
+SpellTarget.All = 7
+SpellTarget.AllMobs = 9
+SpellTarget.AllPlayers = 8
+SpellTarget.AllUnmounted = 10
+SpellTarget.Enemy = 2
+SpellTarget.EnemyMobs = 4
+SpellTarget.EnemyPlayers = 3
+SpellTarget.EnemyUnmounted = 5
+SpellTarget.FactionSelf = 18
+SpellTarget.FriendAll = 11
+SpellTarget.FriendAllMobs = 15
+SpellTarget.FriendAllPlayers = 13
+SpellTarget.FriendFaction = 17
+SpellTarget.FriendOther = 12
+SpellTarget.FriendOtherMobs = 16
+SpellTarget.FriendOtherPlayers = 14
+SpellTarget.Ground = 6
+SpellTarget.KnockedDownFriendPlayer = 22
+SpellTarget.KnockedDownPlayer = 21
+SpellTarget.None = 0
+SpellTarget.Other = 19
+SpellTarget.Self = 1
+SpellTarget.StoredTarget = 20
+SpellTickArgs.Caster: IUnit { get; }
+SpellTickArgs.Channel: SpellInfo { get; }
+SpellTickArgs.Count: Int32 { get; }
+SpellTickArgs.Spell: SpellInfo { get; }
+SpellTickArgs.Target: IUnit { get; }
+SpellTickArgs.Tick: Int32 { get; }
+SpellTickArgs.X: Single { get; }
+SpellTickArgs.Y: Single { get; }
+SpellTickArgs.ctor(IUnit, SpellInfo, SpellInfo, Int32, Int32, IUnit, Single, Single)
+SpellTriggerArgs.Effect: SpellInfo { get; }
+SpellTriggerArgs.Event: SpellTriggerEvent { get; }
+SpellTriggerArgs.IsPassive: Boolean { get; }
+SpellTriggerArgs.Other: IUnit { get; }
+SpellTriggerArgs.Owner: IPlayer { get; }
+SpellTriggerArgs.Spell: SpellInfo { get; }
+SpellTriggerArgs.ctor(IPlayer, SpellTriggerEvent, IUnit, SpellInfo, SpellInfo, Boolean)
+SpellTriggerEvent.AutoAttack = 4
+SpellTriggerEvent.CastFinished = 5
+SpellTriggerEvent.DoDamage = 2
+SpellTriggerEvent.DoDirectDamage = 3
+SpellTriggerEvent.Other = 6
+SpellTriggerEvent.ReceiveDamage = 0
+SpellTriggerEvent.ReceiveDirectDamage = 1
+Stat.Armor: String
+Stat.AttackDamage: String
+Stat.AttackRange: String
+Stat.AttackSpeed: String
+Stat.Balance: String
+Stat.CastTimeReduction: String
+Stat.CooldownRate: String
+Stat.CooldownReduction: String
+Stat.CraftTime: String
+Stat.CraftingQuality: String
+Stat.CrowdControlDurationVsMobs: String
+Stat.CrowdControlDurationVsMounts: String
+Stat.CrowdControlDurationVsPlayers: String
+Stat.CrowdControlResist: String
+Stat.CrowdControlResistVsMobs: String
+Stat.CrowdControlResistVsPlayers: String
+Stat.DamageVsMobs: String
+Stat.DamageVsMounts: String
+Stat.DamageVsPlayers: String
+Stat.DefenseVsMobs: String
+Stat.DefenseVsPlayers: String
+Stat.DestinyProgress: String
+Stat.EnergyCostReduction: String
+Stat.EnergyRegen: String
+Stat.EnergyRegenBonus: String
+Stat.FactionPoints: String
+Stat.FishingFame: String
+Stat.FishingSpeed: String
+Stat.FishingYield: String
+Stat.FocusFirePenetration: String
+Stat.GatheringSpeed: String
+Stat.GatheringYield: String
+Stat.HealBonus: String
+Stat.HealModifier: String
+Stat.HealingSickness: String
+Stat.HealthRegen: String
+Stat.HealthRegenBonus: String
+Stat.ItemPower: String
+Stat.MagicAttackDamage: String
+Stat.MagicResist: String
+Stat.MagicSpellDamage: String
+Stat.MaxHealth: String
+Stat.MaxLoad: String
+Stat.MaxLoadBonus: String
+Stat.MightGain: String
+Stat.MobFame: String
+Stat.MobLoot: String
+Stat.MobSilver: String
+Stat.MoveSpeed: String
+Stat.MoveSpeedFlat: String
+Stat.PhysicalSpellDamage: String
+Stat.ResourceFame: String
+Stat.ThreatBonus: String
+Stat.TrackingFame: String
+StationActionKind.Awaken = 6
+StationActionKind.CraftItem = 1
+StationActionKind.Other = 0
+StationActionKind.RepairItem = 2
+StationActionKind.RerollQuality = 5
+StationActionKind.SalvageItem = 3
+StationActionKind.UpgradeEnchantment = 4
+ThreatEntry.<Clone>$(): ThreatEntry
+ThreatEntry.Amount: Double { get; set; }
+ThreatEntry.Deconstruct(IPlayer&, Double&): Void
+ThreatEntry.Equals(Object): Boolean
+ThreatEntry.Equals(ThreatEntry): Boolean
+ThreatEntry.GetHashCode(): Int32
+ThreatEntry.Player: IPlayer { get; set; }
+ThreatEntry.ToString(): String
+ThreatEntry.ctor(IPlayer, Double)
+TickArgs.DeltaSeconds: Double { get; }
+TickArgs.Seconds: Double { get; }
+TickArgs.ctor(Double, Double)
+ToolType.Fiber = 1
+ToolType.Fishing = 6
+ToolType.Hide = 2
+ToolType.None = 0
+ToolType.Ore = 3
+ToolType.Other = 8
+ToolType.Rock = 4
+ToolType.Tracking = 7
+ToolType.Wood = 5
+UnitArgs.Unit: IUnit { get; }
+UnitArgs.ctor(IUnit)
+UnitFormulaArgs.OriginalValue: Double { get; }
+UnitFormulaArgs.Player: IPlayer { get; }
+UnitFormulaArgs.Unit: IUnit { get; }
+UnitFormulaArgs.Value: Double { get; set; }
+UnitFormulaArgs.ctor(IPlayer, IUnit, Double)
+UnitScript.OnEnergyChange(UnitValueArgs): Void
+UnitScript.OnEnterCombat(UnitArgs): Void
+UnitScript.OnHealthChange(UnitValueArgs): Void
+UnitScript.OnLeaveCombat(UnitArgs): Void
+UnitScript.OnReload(UnitArgs): Void
+UnitScript.OnRevive(UnitArgs): Void
+UnitScript.ctor()
+UnitStats.<Clone>$(): UnitStats
+UnitStats.ArmorResist: Double { get; set; }
+UnitStats.CrowdControlResist: Double { get; set; }
+UnitStats.Deconstruct(Single&, Single&, Single&, Single&, Double&, Double&, Double&, Double&, Int32&): Void
+UnitStats.Energy: Single { get; set; }
+UnitStats.Equals(Object): Boolean
+UnitStats.Equals(UnitStats): Boolean
+UnitStats.GetHashCode(): Int32
+UnitStats.Health: Single { get; set; }
+UnitStats.ItemPower: Double { get; set; }
+UnitStats.MagicResist: Double { get; set; }
+UnitStats.MaxEnergy: Single { get; set; }
+UnitStats.MaxHealth: Single { get; set; }
+UnitStats.Tier: Int32 { get; set; }
+UnitStats.ToString(): String
+UnitStats.ctor(Single, Single, Single, Single, Double, Double, Double, Double, Int32)
+UnitValueArgs.After: Single { get; }
+UnitValueArgs.Before: Single { get; }
+UnitValueArgs.Max: Single { get; }
+UnitValueArgs.Share: Single { get; }
+UnitValueArgs.Source: IUnit { get; }
+UnitValueArgs.Spell: SpellInfo { get; }
+UnitValueArgs.ctor(IUnit, Single, Single, Single, IUnit, SpellInfo)
+WeaponSwapArgs.From: ItemType { get; }
+WeaponSwapArgs.To: ItemInfo { get; }
+WeaponSwapArgs.ctor(IPlayer, ItemType, ItemInfo)
+WeaponType.ArcaneStaff = 15
+WeaponType.Axe = 2
+WeaponType.Bow = 9
+WeaponType.Crossbow = 10
+WeaponType.CursedStaff = 16
+WeaponType.Dagger = 6
+WeaponType.FireStaff = 11
+WeaponType.FrostStaff = 12
+WeaponType.Hammer = 4
+WeaponType.HolyStaff = 13
+WeaponType.Mace = 3
+WeaponType.NatureStaff = 14
+WeaponType.None = 0
+WeaponType.Other = 18
+WeaponType.Quarterstaff = 7
+WeaponType.ShapeshifterStaff = 17
+WeaponType.Spear = 5
+WeaponType.Sword = 1
+WeaponType.WarGloves = 8
+ZoneArgs.ClusterChange: Boolean { get; }
+ZoneArgs.Zone: ZoneInfo { get; }
+ZoneArgs.ctor(IPlayer, ZoneInfo, Boolean)
+ZoneColor.Black = 4
+ZoneColor.Blue = 1
+ZoneColor.None = 0
+ZoneColor.Red = 3
+ZoneColor.Yellow = 2
+ZoneInfo.Cluster: String { get; }
+ZoneInfo.Color: ZoneColor { get; }
+ZoneInfo.DisplayName: String { get; }
+ZoneInfo.Equals(Object): Boolean
+ZoneInfo.Equals(ZoneInfo): Boolean
+ZoneInfo.GetHashCode(): Int32
+ZoneInfo.IsLethal: Boolean { get; }
+ZoneInfo.Kind: ZoneKind { get; }
+ZoneInfo.Pvp: ZonePvp { get; }
+ZoneInfo.ToString(): String
+ZoneInfo.Type: String { get; }
+ZoneKind.Arena = 8
+ZoneKind.City = 1
+ZoneKind.CorruptedDungeon = 5
+ZoneKind.Dungeon = 4
+ZoneKind.Expedition = 7
+ZoneKind.Hellgate = 6
+ZoneKind.Hideout = 11
+ZoneKind.Island = 10
+ZoneKind.OpenWorld = 2
+ZoneKind.Other = 0
+ZoneKind.Passage = 3
+ZoneKind.Road = 9
+ZoneKind.Tutorial = 12
+ZonePvp.Allowed = 2
+ZonePvp.Disabled = 0
+ZonePvp.FactionOnly = 1
+ZonePvp.Forced = 3
+class AbsorbArgs : CancellableArgs
+class AreaTickArgs
+class BeforeAggroArgs : CancellableArgs
+class BeforeBuffArgs : CancellableArgs
+class BeforeCastArgs : CancellableSpellArgs
+class BeforeCommandArgs : CancellableArgs
+class BeforeDamageArgs : CancellableArgs
+class BeforeHealArgs : CancellableArgs
+class BeforeLeaveCombatArgs : CancellableArgs
+class BeforeLootTakeArgs : CancellablePlayerArgs
+class BeforeMountArgs : CancellablePlayerArgs
+class BeforeRespawnArgs : CancellableArgs
+class BeforeThinkArgs : CancellableArgs
+class BuffArgs
+class BuffRemoveArgs : BuffArgs
+class BuffScript : ModuleScript
+class BuffStackArgs : BuffArgs
+class BuildingActionArgs : PlayerArgs
+class CancellableArgs
+class CancellablePlayerArgs : PlayerArgs
+class CancellableSpellArgs : SpellArgsBase
+class ChatArgs : CancellablePlayerArgs
+class ChestLootArgs : PlayerArgs
+class CombatScript : ModuleScript
+class CustomSpell
+class CustomSpellContext
+class EquipArgs : PlayerArgs
+class FameGainedArgs : PlayerArgs
+class ForIdAttribute : Attribute
+class FormulaScript : ModuleScript
+class GoalArgs : PlayerArgs
+class HarvestArgs : PlayerArgs
+class HealthChangeArgs
+class HitAvoidedArgs
+class HookAttribute : Attribute
+class ItemBreakArgs : PlayerArgs
+class ItemCraftedArgs : PlayerArgs
+class ItemFormulaArgs
+class ItemInfo : ItemType
+class ItemScript : ModuleScript
+class ItemType
+class ItemUsedArgs : PlayerArgs
+class LootArgs : MobArgs
+class LootItem
+class LootList : List<LootItem>
+class MapArgs
+class MapScript : ModuleScript
+class MobAggroArgs : MobArgs
+class MobArgs
+class MobDeathArgs : MobArgs
+class MobDefinition
+class MobLeaveCombatArgs : MobArgs
+class MobScript : ModuleScript
+class MobType
+class Module : ModuleScript
+class ModuleApi
+class ModuleScript
+class MountArgs : PlayerArgs
+class MountDamageArgs : MountArgs
+class MountScript : ModuleScript
+class MountedArgs : MountArgs
+class NetworkMessageArgs : CancellableArgs
+class NetworkScript : ModuleScript
+class OutgoingArgs : NetworkMessageArgs
+class PartyArgs
+class PassiveArgs : PlayerArgs
+class PlayerArgs
+class PlayerDownArgs : PlayerArgs
+class PlayerLoginArgs : PlayerArgs
+class PlayerScript : ModuleScript
+class PriorityAttribute : Attribute
+class ReceiveCancelledAttribute : Attribute
+class RequestArgs : NetworkMessageArgs
+class Roll
+class ServerArgs
+class ServerScript : ModuleScript
+class SilverChangedArgs : PlayerArgs
+class SocialScript : ModuleScript
+class SpellAreaArgs
+class SpellArgsBase
+class SpellCancelArgs : SpellArgsBase
+class SpellCastArgs : SpellArgsBase
+class SpellDamageArgs : CancellableArgs
+class SpellEffectArgs : CancellableArgs
+class SpellFormulaArgs
+class SpellHitArgs : CancellableSpellArgs
+class SpellInfo
+class SpellScript : ModuleScript
+class SpellSlots
+class SpellTickArgs
+class SpellTriggerArgs : CancellableArgs
+class Stat
+class ThreatEntry
+class TickArgs
+class UnitArgs
+class UnitFormulaArgs
+class UnitScript : ModuleScript
+class UnitStats
+class UnitValueArgs : UnitArgs
+class WeaponSwapArgs : PlayerArgs
+class ZoneArgs : PlayerArgs
+class ZoneInfo
+enum ArmorType
+enum BreakCause
+enum BuffEnd
+enum ConsumableType
+enum DamageKind
+enum DamageOrigin
+enum EquipSlot
+enum FameSource
+enum GamePreset
+enum GoalKind
+enum HarvestKind
+enum HitAvoidReason
+enum HookPriority
+enum ItemCategory
+enum ItemQuality
+enum LeaveCombatReason
+enum LootContainer
+enum MobCategory
+enum MobFaction
+enum MountReason
+enum OffHandType
+enum PartyChange
+enum PlayerLevel
+enum SpellCategory
+enum SpellKind
+enum SpellSlot
+enum SpellTarget
+enum SpellTriggerEvent
+enum StationActionKind
+enum ToolType
+enum WeaponType
+enum ZoneColor
+enum ZoneKind
+enum ZonePvp
+interface IBuff
+interface IBuffHooks
+interface ICancellableArgs
+interface ICombatHooks
+interface ICommandCall
+interface IFormulaHooks
+interface IGameplay
+interface IHookRegistration
+interface IHooks
+interface IItemHooks
+interface IMapHooks
+interface IMob
+interface IMobHooks
+interface IModuleArea
+interface IModuleCommands
+interface IModuleConfig
+interface IModuleContext
+interface IModuleLog
+interface IModuleStorage
+interface IModuleTimers
+interface IMountHooks
+interface INetworkHooks
+interface IPlayer
+interface IPlayerHooks
+interface IServer
+interface IServerHooks
+interface ISocialHooks
+interface ISpellHooks
+interface IUnit
+interface IUnitHooks
+interface IUnitTimer

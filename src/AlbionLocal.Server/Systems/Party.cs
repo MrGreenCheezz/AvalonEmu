@@ -259,6 +259,7 @@ public sealed class Parties(World world)
         _droppedAway.Remove(me);
         // Bot-party: a world bot joins as its inviter's companion member (no client, never offline, never the leader: Companions.Recruit).
         var joiner = invitee.Bot is null ? MemberOf(invitee) : new PartyMember(me, invitee.Character.Name ?? "", (byte)invitee.Character.Template) { Owner = invite.Inviter };
+        var created = party is null;
         if (party is null)
         {
             var host = inviter!; // a new party without an inviter player was refused above
@@ -282,6 +283,9 @@ public sealed class Parties(World world)
         }
         inviter?.Session.Send(Answer(invite.InviteeName, true, false, NoReason));
         Log.Info("party", $"'{invite.InviteeName}' joins party {party.Id} of '{invite.InviterName}' ({party.Members.Count} members)");
+        // The modules' PartyJoined: a new party's leader first, then the joiner.
+        if (created) world.Modules.Party(true, invite.Inviter, invite.InviterName, party.Id, 2, "created");
+        world.Modules.Party(true, me, invite.InviteeName, party.Id, party.Members.Count, "invited");
         return 0;
     }
 
@@ -332,6 +336,7 @@ public sealed class Parties(World world)
         if (m.Missed) _droppedAway[m.Id] = party.Id;
         world.Expeditions.PartyLeft(m.Id); // stageH: a registration of the party's expedition group ends with it
         Log.Info("party", $"'{m.Name}' {why}: party {party.Id} has {party.Members.Count} member(s)");
+        if (!m.Companion) world.Modules.Party(false, m.Id, m.Name, party.Id, party.Members.Count, why); // the modules' PartyLeft
         // StageN companions: a companion out of the party (kicked from the party frame, dismissed) goes; a player's companions leave with it.
         if (m.Companion) world.Companions.LeftParty(m.Id);
         else

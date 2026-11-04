@@ -1,0 +1,10 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-core-access",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Reaches the server's own classes: everything is possible, nothing is promised to stay",
+  "api": "1.0",
+  "enabled": false,
+  "coreAccess": true
+}

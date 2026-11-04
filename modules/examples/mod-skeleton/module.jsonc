@@ -1,0 +1,9 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-skeleton",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Greets players when they log in and answers .motd: the place to start from",
+  "api": "1.0",
+  "enabled": false
+}

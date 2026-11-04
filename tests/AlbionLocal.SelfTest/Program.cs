@@ -127,6 +127,8 @@ tests.AddRange(TerritoryTest.All);
 tests.AddRange(TerritoryClaimTest.All);
 tests.AddRange(CastleTest.All);
 tests.AddRange(HideoutTest.All);
+tests.AddRange(ModuleTest.All);
+tests.AddRange(ModuleHooksTest.All);
 tests.AddRange(CompanionTest.All);
 tests.AddRange(LabExercises.All);
 tests.AddRange(LabTests.All);

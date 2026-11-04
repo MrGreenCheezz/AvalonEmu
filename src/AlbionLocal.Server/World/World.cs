@@ -75,7 +75,11 @@ public sealed class World : IDisposable
         Social = new Systems.Social(this, characters as ISocialStore);
         Bots = new Bots.BotManager(this);
         Companions = new Bots.Companions(this);
+        Modules = new Modules.ModuleHost(this);
     }
+
+    /// <summary>The C# modules (Modules:*, docs/modules/README.md): loaded by ServerHost with Modules:Enabled; none in a bare World.</summary>
+    public Modules.ModuleHost Modules { get; }
 
     public ServerConfig Config { get; }
 
@@ -196,6 +200,7 @@ public sealed class World : IDisposable
     /// <summary>The static dungeons: their events and value on the world map and in 499 (stageN static-dungeons SPEC).</summary>
     public Systems.StaticDungeons StaticDungeons { get; }
 
+
     /// <summary>The world bosses: the WORLDBOSS spawn points' and content/bosses.json's, their schedule, announcements and loot (stageH bosses SPEC §4.1, §6.1).</summary>
     public Systems.WorldBosses Bosses { get; }
 
@@ -235,6 +240,7 @@ public sealed class World : IDisposable
     /// <summary>The server casts of CharacterSpellSlot.FakeSpell (25): the corrupted dungeon entrance, the mists entrance, the loot chest opening (stageM chest-slot25 NOTES).</summary>
     public Systems.FakeSlotCasts FakeCasts { get; }
 
+
     /// <summary>StageN: the buff shrines of the dungeon rooms and open-world clusters (NewShrine, UseShrine; stageN shrines SPEC).</summary>
     public Systems.BuffShrines Shrines { get; }
 
@@ -270,6 +276,7 @@ public sealed class World : IDisposable
 
     /// <summary>The world boss settings (content/bosses.json; the built-in ones without it).</summary>
     public BossSettings BossSettings { get; init; } = BossSettings.Default;
+
 
     /// <summary>worldbosses.xml (or its regional variant, BossSettings.DataFile), read at the start; null = no world bosses (hand-made test worlds).</summary>
     public WorldBossData? BossData { get; init; }
@@ -542,6 +549,9 @@ public sealed class World : IDisposable
         Hideouts.UpdateChannels(); // stageP hideouts: the 4 s channels into and out of a hideout
         Dungeons.Update(now); // stageG: exit rerolls, despawns and refills, dungeons that close
         Saves.Update(now);
+        // The modules' timers, Tick and storage writes (each call guarded: a module's fault never costs the tick).
+        try { Modules.Update(now); }
+        catch (Exception e) { Log.Error("modules", $"module update failed: {e}"); }
         if (Config.MapIdleUnload > TimeSpan.Zero)
             // A floor of a live random dungeon stays until the dungeon closes (its own empty lifetime, RandomDungeons.Close).
             // So does an expedition instance's map (Expeditions.Close), a corrupted dungeon's (CorruptedDungeons.Close), a hellgate's (Hellgates.Close)

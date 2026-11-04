@@ -68,7 +68,7 @@ public sealed partial class WorldSession
             return Generic($"another station action runs at building {busy.Building.Id}");
         if (Systems.OpeningTutorial.ForgeLocked(player, building)) return Generic("tutorial forge is locked until its quest is accepted");
         var far = Vector2.Distance(player.PositionAt(DateTime.UtcNow), building.Position) > StationRange;
-        return (StationAction)req.p switch
+        var answer = (StationAction)req.p switch
         {
             StationAction.RepairItem when !building.Template.Repairs => Generic($"{building.Template.Name} does not repair"),
             StationAction.RepairItem when far => StationRefused(player, req, StationComponentError, (byte)RepairError.OutOfRange, "out of range"),
@@ -90,6 +90,9 @@ public sealed partial class WorldSession
             StationAction.Awaken => StartLegendary(player, building, req),
             _ => Generic($"ACT {req.p} is not made yet"),
         };
+        // The modules' BuildingAction: a started action gets no response (a refusal does).
+        world.Modules.BuildingAction(player, building.Template.Name, ((StationAction)req.p).ToString(), answer is null);
+        return answer;
     }
 
     /// <summary>The failure response of op 55 (see the class), logged with why.</summary>
@@ -385,6 +388,7 @@ public sealed partial class WorldSession
                     item.IsEquipment ? RollQuality(world.CraftRandom, world.Economy.QualityWeights, qualityBonus) : 1));
             if (returns > 0) GiveReturns(player, recipe, done, returns);
             if (fames) AwardCraftFame(player, item, checked(done * recipe.AmountCrafted));
+            world.Modules.ItemCrafted(player, item.Name, checked(done * recipe.AmountCrafted), building.Template.Name); // the modules' ItemCrafted
             var finished = new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] };
             SendEvent(finished);
             if (!instant) player.SendToObservers(finished);

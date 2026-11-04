@@ -87,6 +87,7 @@ public static class SpawnManager
             slot.RespawnAt = null;
             if (Spawn(map, slot, world) is { } mob)
             {
+                if (world.Modules.BeforeRespawn(map, slot, mob, now)) continue; // the modules' Mobs.OnBeforeRespawn
                 map.AddObject(mob);
                 world.WorldChests.MobSpawned(map, mob); // stageH: a protecting mob back locks its POI chest again
             }

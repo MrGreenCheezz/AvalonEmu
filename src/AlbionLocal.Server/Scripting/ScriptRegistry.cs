@@ -67,8 +67,9 @@ public sealed class ScriptRegistry
     public ItemScript? ItemScriptOf(ItemTemplate template) => template.Index < _items.Length ? _items[template.Index] : null;
 
     /// <summary><see cref="ItemScript.OnEquip"/> of the item's script, if it has one; returns whether it had one.</summary>
-    public bool OnEquip(Player p, Item item)
+    public bool OnEquip(Player p, Item item, bool login = false)
     {
+        p.World.Modules.Equipped(p, item, equip: true, login); // the modules' Items.OnEquip
         if (ItemScriptOf(item.Template) is not { } script) return false;
         try { script.OnEquip(p, item); }
         catch (Exception e) { Failed(script, nameof(ItemScript.OnEquip), e); }
@@ -78,6 +79,7 @@ public sealed class ScriptRegistry
     /// <summary><see cref="ItemScript.OnUnequip"/> of the item's script, if it has one.</summary>
     public void OnUnequip(Player p, Item item)
     {
+        p.World.Modules.Equipped(p, item, equip: false, login: false); // the modules' Items.OnUnequip
         if (ItemScriptOf(item.Template) is not { } script) return;
         try { script.OnUnequip(p, item); }
         catch (Exception e) { Failed(script, nameof(ItemScript.OnUnequip), e); }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-04 — Server modules (branch `modules`)
+
+An AzerothCore-like module system: a module is a folder with C# sources that the server builds and loads, and reloads while it runs. Start with `docs/modules/README.md`; `docs/modules/HOOKS.md` lists every hook, and `modules/examples` holds working modules. Not merged into `main` yet.
+
+- **Hooks** on players, combat, spells, buffs, items, mounts, mobs, maps and any network message, as `*Script` methods or lambdas, with cancel, priorities and per-id filters. A module that keeps failing is switched off without stopping the game.
+- **Types, not text**: hooks and `Server` hand out `ItemType`, `SpellInfo`, `MobType` and `ZoneInfo`, and closed sets are enums.
+- **What became of a hit**: `Combat.OnBeforeAbsorb` and `OnAfterAbsorb` (damage shields), `Combat.OnHitAvoided` (invincibility, spell immunity, a module's cancel), `Spells.OnBeforeTrigger` (reactions), `e.IsDirectHit`, `e.UnitsHit`, `Roll`.
+- **A boss of your own**: `Server.DefineMob` (a copy of a mobs.xml type with your numbers: the clients still show the base type's model and name), `IMob.Attack`, `Threat`, `CurrentSpell`, `CastSpell` with its own cast time, instant and scripted spells for mobs, `Mobs.OnBeforeLeaveCombat`, areas the clients can see.
+- Self-tests cover the hooks and a contract test guards the public API (`docs/modules/api-baseline.txt`). Not checked in the game client: `MobDefinition.Title`, `CreateArea`'s `visual`, and how the cast bar follows `castSeconds`.
+
 ## 2026-10-26 (evening) — PvP end-game (the parts the client code and data settle)
 
 Everything below is on under `Preset: official`, where the official game has it; each system has its own switch.

@@ -116,7 +116,9 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
     public bool Immune { get; internal set; }
 
     /// <summary>Its active spells (stageD effects SPEC §1): the players' damage over time and debuffs, its return-home buff.</summary>
-    public Systems.EffectList Effects { get; } = new();
+    public Systems.EffectList Effects => _effects ??= new() { Owner = this };
+
+    private Systems.EffectList? _effects;
 
     /// <summary>StageH bosses SPEC §4.1: the world boss slot it stands for (<see cref="Systems.WorldBosses"/>); null for every other mob.</summary>
     public Systems.WorldBosses.Slot? Boss { get; init; }
@@ -132,6 +134,7 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
 
     /// <summary>Stage I: a factor on its kill fame (a T9/T10 invasion's wave mob); 1 for every other mob.</summary>
     public double FameFactor { get; init; } = 1;
+
 
     /// <summary>StageG: the dungeon level's mobmodifier it carries from its spawn (<see cref="SpawnManager.LevelBuff"/>); null off a dungeon floor of level 1-4.</summary>
     public SpellTemplate? LevelBuff { get; internal set; }
@@ -208,7 +211,7 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
             c5w = Energy.RegenPerSecond,                // [21]
             c5x = now,                                  // [22] the energy stamp
             c57 = invisible,                            // [32] just spawned
-            Extra = new() { [2] = Flagging, [6] = "", [30] = (byte)0, [34] = (byte)0 }, // always, also 0 and ""
+            Extra = new() { [2] = Flagging, [6] = Template.Title ?? "", [30] = (byte)0, [34] = (byte)0 }, // always, also 0 and ""
         };
         if (RareState != 0) yield return BuildChangeState();
         if (Systems.SpellEffects.ForNewObserver(this, now) is { } effects) yield return effects;

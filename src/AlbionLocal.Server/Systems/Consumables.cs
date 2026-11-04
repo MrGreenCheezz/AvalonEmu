@@ -75,6 +75,7 @@ public static class Consumables
         }
         p.SaveItems();
         Log.Debug("items", $"'{p.Character.Name}' used {item.Template.Name} from slot {cast.Slot}: {item.Count} left");
+        p.World.Modules.ItemUsed(p, item.Template.Name, 1, "slot"); // the modules' ItemUsed
     }
 
     /// <summary>
@@ -367,6 +368,7 @@ public static class Consumables
         SpellCasts.ExecuteFirst(new SpellCasts.SpellContext(p, batch.Map, spell, 0, batch.Ap, null, here, ticks) { CcAbilityPower = batch.CcAp, Item = item.Template, Loot = loot }, spell);
         item.Count--;
         batch.Done++;
+        p.World.Modules.ItemUsed(p, item.Template.Name, 1, "inventory"); // the modules' ItemUsed
         var hit = Combat.CastHit(p.Id, p.Id, spell.Id, 0);
         if (batch.Done < batch.Count && item.Count > 0)
         {

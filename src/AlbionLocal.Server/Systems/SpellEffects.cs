@@ -163,11 +163,52 @@ public sealed class EffectList
     /// <summary>The buff sums of a player's worn passives by attribute (<see cref="Passives"/>: a passive buff counts as a buffovertime); null for mobs.</summary>
     internal Func<IReadOnlyDictionary<string, double>>? PassiveBuffs { get; init; }
 
-    /// <summary>Nothing to add up: no spells and no passive buffs (the fast path of the sums and factors).</summary>
-    public bool Idle => _spells.Count == 0 && (PassiveBuffs?.Invoke().Count ?? 0) == 0;
+    /// <summary>Nothing to add up: no spells, no passive buffs and no module modifiers (the fast path of the sums and factors).</summary>
+    public bool Idle => _spells.Count == 0 && _modifierSums is null && (PassiveBuffs?.Invoke().Count ?? 0) == 0;
 
-    /// <summary>Drops the spells that have ended by <paramref name="now"/>; returns how many.</summary>
-    public int Prune(long now) => _spells.RemoveAll(s => !s.Live(now));
+    /// <summary>The unit whose list this is (the modules' buff hooks); null for a list outside any unit.</summary>
+    internal IUnit? Owner { get; init; }
+
+    /// <summary>Whether the modules listen to entries leaving this list (Buffs.OnRemove).</summary>
+    private bool Watched => Owner switch { Player p => p.World.Modules.WantsBuffRemove, Mob { World: { } w } => w.Modules.WantsBuffRemove, _ => false };
+
+    /// <summary>Drops the spells that have ended by <paramref name="now"/>; returns how many (the modules' OnRemove "expired" for each).</summary>
+    public int Prune(long now)
+    {
+        if (_spells.Count == 0) return 0;
+        if (!Watched) return _spells.RemoveAll(s => !s.Live(now));
+        var gone = _spells.Where(s => !s.Live(now)).ToList();
+        if (gone.Count == 0) return 0;
+        _spells.RemoveAll(gone.Contains);
+        Modules.ModuleHost.BuffsEnded(Owner!, gone, AlbionLocal.Modules.BuffEnd.Expired);
+        return gone.Count;
+    }
+
+    // ---- the modules' stat modifiers (IGameplay.SetModifier)
+
+    private Dictionary<(string Module, string Source, string Attribute), double>? _modifiers;
+    private Dictionary<string, double>? _modifierSums;
+
+    internal void SetModifier(string module, string source, string attribute, double value)
+    {
+        (_modifiers ??= [])[(module, source, attribute)] = value;
+        Resum();
+    }
+
+    /// <summary>Clears the modifiers of <paramref name="module"/> (of <paramref name="source"/> and <paramref name="attribute"/> when given); whether any went.</summary>
+    internal bool ClearModifiers(string module, string? source, string? attribute)
+    {
+        if (_modifiers is null) return false;
+        var keys = _modifiers.Keys.Where(k => k.Module == module && (source is null || k.Source == source) && (attribute is null || k.Attribute == attribute)).ToList();
+        foreach (var k in keys) _modifiers.Remove(k);
+        if (keys.Count > 0) Resum();
+        return keys.Count > 0;
+    }
+
+    private void Resum()
+    {
+        _modifierSums = _modifiers is { Count: > 0 } ? _modifiers.GroupBy(k => k.Key.Attribute).ToDictionary(g => g.Key, g => g.Sum(x => x.Value)) : null;
+    }
 
     /// <summary>The sub-effects in force at <paramref name="now"/>, with their spell.</summary>
     public IEnumerable<(ActiveSpell Spell, SubEffect Sub)> On(long now)
@@ -186,7 +227,8 @@ public sealed class EffectList
     /// player's passive buffs on it (stageD effects batch 2, <see cref="Passives"/>).
     /// </summary>
     public double Sum(string attribute, long now) =>
-        On(now).Where(x => x.Sub.Attribute == attribute).Sum(x => x.Sub.Value * x.Spell.Stacks) + (PassiveBuffs?.Invoke().GetValueOrDefault(attribute) ?? 0);
+        On(now).Where(x => x.Sub.Attribute == attribute).Sum(x => x.Sub.Value * x.Spell.Stacks) + (PassiveBuffs?.Invoke().GetValueOrDefault(attribute) ?? 0)
+        + (_modifierSums?.GetValueOrDefault(attribute) ?? 0);
 
     /// <summary>The entry of <paramref name="spell"/> by <paramref name="caster"/>; null = none.</summary>
     public ActiveSpell? Find(short spell, long caster) => _spells.FirstOrDefault(s => s.Spell.Id == spell && s.Caster == caster);
@@ -198,15 +240,19 @@ public sealed class EffectList
     internal bool Remove(ActiveSpell s)
     {
         s.Cancelled = true;
-        return _spells.Remove(s);
+        if (!_spells.Remove(s)) return false;
+        if (Watched) Modules.ModuleHost.BuffsEnded(Owner!, [s], AlbionLocal.Modules.BuffEnd.Removed);
+        return true;
     }
 
     /// <summary>Every spell gone (death, reset, knockdown), a forced movement under way with them; the diminishing returns stay.</summary>
     public void Clear()
     {
         foreach (var s in _spells) s.Cancelled = true;
+        var gone = Watched && _spells.Count > 0 ? _spells.ToList() : null;
         _spells.Clear();
         Forced = null;
+        if (gone is not null) Modules.ModuleHost.BuffsEnded(Owner!, gone, AlbionLocal.Modules.BuffEnd.Cleared);
     }
 }
 
@@ -384,6 +430,8 @@ public static class SpellEffects
         var list = unit.Effects;
         list.Prune(world.GameNow);
         var entry = list.Find(spell.Id, caster);
+        var isNew = entry is null;
+        var before = entry?.Stacks ?? 0;
         if (entry is null)
         {
             entry = new ActiveSpell
@@ -412,6 +460,7 @@ public static class SpellEffects
                 SpellCasts.At(world, map, end, () => Expired(world, unit));
         if (unit is Player victim && entry.Subs.Any(s => s.Active)) DeathRecaps.Effect(victim, entry, start); // stageP: crowd control and debuffs in the death recap
         if (!entry.Pending) Interrupt(unit, world.GameNow);
+        world.Modules.BuffApplied(unit, entry, isNew, before); // the modules' Buffs.OnApply / OnStackChange
         return entry;
     }
 
@@ -437,7 +486,12 @@ public static class SpellEffects
         foreach (var s in list.Spells.Where(match).ToList())
         {
             changed = true;
-            if (charges > 0 && s.Stacks > charges) s.Stacks -= (byte)charges;
+            if (charges > 0 && s.Stacks > charges)
+            {
+                var before = s.Stacks;
+                s.Stacks -= (byte)charges;
+                world.Modules.BuffStacks(unit, s, before); // the modules' Buffs.OnStackChange
+            }
             else list.Remove(s);
         }
         if (changed && unit is Player { Combat.Toggles.Count: > 0 } owner) SpellCasts.ToggleEntriesGone(owner);
@@ -896,7 +950,7 @@ public static class SpellEffects
     /// is left for its health. A shield used up is switched off (the list goes out at once, a sub-effect ended early); the
     /// DamageShieldUpdate carries what is left, or is bare at the break.
     /// </summary>
-    public static double Absorb(World world, IUnit unit, double damage, long now)
+    public static double Absorb(World world, IUnit unit, double damage, long now, IUnit attacker, HitOrigin origin, short spell)
     {
         if (damage <= 0 || unit.Effects.Count == 0) return damage;
         var broke = false;
@@ -904,14 +958,18 @@ public static class SpellEffects
         foreach (var (entry, sub) in unit.Effects.On(now).Where(x => x.Sub.Tag == "damageshield").ToList())
         {
             if (damage <= 0) break;
-            var take = Math.Min(sub.Shield, damage);
+            var take = world.Modules.BeforeAbsorb(unit, entry, Math.Min(sub.Shield, damage), sub.Shield, damage, attacker, origin, spell); // Combat.OnBeforeAbsorb
+            if (take < 0) continue; // a module lets the hit through this shield
             sub.Shield -= take;
             damage -= take;
             absorbed = true;
-            if (sub.Shield > 0.0001) continue;
-            sub.Shield = 0;
-            sub.Active = false;
-            broke = true;
+            if (sub.Shield <= 0.0001)
+            {
+                sub.Shield = 0;
+                sub.Active = false;
+                broke = true;
+            }
+            world.Modules.AfterAbsorb(unit, entry, take, sub.Shield, damage, attacker, origin, spell); // Combat.OnAfterAbsorb
         }
         if (!absorbed) return damage;
         if (broke)
@@ -956,6 +1014,7 @@ public static class SpellEffects
                 var enemy = (string?)node.Attribute("applyeffecttarget") is "enemy" or "groundatenemy";
                 if (enemy && !Hostile(owner, other, now)) continue;
                 if (node.Attribute("applychance") is not null && map.Random.NextDouble() >= SpellTemplate.Float(node, "applychance", 1)) continue;
+                if (owner.World.Modules.TriggerBlocked(owner, e, other, entry.Spell, spell, passive: false)) continue; // Spells.OnBeforeTrigger
                 sub.Uses++;
                 var target = enemy ? other : null;
                 SpellCasts.Execute(new SpellCasts.SpellContext(owner, map, entry.Spell, 0, entry.Ap, target, SpellMovement.PositionOf(target ?? owner, now), ticks)

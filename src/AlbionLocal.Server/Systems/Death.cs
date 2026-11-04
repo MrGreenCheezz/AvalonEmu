@@ -273,7 +273,11 @@ public static class Death
             for (var slot = 0; slot < container.Size; slot++)
             {
                 if (container[slot] is not { } item) continue;
-                if (wear is not null && Wear(item, wear, multiplier, random)) worn.Add(item);
+                if (wear is not null && Wear(item, wear, multiplier, random))
+                {
+                    worn.Add(item);
+                    if (item.DurabilityRaw <= 0) world.Modules.Broke(victim, item, "death"); // Items.OnBreak
+                }
                 if (stack is null) continue;
                 container.Take(slot);
                 var lost = RandomRound(item.Count * stack.For(item.Template.Kind), random);

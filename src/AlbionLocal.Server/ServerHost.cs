@@ -130,6 +130,9 @@ public sealed class ServerHost : IDisposable
         if (World.Rates != new Game.Rates())
             Log.Info("config", $"rates: {World.Rates.Describe(changedOnly: true)}");
         World.Bots.LoadNames(); // stage I: the names bots never take, read here rather than in a tick
+        // The C# modules (Modules:Enabled; docs/modules/README.md): found, built when their sources changed, loaded. A module that fails
+        // is logged and left out; the server starts anyway.
+        lock (World.Sync) World.Modules.LoadAll();
         Loop = new WorldLoop(World);
     }
 
@@ -164,6 +167,7 @@ public sealed class ServerHost : IDisposable
 
     /// <summary>The world bosses' settings (content/bosses.json).</summary>
     public BossSettings Bosses { get; }
+
 
     /// <summary>The world events' settings (content/events.json).</summary>
     public EventSettings Events { get; }
@@ -280,6 +284,7 @@ public sealed class ServerHost : IDisposable
         Log.Info("main", $"{Characters.List().Count} persisted character(s); new character start cluster {World.OpeningTutorial?.Tutorial.StartCluster ?? Starter.Cluster}");
         if (World.OpeningTutorial is not null)
             Log.Info("tutorial", "tutorial lab enabled for newly created characters; existing progress is retained; client-authored island route continues through starter-town departure (visual validation pending)");
+        lock (World.Sync) World.Modules.Started(); // the modules' ServerStarted
     }
 
     /// <summary>
@@ -294,6 +299,7 @@ public sealed class ServerHost : IDisposable
         WebPanel?.Dispose();
         Backups?.Dispose();
         Loop.Dispose();
+        lock (World.Sync) World.Modules.Shutdown(); // the modules' ServerStopping, then each unloaded with its storage saved
         lock (World.Sync) World.Duels.CancelAll(); // the wagers back before the sessions close (a disconnect would lose the duel)
         lock (World.Sync) World.Trades.CancelAll(); // the trades end (nothing has moved before a commit)
         GameServer.Dispose();

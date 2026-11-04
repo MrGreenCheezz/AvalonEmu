@@ -1,0 +1,9 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-custom-spells",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Spell hooks and a scripted spell: what the spell API looks like",
+  "api": "1.0",
+  "enabled": false
+}

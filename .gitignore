@@ -35,3 +35,11 @@ logs/
 /config.private/
 /src/AlbionLocal.Server/Properties/launchSettings.json
 /data/lab/
+
+# Server modules (docs/modules/README.md): each lives in its own repository, the examples here; their build output, runtime data and the owner's settings
+/modules/*
+!/modules/README.md
+!/modules/examples/
+data/modules/
+data/modules-bin/
+/config/modules/

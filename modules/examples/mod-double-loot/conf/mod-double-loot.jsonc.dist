@@ -1,0 +1,6 @@
+{
+  // The defaults of mod-double-loot. The server copies this file once to config/modules/mod-double-loot.jsonc: change it there, then .modules reload mod-double-loot.
+  "Enabled": true,
+  "LootFactor": 2,    // every stack of a mob's loot is multiplied by this
+  "FameFactor": 1.5   // the fame of a kill
+}

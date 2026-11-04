@@ -139,7 +139,12 @@ public sealed class Player(WorldSession session, World world, long id, Character
     public PlayerCombat Combat { get; } = new();
 
     /// <summary>Its active spells (stageD effects SPEC §1): buffs, crowd control, heals over time. Not saved (lives with the connection).</summary>
-    public Systems.EffectList Effects => _effects ??= new() { PassiveBuffs = () => Systems.Passives.Of(this).Buffs };
+    public Systems.EffectList Effects => _effects ??= new() { Owner = this, PassiveBuffs = () => Systems.Passives.Of(this).Buffs };
+
+    /// <summary>The main-hand item's object id at the last stats change (the modules' OnWeaponSwap); -1 before the first.</summary>
+    internal long ModuleMainHand { get; set; } = -1;
+
+    internal string? ModuleMainHandName { get; set; }
 
     private Systems.EffectList? _effects;
 
@@ -424,6 +429,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
     /// </summary>
     public bool RecalculateStats(long now, bool keep = false)
     {
+        World.Modules.MainHand(this); // the modules' Items.OnWeaponSwap
         Defense = ComputeDefense();
         var s = ComputeStats();
         // StageN companions: Companions:HealthFactor instead of the world bots' Bots:Combat:HealthFactor.

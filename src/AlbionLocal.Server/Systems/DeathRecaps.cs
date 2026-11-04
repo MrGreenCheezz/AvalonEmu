@@ -184,7 +184,7 @@ public sealed class DeathRecaps(World world)
         switch (source)
         {
             case Mob m:
-                return new Causer(m.Template.Name, "", -1, m.Template.Avatar, m.Template.AvatarRing, MobFlag, 0, 0, CauserMob, "", 0, buckets);
+                return new Causer(m.Template.ClientName, "", -1, m.Template.Avatar, m.Template.AvatarRing, MobFlag, 0, 0, CauserMob, "", 0, buckets);
             case Player p:
             {
                 var main = p.Inventory.Equipment[0];

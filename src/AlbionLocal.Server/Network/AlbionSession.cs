@@ -17,7 +17,7 @@ namespace AlbionLocal.Server.Network;
 /// configured answer instead (a filled response, none for a "silent" or "ignore" one, the bare rc-0 answer for an "ack" one), without
 /// the warning, logged at debug level and counted apart (<see cref="OpcodeTable.Stubbed"/>).
 /// </summary>
-public abstract class AlbionSession : IPhotonPeerHandler
+public abstract partial class AlbionSession : IPhotonPeerHandler
 {
     private readonly OpcodeTable _opcodes;
 
@@ -82,6 +82,7 @@ public abstract class AlbionSession : IPhotonPeerHandler
             Log.Debug(Name, $"<- {code}: the session is transferring, dropped");
             return;
         }
+        if (ModuleRequest(code, msg, request, requestId, encrypted)) return; // the modules' Network.OnRequest
         var handler = _opcodes.Find(code);
         var quiet = handler is { Quiet: true };
         var head = $"<- {code}{(requestId is { } id ? $" #{id}" : "")}{(encrypted ? " (enc)" : "")}";
@@ -135,6 +136,11 @@ public abstract class AlbionSession : IPhotonPeerHandler
             resp = ((AlbionResponse)Activator.CreateInstance(rt)!).FillEmpty();
         }
         if (resp is null) return;
+        if (ModuleResponse(code, ref resp)) // the modules' Network.OnResponse kept it back; what must follow it still does
+        {
+            AfterResponse(code, resp);
+            return;
+        }
         Peer.SendOperationResponse(AlbionSerializer.BuildResponse(resp, requestId, code), encrypted);
         Log.Debug(Name, $"-> {code} rc {resp.ReturnCode}");
         AfterResponse(code, resp);
@@ -156,14 +162,14 @@ public abstract class AlbionSession : IPhotonPeerHandler
     /// </summary>
     protected void SendResponse(OperationCodes code, AlbionResponse resp, int? requestId, bool encrypted)
     {
-        if (Peer is BotPeer) return; // stage I: a bot's session has no client (nothing is serialized for it)
+        if (Peer is BotPeer || ModuleResponse(code, ref resp)) return; // stage I: a bot's session has no client (nothing is serialized for it)
         Peer.SendOperationResponse(AlbionSerializer.BuildResponse(resp, requestId, code), encrypted);
         Log.Debug(Name, $"-> {code}{(requestId is { } id ? $" #{id}" : " (no request id)")} rc {resp.ReturnCode}");
     }
 
     protected void SendEvent(AlbionEvent ev, bool encrypt = false)
     {
-        if (Peer is BotPeer) return; // stage I: a bot's session has no client (nothing is serialized for it)
+        if (Peer is BotPeer || ModuleEvent(ref ev)) return; // stage I: a bot's session has no client (nothing is serialized for it)
         Peer.SendEvent(AlbionSerializer.BuildEvent(ev), encrypt);
         Log.Debug(Name, $"-> event {ev.GetType().Name}");
     }

@@ -88,6 +88,7 @@ public abstract class MobAI(Mob me)
             try
             {
                 if (!mob.SpawnSpellsCast) Systems.MobEvents.Spawned(world, map, mob); // stageN spells-bosses: <SpawnSpells>
+                if (world.Modules.BeforeThink(mob, map)) continue; // the modules' Mobs.OnBeforeThink
                 mob.AI.Update(world, map);
             }
             catch (Exception e)

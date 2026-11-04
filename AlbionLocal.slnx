@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/AlbionLocal.Modules.Api/AlbionLocal.Modules.Api.csproj" />
     <Project Path="src/AlbionLocal.Photon/AlbionLocal.Photon.csproj" />
     <Project Path="src/AlbionLocal.Protocol/AlbionLocal.Protocol.csproj" />
     <Project Path="src/AlbionLocal.Server/AlbionLocal.Server.csproj" />

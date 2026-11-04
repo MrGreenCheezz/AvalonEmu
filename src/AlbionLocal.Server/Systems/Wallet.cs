@@ -33,6 +33,7 @@ public static class Wallet
         if (raw == 0) return true;
         c.Silver -= raw;
         Changed(p, string.Create(CultureInfo.InvariantCulture, $"-{raw / 10000.0:0.####} silver ({why})"));
+        p.World.Modules.SilverChanged(p, -raw, why); // the modules' Players.OnSilverChanged
         return true;
     }
 
@@ -42,6 +43,7 @@ public static class Wallet
         if (raw <= 0) return;
         p.Character.Silver = checked(p.Character.Silver + raw);
         Changed(p, string.Create(CultureInfo.InvariantCulture, $"+{raw / 10000.0:0.####} silver ({why})"));
+        p.World.Modules.SilverChanged(p, raw, why); // the modules' Players.OnSilverChanged
     }
 
     /// <summary>
@@ -62,9 +64,11 @@ public static class Wallet
     /// <summary>Sets both values (GM .money) and sends UpdateMoney.</summary>
     public static void Set(Player p, long silver, long gold)
     {
+        var silverBefore = p.Character.Silver;
         p.Character.Silver = Math.Max(0, silver);
         p.Character.Gold = Math.Max(0, gold);
         Changed(p, "set");
+        p.World.Modules.SilverChanged(p, p.Character.Silver - silverBefore, "set"); // the modules' Players.OnSilverChanged
     }
 
     private static void Changed(Player p, string what)

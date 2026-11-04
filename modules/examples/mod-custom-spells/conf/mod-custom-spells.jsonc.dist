@@ -1,0 +1,18 @@
+{
+  // The defaults of mod-custom-spells. The server copies this file once to config/modules/mod-custom-spells.jsonc: change it there, then .modules reload mod-custom-spells.
+  "DashSpell": "CLOCKWORK_DASH",
+  "FallbackSpell": "SWORD_SPIN",
+  "SlowSpell": "CLOCKWORK_DASH_SLOW",            // the pack's 1 s slow; FallbackSlow without the pack
+  "FallbackSlow": "PASSIVE_SLOWPOISON_EFFECT_MOBS",
+  "FieldSeconds": 6,                              // the plugin's field lingers this long at the dash's aim point
+  "FieldRadius": 4,
+  "FieldTickSeconds": 0.5,
+  "Mount": "T5_MOUNT_HORSE",
+  "FastGallopBuff": "MOUNT_SPEEDBUFF_DIREWOLF_T8",
+  "NightFrom": 20,
+  "NightTo": 6,
+  "WhenBuff": "",                                 // a spells.xml buff name; "" = only at night
+  "Weapons": [ "Sword" ],                         // weapon lines (WeaponType): Sword, Axe, Bow, FireStaff, …
+  "LowHealth": 0.3,
+  "DamageBonus": 0.10
+}

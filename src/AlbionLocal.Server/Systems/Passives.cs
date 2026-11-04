@@ -114,9 +114,10 @@ public static class Passives
         var hash = new HashCode();
         var any = false;
         var e = p.Inventory.Equipment;
+        var modules = p.World.Modules.WantsPassives; // an OnCalcPassives listens: every worn item counts
         for (var s = 0; s < Slots; s++)
         {
-            if (e[s] is not { } item || item.Passive.Length == 0 && item.Soul is null) continue;
+            if (e[s] is not { } item || item.Passive.Length == 0 && item.Soul is null && !modules) continue;
             any = true;
             hash.Add(s);
             hash.Add(item.Id);
@@ -168,6 +169,7 @@ public static class Passives
             }
             Traits(p, item, spells, buffs, settings);
         }
+        p.World.Modules.CalcPassives(p, buffs); // the modules' Items.OnCalcPassives
         var set = new PassiveSet { Key = key, Spells = spells, Buffs = buffs, Weight = weight, Gathering = gathering };
         var now = p.World.GameNow;
         foreach (var ps in spells)
@@ -252,6 +254,7 @@ public static class Passives
                     { CcAbilityPower = ps.CcAp, Depth = 1 };
                 if (!SpellCasts.ConditionsHold(c, node)) continue;
                 if (node.Attribute("chance") is not null && map.Random.NextDouble() >= SpellTemplate.Float(node, "chance", 1)) continue;
+                if (owner.World.Modules.TriggerBlocked(owner, e, other, ps.Spell, spell, passive: true)) continue; // Spells.OnBeforeTrigger
                 SpellCasts.Execute(c, spell);
             }
     }

@@ -74,6 +74,7 @@ public static class Destiny
         if (journals) Journals.OnFame(p, boardGain ?? gain, ctx, source, pvp); // stageH journals SPEC §A.3: after the UpdateFame of the gain
         if (guild && !pvp) p.World.Factions.OnFame(p, gain, ctx.Source); // stageN faction SPEC §2: faction points and standing in a warfare cluster
         if (ctx.Source == FameSource.Kill) Attunement.OnFame(p, gain); // stageN awakening SPEC §5: the awakened weapon in hand gains attunement
+        p.World.Modules.FameGained(p, gain, ctx, source, pvp); // the modules' Players.OnFameGained
         return steps;
     }
 

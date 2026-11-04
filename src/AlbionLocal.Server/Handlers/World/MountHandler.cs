@@ -25,7 +25,7 @@ public sealed partial class WorldSession
             else Mounts.Dismount(player);
             return null;
         }
-        if (Mounts.Check(player, req.v3) is { } why)
+        if (Mounts.Check(player, req.v3, req.v5) is { } why)
         {
             Log.Info(Name, $"'{player.Character.Name}' Mount refused ({Mounts.Refused}): {why}");
             return new GenericResponse { ReturnCode = Mounts.Refused };

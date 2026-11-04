@@ -188,6 +188,7 @@ public static partial class SpellCasts
     /// magiccasttimereduction) (SPEC §3.1).
     /// <paramref name="mount"/>: the ridden mount item when <paramref name="slots"/> is its spell-slot layout (a mount spell,
     /// <see cref="Mounts.SpellSlots"/>): it grants the spell (ability power, energy) instead of the equipment in that slot.
+    /// <paramref name="grantedBy"/>: the worn item an extra-slot spell comes from (<see cref="ExtraBars"/>; null for a module's override: the
     /// Returns the cast to start, or the refusal.
     /// </summary>
     public static (PendingCast? Cast, CastRefusal Why) Check(Player p, int[] slots, byte slot, int spellId, long targetId, Vector2 aim, byte counter, long start,
@@ -316,6 +317,7 @@ public static partial class SpellCasts
     public static void Cancel(Player p, PendingCast cast, bool interrupted, bool flush = true)
     {
         if (p.Combat.Cast == cast) p.Combat.Cast = null;
+        p.World.Modules.CastCancelled(p, cast, interrupted); // the modules' Spells.OnCancel
         p.SendToObservers(new CastCancelEvent { ddn = p.Id, buo = interrupted, bup = cast.Counter, Extra = new() { [9] = (byte)0 } });
         if (interrupted) p.Session.Send(new CastCancelEvent { ddn = p.Id, buo = true, bup = cast.Counter, buq = CooldownFactorOf(p) });
         if (flush && p.Combat.Cast is null) SendHeldToggleCancels(p);
@@ -349,14 +351,19 @@ public static partial class SpellCasts
             return;
         }
         var spell = cast.Spell;
-        var energy = p.Energy.At(cast.End) - cast.EnergyCost;
+        var energyBefore = p.Energy.At(cast.End);
+        var energy = energyBefore - cast.EnergyCost;
         p.Energy.Set(energy, Math.Max(cast.End, p.Energy.Stamp));
+        world.Modules.EnergyChanged(p, energyBefore, energy, p.Id, spell.Id); // the modules' Units.OnEnergyChange
         var point = cast.Target is { } at ? SpellMovement.PositionOf(at, cast.End) : spell.Target == "ground" || storedCast ? cast.Aim : p.PositionAt(DateTime.UtcNow);
         var flight
  = spell.ProjectileSpeed is { } speed ? Vector2.Distance(p.PositionAt(DateTime.UtcNow), point) / speed : 0;
         var hit = cast.End + Seconds(spell.HitDelay + flight);
         var targetId = cast.Target?.Id ?? (NamesCaster(spell) ? p.Id : 0);
         var cooldown = CooldownFactorOf(p);
+        // The modules' Formulas.OnCalcCooldown: the client is told the changed cooldown as CastFinished's factor (recast × key 6).
+        var recast = world.Modules.CalcCooldown(p, spell, cast.Target, spell.RecastDelay * cooldown);
+        if (spell.RecastDelay > 0 && recast != spell.RecastDelay * cooldown) cooldown = (float)(recast / spell.RecastDelay);
         p.SendAround(new EnergyUpdateEvent { ddn = p.Id, b5b = cast.End, b5c = -cast.EnergyCost, b5d = p.Energy.Value, b5e = Combat.EnergyCast, b5f = p.Id, b5g = spell.Id });
         if (consumable) Consumables.UseSlotItem(p, cast);
         p.SendAround(new CastFinishedEvent
@@ -374,6 +381,7 @@ public static partial class SpellCasts
         if (toggle is null) p.Combat.Cooldowns[spell.Id] = cast.End + Seconds(spell.RecastDelay * cooldown);
         if (consumable) p.Combat.SlotCooldowns[cast.Slot] = new SlotCooldown(cast.End, cast.End + Seconds(spell.RecastDelay * cooldown), Seconds(spell.RecastDelay));
         MultiCast(p, cast);
+        world.Modules.CastDone(p, cast, point, cast.AbilityPower); // the modules' Spells.OnCast, Mounts.OnMountSpell, a scripted spell's OnCast
         OpeningTutorial.SpellFinished(p, spell);
         Log.Debug("combat", string.Create(CultureInfo.InvariantCulture,
             $"'{p.Character.Name}' cast {spell} ({cast.EnergyCost} energy, AP {cast.AbilityPower:0.#}){(cast.Target is { } t ? $" on {t}" : "")}"));
@@ -384,8 +392,14 @@ public static partial class SpellCasts
         At(world, map, hit, () =>
         {
             if (p.Map != map || context.ToggledOff) return;
-            if (consumable) Consumables.Hit(context, spell);
-            else Execute(context, spell);
+            // The modules' Spells.OnBeforeHit (Cancel) and a scripted spell's OnHit (ReplaceEffects), then OnAfterHit.
+            var unitsHit = 0;
+            if (world.Modules.BeforeHit(context, cast))
+            {
+                if (consumable) Consumables.Hit(context, spell);
+                else unitsHit = Execute(context, spell);
+            }
+            world.Modules.AfterHit(context, cast, unitsHit);
         });
         StartChannel(p, context, cast);
     }
@@ -435,7 +449,8 @@ public static partial class SpellCasts
             At(world, map, ticks, () =>
             {
                 if (p.Combat.Channel != state || p.Map != map) return;
-                Execute(context with { Ticks = ticks, ChannelTick = tick, Point = c.Target is { } t ? SpellMovement.PositionOf(t, ticks) : cast.Spell.Target == "ground" ? cast.Aim : SpellMovement.PositionOf(p, ticks) }, channel);
+                var at = context with { Ticks = ticks, ChannelTick = tick, Point = c.Target is { } t ? SpellMovement.PositionOf(t, ticks) : cast.Spell.Target == "ground" ? cast.Aim : SpellMovement.PositionOf(p, ticks) };
+                if (world.Modules.ChannelTick(p, cast, channel, tick, info.Count, at.Target, at.Point, at.AbilityPower)) Execute(at, channel); // Spells.OnTick, a script's OnTick
             });
         }
         At(world, map, state.End, () =>
@@ -696,6 +711,9 @@ public static partial class SpellCasts
         public readonly Dictionary<(short Spell, long Unit), (IUnit Unit, long Caster, byte Counter)?> Blocked = [];
         public readonly List<Application> Applications = [];
 
+        /// <summary>The units other than the caster that this hit acts on (Spells.OnAfterHit).</summary>
+        public readonly HashSet<long> Hit = [];
+
         /// <summary>The entries this hit listed but that are not in force yet, by spell (<see cref="ActiveSpell.Pending"/>).</summary>
         public readonly Dictionary<short, List<(IUnit Unit, ActiveSpell Entry)>> Pending = [];
 
@@ -720,12 +738,13 @@ public static partial class SpellCasts
     /// each spell a spellimmunity blocked on a unit (nothing else of it runs there), then the instant effects in document
     /// order (damage and heals with their CastHit and HealthUpdate, the over-time ticks, the pulses, the removals).
     /// </summary>
-    public static void Execute(SpellContext c, SpellTemplate spell)
+    public static int Execute(SpellContext c, SpellTemplate spell)
     {
-        if (c.Depth > 8) return;
+        if (c.Depth > 8) return 0;
         var world = c.Caster.World;
         var plan = new Plan();
         Collect(c, spell, plan);
+        if (world.Modules.Hooks.BuffCheck.Any) plan.Applications.RemoveAll(a => world.Modules.BuffBlocked(a.Unit, a.Spell, a.Context.Caster)); // Buffs.OnBeforeApply
         var changed = Removed(plan, refresh: false);
         // An effect on a Hostile player or bot is an attack (stageJ pvp-spells SPEC §2.5, D6): its bookkeeping once per hit and unit, before
         // the effect (a stun, a slow, a knockback; a damage hit runs it again in Pvp.Damage, which changes nothing then).
@@ -773,6 +792,7 @@ public static partial class SpellCasts
         if (ownMove) SpellEffects.Send(world, c.Caster);
         foreach (var id in plan.Pending.Keys.ToList()) InForce(world, plan, id);
         foreach (var u in shielded) SpellEffects.ShieldChanged(u, world.GameNow); // in force now: DamageShieldUpdate {1 left}
+        return plan.Hit.Count;
     }
 
     /// <summary>
@@ -787,6 +807,7 @@ public static partial class SpellCasts
         var world = c.Caster.World;
         var plan = new Plan();
         Collect(c, spell, plan);
+        if (world.Modules.Hooks.BuffCheck.Any) plan.Applications.RemoveAll(a => world.Modules.BuffBlocked(a.Unit, a.Spell, a.Context.Caster)); // Buffs.OnBeforeApply
         var changed = Removed(plan, refresh: true);
         var entries = new List<(Application A, ActiveSpell Entry)>();
         foreach (var a in plan.Applications)
@@ -1038,9 +1059,12 @@ public static partial class SpellCasts
     {
         var key = (spell.Id, unit.Id);
         if (plan.Blocked.TryGetValue(key, out var b)) return b is not null;
-        var blocked = unit is Mob { Immune: true } || SpellEffects.Immune(unit, spell, c.Caster.World.GameNow);
+        var blocked = unit is Mob { Immune: true } || SpellEffects.Immune(unit, spell, c.Caster.World.GameNow)
+            || c.Caster.World.Modules.EffectBlocked(c, spell, unit); // the modules' Spells.OnBeforeEffect (Cancel)
         plan.Blocked[key] = blocked ? (unit, c.Caster.Id, c.CounterOf(spell)) : null;
         if (blocked) Log.Debug("combat", $"{spell} on #{unit.Id} is blocked by a spell immunity");
+        if (blocked) c.Caster.World.Modules.SpellAvoided(c.Caster, spell, unit, c.Caster.World.GameNow); // Combat.OnHitAvoided
+        else if (unit != c.Caster) plan.Hit.Add(unit.Id);
         return blocked;
     }
 
@@ -1160,7 +1184,12 @@ public static partial class SpellCasts
             if (c.Caster != p) PvpDetails.Healed(c.Caster, p, c.Ticks); // stageP: healing sickness by distinct healers, before this heal
             var amount = Relative(Combat.Heal(change, c.AbilityPower), p.Health.At(c.Ticks), p.Health.Max);
             if (SpellTemplate.Bool(node, "usehealingmodifiers", true)) amount *= Combat.HealBonusFactor(c.Caster, c.Ticks) * SpellEffects.HealFactor(p, c.Ticks);
-            Combat.HealPlayer(c.Caster, p, amount, origin, spell.Id, c.Ticks);
+            var modules = c.Caster.World.Modules; // Formulas.OnCalcHeal, Spells.OnBeforeDamage / OnAfterDamage
+            if (modules.DamageEarly(c.Caster, spell, p, amount, heal: true, energy: false, origin == HitOrigin.OverTime, origin == HitOrigin.Area || c.FromArea, magic: true) is not { } healed) return;
+            var healLate = modules.WantsDamageLate(spell);
+            var healBefore = healLate ? Modules.ModuleHost.HealthOf(p, c.Caster.World.GameNow) : 0;
+            Combat.HealPlayer(c.Caster, p, healed, origin, spell.Id, c.Ticks);
+            if (healLate) modules.DamageLate(c.Caster, spell, p, healBefore, heal: true, energy: false, origin == HitOrigin.OverTime, origin == HitOrigin.Area || c.FromArea, magic: true);
             return;
         }
         if (energy)
@@ -1188,8 +1217,14 @@ public static partial class SpellCasts
                 q.Health.At(c.Ticks), q.Health.Max);
             var cast = firstHit ? Combat.CastHit(q.Id, c.Caster.Id, spell.Id, c.CounterOf(spell)) : null;
             var lands = Pvp.Refusal(c.Caster, q, c.Ticks) is null;
-            Pvp.Damage(c.Caster, q, -dealt * Combat.ResistanceOf(q, type), type, origin, spell.Id, c.Ticks, cast,
+            var pvpModules = c.Caster.World.Modules; // Spells.OnBeforeDamage / OnAfterDamage
+            var area = origin == HitOrigin.Area || c.FromArea;
+            if (pvpModules.DamageEarly(c.Caster, spell, q, -dealt * Combat.ResistanceOf(q, type), heal: false, energy: false, origin == HitOrigin.OverTime, area, type == EffectType.Magic) is not { } pvpDamage) { if (cast is not null) q.SendAround(cast); return; } // the CastHit still goes out: the client shows the hit, no damage
+            var pvpLate = pvpModules.WantsDamageLate(spell);
+            var pvpBefore = pvpLate ? Modules.ModuleHost.HealthOf(q, c.Caster.World.GameNow) : 0;
+            Pvp.Damage(c.Caster, q, pvpDamage, type, origin, spell.Id, c.Ticks, cast,
                 reflectable: (string?)node.Attribute("reflectdamage") != "never");
+            if (pvpLate) pvpModules.DamageLate(c.Caster, spell, q, pvpBefore, heal: false, energy: false, origin == HitOrigin.OverTime, area, type == EffectType.Magic);
             if (lands && SpellTemplate.Bool(node, "interruptscasting")) InterruptPlayer(q, c.Ticks, "interruptscasting"); // after the hit, as on a mob
             return;
         }
@@ -1198,7 +1233,17 @@ public static partial class SpellCasts
         var value = Relative(Combat.SpellChange(change, c.AbilityPower) * SpellEffects.DealtFactor(c.Caster, spell: true, type, vsPlayer: false, c.Ticks),
             mob.Health.At(c.Ticks), mob.Health.Max);
         var hit = firstHit ? Combat.CastHit(mob.Id, c.Caster.Id, spell.Id, c.CounterOf(spell)) : null;
-        Combat.Damage(c.Caster, mob, -value * Combat.ResistanceOf(mob, type), type, origin, spell.Id, c.Ticks, hit);
+        var mobModules = c.Caster.World.Modules; // Spells.OnBeforeDamage / OnAfterDamage
+        var inArea = origin == HitOrigin.Area || c.FromArea;
+        if (mobModules.DamageEarly(c.Caster, spell, mob, -value * Combat.ResistanceOf(mob, type), heal: false, energy: false, origin == HitOrigin.OverTime, inArea, type == EffectType.Magic) is not { } mobDamage)
+        {
+            if (hit is not null) mob.Map?.SendToObservers(mob, hit); // the CastHit still goes out: the client shows the hit, no damage
+            return;
+        }
+        var mobLate = mobModules.WantsDamageLate(spell);
+        var mobBefore = mobLate ? Modules.ModuleHost.HealthOf(mob, c.Caster.World.GameNow) : 0;
+        Combat.Damage(c.Caster, mob, mobDamage, type, origin, spell.Id, c.Ticks, hit);
+        if (mobLate) mobModules.DamageLate(c.Caster, spell, mob, mobBefore, heal: false, energy: false, origin == HitOrigin.OverTime, inArea, type == EffectType.Magic);
         if (SpellTemplate.Bool(node, "interruptscasting") && mob.Attackable) InterruptMob(mob); // as interruptcast, after the hit
     }
 
@@ -1215,8 +1260,10 @@ public static partial class SpellCasts
         if (p.Combat.Down is not null) return;
         var overTime = origin == HitOrigin.OverTime;
         var gain = Math.Max(0, overTime ? (float)amount : Combat.Rounded(amount));
-        var after = Math.Min(p.Energy.Max, p.Energy.At(ticks) + gain);
+        var energyBefore = p.Energy.At(ticks);
+        var after = Math.Min(p.Energy.Max, energyBefore + gain);
         p.Energy.Set(after, Math.Max(ticks, p.Energy.Stamp));
+        p.World.Modules.EnergyChanged(p, energyBefore, after, source != 0 ? source : p.Id, spell.Id); // Units.OnEnergyChange
         p.SendAround(new EnergyUpdateEvent { ddn = p.Id, b5b = ticks, b5c = gain, b5d = after, b5e = (byte)(overTime ? 5 : 2), b5f = source != 0 ? source : p.Id, b5g = spell.Id });
     }
 
@@ -1245,6 +1292,7 @@ public static partial class SpellCasts
         if (p.Combat.Down is not null || amount <= 0) return before;
         var after = (float)Math.Max(0, before - amount);
         p.Energy.Set(after, Math.Max(ticks, p.Energy.Stamp));
+        p.World.Modules.EnergyChanged(p, before, after, source, spell.Id); // Units.OnEnergyChange
         p.SendAround(new EnergyUpdateEvent
         {
             ddn = p.Id, b5b = ticks, b5c = after - before, b5d = after, b5e = (byte)(origin == HitOrigin.OverTime ? 5 : 2), b5f = source, b5g = spell.Id,
@@ -1275,6 +1323,7 @@ public static partial class SpellCasts
             {
                 if (c.Caster.Map != c.Map || c.ToggledOff || target is Player { Map: var there } && there != c.Map) return; // a Friend who left
                 if (sub is not null && (entry!.Cancelled || sub.Generation != generation)) return;
+                c.Caster.World.Modules.BuffTicked(unit, entry); // the modules' Buffs.OnTick
                 Change(c with { Ticks = ticks }, spell, node, target, HitOrigin.OverTime, firstHit: false, entry?.Stacks ?? 1);
             });
         }

@@ -86,7 +86,7 @@ public sealed partial class WorldSession
         // A second Join on one connection (never captured): the old player leaves first, so that what its OnLogout
         // changes in the items is in the character the new item objects are made from. The scripts of the new one run
         // after JoinFinished (AfterResponse).
-        if (Player is { } old) Leave(old);
+        if (Player is { } old) Leave(old, clusterChange: false);
         // A reconnect: the player of the old connection (up to its 30 s timeout) shares the
         // live character but has an inventory of its own. A harvest it had under way would finish into that one and save
         // it over the character (FinishHarvest, Player.SaveItems), so it ends here, without an event: its client is gone.

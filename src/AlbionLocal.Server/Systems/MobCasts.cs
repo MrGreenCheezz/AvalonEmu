@@ -224,11 +224,15 @@ public static class MobCasts
             ddn = mob.Id, bvw = targetId, bvx = cast.WirePoint, bvy = spell.Id, bvz = cast.End, bv0 = hit, Extra = new() { [6] = cast.Counter, [7] = (short)0 },
         });
         cast.Owner?.OnCastEvent(cast, "onCastSuccessful");
+        world.Modules.MobCastDone(mob, spell, cast.Ground ? null : cast.Target, aim); // the modules' Spells.OnCast
         SpellCasts.At(world, map, hit, () =>
         {
             if (mob.Map != map || mob.Dead || mob.Removed) return;
             var target = cast.Ground ? null : cast.Target;
-            Execute(new MobHit(mob, map, spell, cast.Counter, cast.Ap, target, cast.Ground ? cast.Point : PositionOf(target) ?? mob.Position, hit) { Cast = cast }, spell);
+            var point = cast.Ground ? cast.Point : PositionOf(target) ?? mob.Position;
+            // The modules' Spells.OnBeforeHit (Cancel) and a scripted spell's OnHit (ReplaceEffects), then OnAfterHit.
+            var unitsHit = world.Modules.MobBeforeHit(mob, spell, target, point, cast.Ap) ? Execute(new MobHit(mob, map, spell, cast.Counter, cast.Ap, target, point, hit) { Cast = cast }, spell) : 0;
+            world.Modules.MobHitDone(mob, spell, target, point, unitsHit); // Spells.OnAfterHit
         });
         StartChannel(world, map, cast);
         cast.Owner?.OnCastFinished(cast);
@@ -249,6 +253,7 @@ public static class MobCasts
         if (cast.Over) return;
         cast.Over = true;
         var mob = cast.Caster;
+        if (!cast.Finished) mob.World?.Modules.MobCastCancelled(mob, cast.Spell, cast.Ground ? null : cast.Target, cast.Point, interrupted); // Spells.OnCancel
         if (!cast.Finished) mob.SendAround(new CastCancelEvent { ddn = mob.Id, buo = interrupted, bup = cast.Counter, Extra = new() { [9] = (byte)0 } });
         else if (cast.Channel is not null) mob.SendAround(new ChannelingEndedEvent { ddn = mob.Id, bwu = 2, bwv = cast.Counter });
         foreach (var area in cast.Areas.ToList()) Remove(area);
@@ -278,6 +283,7 @@ public static class MobCasts
                 if (cast.Over || mob.Map != map || mob.Dead || mob.Removed) return;
                 mob.SendAround(new CastSpellEvent { ddn = mob.Id, bvx = cast.WirePoint, bvy = channel.Id, bvz = ticks, bv0 = ticks, Extra = new() { [6] = cast.Counter, [7] = (short)0 } });
                 var target = cast.Ground ? null : cast.Target;
+                if (world.Modules.MobChannelTick(mob, cast.Spell, channel, tick, info.Count, target, cast.Ground ? cast.Point : PositionOf(target) ?? mob.Position, cast.Ap)) // Spells.OnTick
                 Execute(new MobHit(mob, map, channel, cast.Counter, cast.Ap, target, cast.Ground ? cast.Point : PositionOf(target) ?? mob.Position, ticks)
                     { Cast = cast, ListHits = true, FirstTick = first, ChannelTick = tick }, channel);
                 cast.Owner?.OnCastEvent(cast, "onChannelingHit");
@@ -348,11 +354,11 @@ public static class MobCasts
     /// Runs <paramref name="spell"/> with <paramref name="c"/>: the listings (one ActiveSpellEffectsUpdate per changed unit), the
     /// CastHit(s) per reached unit in the order reached (the target before the mob itself, SPEC §3), then the instant effects.
     /// </summary>
-    public static void Execute(MobHit c, SpellTemplate spell)
+    public static int Execute(MobHit c, SpellTemplate spell)
     {
-        if (c.Depth > 8 || c.Caster.World is not { } world) return;
+        if (c.Depth > 8 || c.Caster.World is not { } world) return 0;
         var plan = new Plan();
-        Collect(c, spell, plan);
+        var reached = Collect(c, spell, plan);
         var changed = new List<IUnit>();
         var entries = new List<(MobHit Context, ActiveSpell Entry, SubEffect?[] Subs, IUnit Unit)>();
         foreach (var (ctx, s, unit, subs) in plan.Applications)
@@ -394,6 +400,7 @@ public static class MobCasts
             if (UnitById(c, unitId) is { } unit)
                 unit.SendAround(new CastHitEvent { ddn = unit.Id, bu3 = c.Caster.Id, bu4 = id, bu5 = 2, Extra = new() { [4] = (byte)0 } });
         Run(c, spell, plan);
+        return reached.Count(id => id != c.Caster.Id);
     }
 
     private static IUnit? UnitById(MobHit c, long id) =>
@@ -420,7 +427,7 @@ public static class MobCasts
                 if (!Holds(plan, c, node, unit)) continue;
                 if (unit is Player && SpellEffects.Immune(unit, spell, c.Ticks))
                 {
-                    plan.Blocked.Add((spell.Id, unit.Id));
+                    if (plan.Blocked.Add((spell.Id, unit.Id))) world.Modules.SpellAvoided(c.Caster, spell, unit, c.Ticks); // Combat.OnHitAvoided
                     continue;
                 }
                 if (tag == "applyspell")
@@ -660,8 +667,13 @@ public static class MobCasts
             var value = Relative(Combat.SpellChange(change, c.Ap) * SpellEffects.DealtFactor(c.Caster, spell: true, type, vsPlayer: true, c.Ticks),
                 p.Health.At(c.Ticks), p.Health.Max);
             var resistance = SpellTemplate.Bool(node, "ignorearmor") ? 1 : Combat.ResistanceOf(p, type);
+            var modules = p.World.Modules; // Spells.OnBeforeDamage / OnAfterDamage
+            if (modules.DamageEarly(c.Caster, spell, p, -value * resistance, heal: false, energy: false, origin == HitOrigin.OverTime, origin == HitOrigin.Area, type == EffectType.Magic) is not { } damage) return;
+            var late = modules.WantsDamageLate(spell);
+            var before = late ? Modules.ModuleHost.HealthOf(p, p.World.GameNow) : 0;
             // reflectdamage="never" (321 nodes; stageJ pvp-spells phase 0): the player's reflectdamageactive does not answer this hit.
-            Combat.DamagePlayer(c.Caster, p, -value * resistance, type, origin, spell.Id, c.Ticks, reflectable: (string?)node.Attribute("reflectdamage") != "never");
+            Combat.DamagePlayer(c.Caster, p, damage, type, origin, spell.Id, c.Ticks, reflectable: (string?)node.Attribute("reflectdamage") != "never");
+            if (late) modules.DamageLate(c.Caster, spell, p, before, heal: false, energy: false, origin == HitOrigin.OverTime, origin == HitOrigin.Area, type == EffectType.Magic);
             return;
         }
         if (change > 0 && unit is Mob m)
@@ -685,6 +697,7 @@ public static class MobCasts
         var after = Math.Min(mob.Health.Max, before + Math.Max(0, origin == HitOrigin.OverTime ? (float)amount : Combat.Rounded(amount)));
         mob.Health.Set(after, Math.Max(ticks, mob.Health.Stamp));
         map.SendToObservers(mob, Combat.HealthUpdate(mob.Id, ticks, after - before, after, EffectType.Magic, origin, mob.Id, spell));
+        mob.World?.Modules.HealthChanged(mob, before, after, mob.Id, spell, origin); // Units.OnHealthChange
     }
 
     /// <summary>attributechangeovertime: count ticks from initialinterval after the hit, every interval, origin 5, while its entry on the unit stays (removeonleave, a reset, a death end it).</summary>

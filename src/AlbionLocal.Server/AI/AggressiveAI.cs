@@ -69,6 +69,21 @@ public class AggressiveAI(Mob me) : MobAI(me)
     /// <summary>The no-hit leash counts again from now (a mob CastStart restarts it, stageD mobspells §5).</summary>
     protected void RestartLeash(World world) => _lastSwing = world.Now;
 
+    /// <summary>A module has this update's AI (Mobs.OnBeforeThink): no leash for the time.</summary>
+    internal void HoldLeash(World world) => RestartLeash(world);
+
+    /// <summary>A module's order (<c>IMob.Attack</c>): one swing at <paramref name="target"/> when it is in reach and sight and a swing is due; false otherwise.</summary>
+    internal bool OrderSwing(World world, Map map, Player target)
+    {
+        var now = world.GameNow;
+        if (State != MobState.Combat || !CanAttack || now < _nextSwing || SpellEffects.Stunned(Me, now) || SpellMovement.Moving(Me, now)) return false;
+        var there = target.PositionAt(DateTime.UtcNow);
+        if (Vector2.Distance(Me.Position, there) > Reach(world) || !Sees(world, map, Me.Position, there)) return false;
+        if (Me.Motion.Moving) Me.Motion.Stop(MotionMaster.Facing(Me.Position, there));
+        Swing(world, map, target, now);
+        return true;
+    }
+
     /// <summary>
     /// <see cref="World.Clock"/> time of its last swing's start (its combat entry before the first): the no-hit leash counts
     /// from it, as the captured resets came 3.8-4.0 s after the mob's last Attack (SPEC §9 Q3, mobs/mob_reset.txt).
@@ -204,6 +219,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
             if (!Sees(world, map, here, at)) continue; // behind a wall (stageN mobnav)
             (best, bestDistance) = (p, d);
         }
+        if (best is not null && world.Modules.BeforeAggro(Me, best)) return null; // the modules' Mobs.OnBeforeAggro
         return best;
     }
 
@@ -241,6 +257,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
         Log.Debug("ai", string.Create(CultureInfo.InvariantCulture,
             $"{Me} fights '{target.Character.Name}': first basic attack ready in {(_nextSwing - world.GameNow) / (double)TimeSpan.TicksPerSecond:0.###} s"));
         OnEnterCombat(world);
+        world.Modules.MobAggro(Me, target); // the modules' Mobs.OnAggro
         if (!alert || Me.Template.AlertRadius <= 0) return;
         var here = Me.Position;
         foreach (var other in map.Objects.Values.OfType<Mob>())
@@ -281,10 +298,10 @@ public class AggressiveAI(Mob me) : MobAI(me)
         foreach (var p in Me.Threat.Keys.Where(p => !Valid(p, map)).ToList()) Me.Threat.Remove(p);
         if (Me.Threat.Count == 0)
         {
-            Reset(world, map, "no target left");
+            if (!world.Modules.LeaveCombatBlocked(Me, "no target left")) Reset(world, map, "no target left"); // the modules' Mobs.OnBeforeLeaveCombat
             return;
         }
-        if (Pursuit > 0 && Vector2.Distance(Me.Position, Me.Home) > Pursuit)
+        if (Pursuit > 0 && Vector2.Distance(Me.Position, Me.Home) > Pursuit && !world.Modules.LeaveCombatBlocked(Me, "pursuit radius"))
         {
             Reset(world, map, "pursuit radius");
             return;
@@ -300,9 +317,10 @@ public class AggressiveAI(Mob me) : MobAI(me)
         var sees = grid is null || grid.Sight(here, there);
         if (distance > reach || !sees)
         {
-            if (world.Now - _lastSwing >= world.Combat.MobLeashNoHit)
+            var leash = distance > reach ? "no hit while out of reach" : "no hit while out of sight";
+            if (world.Now - _lastSwing >= world.Combat.MobLeashNoHit && !world.Modules.LeaveCombatBlocked(Me, leash))
             {
-                Reset(world, map, distance > reach ? "no hit while out of reach" : "no hit while out of sight");
+                Reset(world, map, leash);
                 return;
             }
             if (Me.Template.AttackMoveSpeed <= 0 || SpellEffects.Rooted(Me, world.GameNow)) return;
@@ -523,6 +541,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
             Me.HomeDirection = Me.Direction;
         }
         State = MobState.Returning;
+        world.Modules.MobLeftCombat(Me, why); // the modules' Mobs.OnLeaveCombat
         if (t.DontResetAfterPursuit)
         {
             WalkHome(world, map);
@@ -621,6 +640,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
                 Me.TargetId = 0;
                 _aim = null;
                 Combat.EnemyGone(map, Me);
+                world.Modules.MobLeftCombat(Me, "the AI went off"); // the modules' Mobs.OnLeaveCombat
                 break;
             case MobState.Returning:
                 Me.Motion.Stop();

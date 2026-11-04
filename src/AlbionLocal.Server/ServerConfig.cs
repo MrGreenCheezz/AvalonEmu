@@ -975,6 +975,9 @@ public sealed record ServerConfig
     /// <summary>StageN companions: the hired companion bots (Companions:*, <see cref="CompanionOptions"/>; off under Preset official, on under pve).</summary>
     public CompanionOptions Companions { get; init; } = new();
 
+    /// <summary>The server modules (Modules:*, <see cref="ModuleOptions"/>, config/modules.jsonc).</summary>
+    public ModuleOptions Modules { get; init; } = new();
+
     /// <summary>
     /// How long a map stays loaded without players (World:MapIdleUnloadMinutes, 5; 0 = never): then it is dropped with its
     /// objects, and the next Join into the cluster builds it anew with new object ids (SPEC stage 3 §5).
@@ -1272,6 +1275,7 @@ public sealed record ServerConfig
             Roads = LoadRoads(values, d.Roads),
             Mists = LoadMists(values, d.Mists),
             Companions = LoadCompanions(values, d.Companions),
+            Modules = ModuleOptions.Load(values, d.Modules, Dir("Modules:Path", "modules")),
             MapIdleUnload = Take("World:MapIdleUnloadMinutes") is not { } idle ? TimeSpan.FromMinutes(5)
                 : double.TryParse(idle, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var min) && min is >= 0 and <= 1440
                     ? TimeSpan.FromMinutes(min) : throw new InvalidDataException($"World:MapIdleUnloadMinutes: '{idle}' is not 0..1440"),

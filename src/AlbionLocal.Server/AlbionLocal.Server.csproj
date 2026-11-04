@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AlbionLocal.Photon\AlbionLocal.Photon.csproj" />
     <ProjectReference Include="..\AlbionLocal.Protocol\AlbionLocal.Protocol.csproj" />
+    <ProjectReference Include="..\AlbionLocal.Modules.Api\AlbionLocal.Modules.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

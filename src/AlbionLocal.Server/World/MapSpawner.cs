@@ -172,6 +172,7 @@ public static class MapSpawner
             + (map.MobSlots.Count > 0 ? $"; {SpawnManager.Summary(map)}" : "")
             + (later.Count > 0 ? $"; not spawned yet: {string.Join(", ", later)}" : ""));
         foreach (var (why, n) in skipped) Log.Warn("world", $"map {map.Cluster}: {n} x {why}, left out (the client would not show it)");
+        world.Modules.MapLoaded(map); // the modules' Maps.OnLoaded
     }
 
     /// <summary>Whether the client binds <paramref name="sent"/> to a tile at <paramref name="tile"/> (|d| &lt; 0.001 per axis, SPEC §1).</summary>

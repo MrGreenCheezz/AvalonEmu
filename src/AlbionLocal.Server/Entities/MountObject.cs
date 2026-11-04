@@ -84,7 +84,7 @@ public sealed class PlayerMount
     public ItemTemplate? Ridden { get; internal set; }
 
     /// <summary>The ridden mount's speed buff trigger (<see cref="MountSpeedBuff"/>); null = its mounted buff has none.</summary>
-    internal MountSpeedBuff? Speed { get; set; }
+    public MountSpeedBuff? Speed { get; internal set; }
 
     /// <summary>The mount object on the map; null when none stands.</summary>
     public MountObject? Object { get; internal set; }

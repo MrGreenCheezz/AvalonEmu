@@ -47,9 +47,10 @@ public static class ServerConfiguration
         directory = Path.GetFullPath(directory);
         var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var sources = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in ConfigurationOptions.FileNames)
+        foreach (var name in ConfigurationOptions.FileNames.Concat(ConfigurationOptions.OptionalFileNames))
         {
             var path = Path.Combine(directory, name);
+            if (!File.Exists(path) && ConfigurationOptions.OptionalFileNames.Contains(name)) continue;
             if (!File.Exists(path)) throw new InvalidDataException($"Required configuration file missing: {path}");
             var editable = EditableConfiguration.Parse(File.ReadAllText(path), path);
             foreach (var (key, value) in editable.Values)
@@ -68,6 +69,7 @@ public static class ServerConfiguration
         var editableValues = new EditableConfiguration(values);
         // Full composition validates cross-option constraints after applying explicit arguments.
         var config = editableValues.Validate(baseDirectory, args);
+        config = config with { Modules = config.Modules with { ConfigPath = Path.Combine(directory, "modules") } };
         return new(config, directory, new ReadOnlyDictionary<string, string>(sources), new ReadOnlyDictionary<string, string>(overrides));
     }
 }

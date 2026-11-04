@@ -172,6 +172,7 @@ public sealed partial class WorldSession
         {
             if (from.Find(ids[i]) is not { } item) continue;
             var want = counts is { } c && i < c.Length && c[i] > 0 ? Math.Min((int)c[i], item.Count) : item.Count;
+            if (world.Modules.BeforeLootTake(player, from, item, want)) continue; // the modules' Items.OnBeforeLootTake (only out of an open loot container)
             if (!VaultTakes(player, to, item.Template, want, from))
             {
                 Log.Info(Name, $"'{player.Character.Name}': {item.Template.Name} x{want} is over the vault's weight limit, not moved");

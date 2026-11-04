@@ -147,6 +147,7 @@ public sealed partial class WorldSession
         if (other is null && to.Unloaded[req.rx] is not null) return Back("the slot keeps an unloaded saved item");
 
         var max = MaxStack(moved.Template);
+        if (world.Modules.BeforeLootTake(player, loot, moved, other is not null && max > 1 && other.StacksWith(moved) ? Math.Min(moved.Count, max - other.Count) : moved.Count)) return Back("a module refused it"); // the modules' Items.OnBeforeLootTake
         if (other is not null && max > 1 && other.StacksWith(moved))
         {
             if (other.Count >= max) return Back("the stack there is full");
@@ -220,6 +221,7 @@ public sealed partial class WorldSession
             : req.sk < 0 || req.sk >= to.Size ? "no such target slot"
             : to[req.sk] is { } target && (!target.StacksWith(source) || target.Count + req.sn > MaxStack(target.Template)) ? "the target slot is taken"
             : to[req.sk] is null && to.Unloaded[req.sk] is not null ? "the slot keeps an unloaded saved item" : null;
+        if (refused is null && world.Modules.BeforeLootTake(player, loot, source!, req.sn)) refused = "a module refused it"; // the modules' Items.OnBeforeLootTake
         if (refused is not null)
         {
             Log.Info(Name, $"'{player.Character.Name}' split of {loot.Id}#{req.sh} into {req.sj}#{req.sk} ({req.sn}) refused: {refused}");

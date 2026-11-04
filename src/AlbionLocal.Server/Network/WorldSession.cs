@@ -117,7 +117,8 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         CancelLogout();
         if (Player is { Map: not null } downed) Systems.Death.Abandoned(downed); // stageE E3: knocked down in a lethal cluster, it dies
         var dead = Player is { Combat.Down.Kind: KnockdownKind.Dead } ? Player : null; // stageE E3: it joins at its respawn point
-        if (Player is { } player) Leave(player);
+        if (Player is { } gone) world.Modules.PlayerLogout(gone); // the modules' PlayerLogout, still on its map
+        if (Player is { } player) Leave(player, clusterChange: false);
         // Out of its party unless another connection still plays the character (a reconnect; stageD party SPEC §7 flow 3).
         // Its guild's members see it go offline the same way (stageH guilds SPEC §3.5), and its chat channels and friends (stageJ chat SPEC §2.2).
         if (Character is { } member && world.Parties.Online(member.Id) is null)
@@ -144,8 +145,9 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
     /// stage 7 SPEC §3), then off the map (the last one out starts the map's idle time), and its chat connection off the map's Area
     /// channel at once (<see cref="Systems.ChatHub.LeftMap"/>: at a cluster change before the ChangeCluster response, as official).
     /// </summary>
-    private void Leave(Player player)
+    private void Leave(Player player, bool clusterChange = true)
     {
+        world.Modules.ZoneLeave(player, clusterChange); // the modules' ZoneLeave, still on its map
         player.StopPlayedTime();
         if (world.Scripts.PlayerHooks.Count > 0)
         {
@@ -243,10 +245,11 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         player.Visibility.FlushLists();
         var scripted = false;
         for (var slot = 0; slot < Inventory.EquipmentSlots; slot++)
-            if (player.Inventory.Equipment[slot] is { } item) scripted |= world.Scripts.OnEquip(player, item);
+            if (player.Inventory.Equipment[slot] is { } item) scripted |= world.Scripts.OnEquip(player, item, login: true);
+        var firstJoin = world.FirstJoin(player.Character); // once per Join (the hooks' and the modules' first login)
         if (world.Scripts.PlayerHooks.Count > 0)
         {
-            world.Scripts.OnLogin(player, world.FirstJoin(player.Character));
+            world.Scripts.OnLogin(player, firstJoin);
             scripted = true;
         }
         if (scripted) player.SaveItems();
@@ -267,6 +270,9 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         world.Roads.Joined(player); // stageL roads phase B: the thrown-out line
         world.Dungeons.Arrived(player); // stageH: the dungeon of the day's chat line on its floor
         world.Islands.Joined(player); // stageN labourers: on an island the houses unlocked for the build menu (224)
+        // The modules last, with the client in the world and every system's arrival done: PlayerLogin after a login, ZoneEnter every Join.
+        if (!_arrived) world.Modules.PlayerLogin(player, firstJoin);
+        world.Modules.ZoneEnter(player, _arrived);
     }
 
     /// <summary>Whether the last Join was the arrival of a cluster change (a PendingTransfer, and not the first Join after a Login).</summary>

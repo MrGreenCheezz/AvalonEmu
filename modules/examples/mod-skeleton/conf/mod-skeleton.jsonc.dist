@@ -1,0 +1,11 @@
+{
+  // The defaults of mod-skeleton. The server copies this file once to config/modules/mod-skeleton.jsonc: change it there, then .modules reload mod-skeleton.
+  // Placeholders: {name} the player, {online} players online, {logins} the player's logins counted by this module.
+  "Greeting": "Welcome back, {name}! {online} player(s) online. Type .motd for the news.",
+  "FirstGreeting": "Welcome to the server, {name}! Type .help for the commands and .motd for the news.",
+  "Motd": [
+    "Message of the day: this is a local server.",
+    "Change these lines in config/modules/mod-skeleton.jsonc or with .motd set <text>."
+  ],
+  "AnnounceLogins": false
+}

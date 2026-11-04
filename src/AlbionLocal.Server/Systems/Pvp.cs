@@ -320,6 +320,7 @@ public static class Pvp
         foreach (var item in p.Inventory.Equipment.Items.Concat(p.Inventory.Bag.Items).ToList())
         {
             if (!Death.Wear(item, rule, 1, random)) continue;
+            if (item.DurabilityRaw <= 0) p.World.Modules.Broke(p, item, "knockdown"); // Items.OnBreak
             Network.WorldSession.SendItemTo(p, item);
             worn = true;
         }
@@ -426,10 +427,12 @@ public static class Pvp
         if (Refusal(attacker, target, ticks) is { } why)
         {
             Log.Debug("combat", $"'{attacker.Character.Name}' hit on '{target.Character.Name}' dropped: {why}");
+            world.Modules.HitAvoided(attacker, target, amount, origin, spell, ticks, why); // Combat.OnHitAvoided
             return;
         }
         var before = target.Health.At(ticks);
         if (before <= 0) return;
+        if (world.Modules.BeforeDamage(attacker, target, ref amount, ticks, type, origin, spell, hit)) return; // the modules' Combat.OnBeforeDamage
         var crime = Engage(attacker, target, ticks, origin); // judged before the hit (a knockdown, a flag change)
         if (attacker.IsBot) amount *= world.Config.Bots.DamageFactor * world.Config.Bots.Difficulty * attacker.Bot!.DamageFactor; // stageN botpower: Bots:Difficulty // stage I: Bots:Combat:DamageFactor, the bots' difficulty (stageL: an invader's own)
         amount *= PvpDetails.Resilience(attacker, target, ticks); // stageP: resilience (focus fire protection) under Pvp:Resilience
@@ -444,7 +447,7 @@ public static class Pvp
             return;
         }
         var raw = damage;
-        damage = Combat.Rounded(SpellEffects.Absorb(world, target, damage, ticks));
+        damage = Combat.Rounded(SpellEffects.Absorb(world, target, damage, ticks, attacker, origin, spell));
         var health = target.Health.At(ticks);
         var left = (float)SpellEffects.Clamp(world, target, health, Math.Max(0, health - damage), ticks);
         if (left > Math.Max(0, health - damage)) damage = health - left;
@@ -455,6 +458,7 @@ public static class Pvp
             target.Health.Set(left, Math.Max(ticks, target.Health.Stamp));
             if (damage > 0) SpellEffects.Damaged(target, type, ticks);
             update = Combat.HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
+            world.Modules.HealthChanged(target, health, left, attacker.Id, spell, origin); // Units.OnHealthChange
             Death.Hit(attacker, target, damage);
             DeathRecaps.Hit(target, attacker, spell, origin, -damage, ticks); // stageP: the death recap's player rows
             if (damage > 0) world.Arenas.Damaged(target); // stageP: a hit breaks an arena orb channel

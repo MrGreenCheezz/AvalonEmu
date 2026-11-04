@@ -162,14 +162,17 @@ public static class Combat
 
     /// <summary>The item power of <paramref name="item"/> as worn by <paramref name="p"/> (<see cref="StatCalculator.ItemPower"/>: quality, destiny board, wear); items.xml itempower without game data.</summary>
     /// <remarks>An awakened weapon attuned to <paramref name="p"/> adds its TRAIT_ITEM_POWER (<see cref="Passives.TraitItemPower"/>).</remarks>
-    /// <remarks>StageP: under an arena's item power cap (<see cref="Player.ItemPowerCap"/>) the capped figure.</remarks>
+    /// <remarks>StageP: under an arena's item power cap (<see cref="Player.ItemPowerCap"/>) the capped figure, after the modules' hook.</remarks>
     public static double ItemPower(Player p, Item item)
     {
-        var ip = (p.World.StatCalculator is { } calc ? calc.ItemPower(item.ForStats(), p.Progression?.Levels ?? new SortedDictionary<int, int>())
-                : double.TryParse(Attr(item.Template, "itempower"), NumberStyles.Float, CultureInfo.InvariantCulture, out var raw) ? raw : 0)
-            + (item.Soul is null ? 0 : Passives.TraitItemPower(p, item));
+        var ip = p.World.Modules.ItemPower(p, item, ItemPowerOf(p, item)); // Formulas.OnCalcItemPower
         return p.ItemPowerCap is { } cap ? cap.Apply(ip) : ip;
     }
+
+    private static double ItemPowerOf(Player p, Item item) =>
+        (p.World.StatCalculator is { } calc ? calc.ItemPower(item.ForStats(), p.Progression?.Levels ?? new SortedDictionary<int, int>())
+            : double.TryParse(Attr(item.Template, "itempower"), NumberStyles.Float, CultureInfo.InvariantCulture, out var ip) ? ip : 0)
+        + (item.Soul is null ? 0 : Passives.TraitItemPower(p, item));
 
     /// <summary>The ItemPowerProgression section's combat progressions of <paramref name="item"/>; null = no scaling.</summary>
     public static CombatProgression? ProgressionOf(World world, Item item) =>
@@ -244,9 +247,12 @@ public static class Combat
     /// value + the resistance points of its buffs and debuffs, clamped by the attribute's &lt;ActiveBuffScaling&gt; mob row
     /// (<see cref="Buffed"/>; the "a71.b curve" of stage 5 Q10 is this clamp, stageJ armour SPEC §1).
     /// </summary>
-    public static double ResistanceOf(Mob mob, EffectType type) =>
-        Resistance(Math.Max(0, Buffed(type == EffectType.Magic ? mob.Template.MagicResistance : mob.Template.Armor, BuffResistance(mob, type, mob.GameNow),
-            Limit(mob.World?.GameData, ResistanceKey(type), mob: true))));
+    public static double ResistanceOf(Mob mob, EffectType type) => Resistance(ResistancePoints(mob, type));
+
+    /// <summary>A mob's armour or magic resistance with its buffs (what <see cref="ResistanceOf(Mob, EffectType)"/> turns into a factor).</summary>
+    public static double ResistancePoints(Mob mob, EffectType type) =>
+        Math.Max(0, Buffed(type == EffectType.Magic ? mob.Template.MagicResistance : mob.Template.Armor, BuffResistance(mob, type, mob.GameNow),
+            Limit(mob.World?.GameData, ResistanceKey(type), mob: true)));
 
     /// <summary>
     /// a4f.e8 / a4f.fa / a4f.fc before their floor (stageJ armour SPEC §2.3): <paramref name="value"/> + S × clamp(points / S, min,
@@ -280,9 +286,15 @@ public static class Combat
     public static double ResistanceOf(Player p, EffectType type)
     {
         if (p.IsMounted) return Mounts.Resistance(p, type); // the mount takes the hit (stageD mounts SPEC §4.5)
+        return Resistance(ResistancePoints(p, type));
+    }
+
+    /// <summary>A player's armour or magic resistance with its buffs (what <see cref="ResistanceOf(Player, EffectType)"/> turns into a factor).</summary>
+    public static double ResistancePoints(Player p, EffectType type)
+    {
         var d = p.Defense;
-        return Resistance(Math.Max(0, Buffed(type == EffectType.Magic ? d.MagicResistance : d.Armor, BuffResistance(p, type, p.World.GameNow),
-            Limit(p.World.GameData, ResistanceKey(type), mob: false))));
+        return Math.Max(0, Buffed(type == EffectType.Magic ? d.MagicResistance : d.Armor, BuffResistance(p, type, p.World.GameNow),
+            Limit(p.World.GameData, ResistanceKey(type), mob: false)));
     }
 
     /// <summary>Distance between the edges of a player and a mob (centre distance less both collision radii, not below 0).</summary>
@@ -344,6 +356,7 @@ public static class Combat
     /// </summary>
     public static void Damage(Player attacker, Mob target, double amount, EffectType type, HitOrigin origin, short spell, long ticks, AlbionEvent? hit = null)
     {
+        attacker.World.Modules.HitAvoided(attacker, target, amount, origin, spell, ticks); // Combat.OnHitAvoided
         // StageN companions: a hired companion fights mobs (Companions:DamageFactor); the other bots never do.
         if (!target.Attackable || target.Map is not { } map || target.Immune || attacker.Combat.Down is not null || attacker.IsBot && !attacker.IsCompanion) return;
         if (SpellEffects.Invincible(target, ticks) || SpellEffects.NotHittable(target, ticks)) return; // stageD SPEC §3.4: no HealthUpdate
@@ -353,11 +366,12 @@ public static class Combat
         if (credit is null) return;
         if (attacker.IsCompanion) amount *= world.Config.Companions.DamageFactor;
         var damage = Math.Max(0, Rounded(amount * SpellEffects.TakenFactor(target, fromPlayer: true, ticks)));
+        if (world.Modules.BeforeDamage(attacker, target, ref damage, type, origin, spell, hit)) return; // the modules' Combat.OnBeforeDamage
         if (target.TargetId == 0) target.TargetId = attacker.Id;
         if (attacker.Map == map) EnterCombat(attacker, target);
         if (origin is not (HitOrigin.Reflected or HitOrigin.OverTime)) SpellEffects.Break(world, attacker, "attacking", ticks); // an invisibility ends with the attack
         var raw = damage;
-        damage = Rounded(SpellEffects.Absorb(world, target, damage, ticks));
+        damage = Rounded(SpellEffects.Absorb(world, target, damage, ticks, attacker, origin, spell));
         if (damage <= 0 && raw > 0)
         {
             if (hit is not null) map.SendToObservers(target, hit); // all on a damage shield: no HealthUpdate (stageD SPEC §9 Q7)
@@ -373,6 +387,7 @@ public static class Combat
             if (left <= 0)
             {
                 target.Health.Set(0, stamp);
+                world.Modules.HealthChanged(target, had, 0, attacker.Id, spell, origin); // Units.OnHealthChange, before the kill's handling
                 // StageN companions: a companion's kill is its owner's (fame, silver, the loot bag's rights), the owner on the map.
                 Kill(world, credit, target, ticks, hit is null ? [update] : [hit, update]);
             }
@@ -381,10 +396,11 @@ public static class Combat
                 target.Health.Set(left, stamp);
                 if (hit is not null) map.SendToObservers(target, hit);
                 map.SendToObservers(target, update);
+                world.Modules.HealthChanged(target, had, left, attacker.Id, spell, origin); // Units.OnHealthChange
                 if (damage > 0) SpellEffects.Break(world, target, "damage", ticks); // a stun or root with damagebreakseffect ends with the hit
                 if (world.MobAi && attacker.Map == map)
                 {
-                    target.AI.OnDamaged(attacker, damage);
+                    target.AI.OnDamaged(attacker, world.Modules.Threat(attacker, target, damage)); // Formulas.OnCalcThreat
                     if (attacker.IsCompanion) world.Companions.Threat(attacker, target, damage); // a tank's Companions:TankThreatFactor
                 }
             }
@@ -412,12 +428,14 @@ public static class Combat
     public static void DamagePlayer(Mob attacker, Player target, double amount, EffectType type, HitOrigin origin, short spell, long ticks, bool reflectable = true)
     {
         if (target.IsBot && !target.IsCompanion) return; // stage I: mobs never fight bots (they scan the humans and companions only; a guard)
+        target.World.Modules.HitAvoided(attacker, target, amount, origin, spell, ticks); // Combat.OnHitAvoided
         if (target.Map is not { } map || attacker.Map != map || target.Combat.Untouchable || SpellEffects.Invincible(target, ticks)
             || SpellEffects.NotHittable(target, ticks)) return;
         var before = target.Health.At(ticks);
         if (before <= 0) return;
         var world = target.World;
         var damage = Math.Max(0, Rounded(amount * SpellEffects.TakenFactor(target, fromPlayer: false, ticks, target.Defense.DefenseVsMobs)));
+        if (world.Modules.BeforeDamage(attacker, target, ref damage, type, origin, spell, null)) return; // the modules' Combat.OnBeforeDamage
         EnterCombat(target, attacker, hit: true);
         // notinterruptible (HYPER_FOCUS) keeps a damagecancelscasting channel too, as it does for stuns (the client side not captured).
         if (target.Combat.Channel is { Info.DamageCancels: true } && !SpellEffects.NotInterruptible(target, ticks))
@@ -429,7 +447,7 @@ public static class Combat
             return;
         }
         var raw = damage;
-        damage = Rounded(SpellEffects.Absorb(world, target, damage, ticks));
+        damage = Rounded(SpellEffects.Absorb(world, target, damage, ticks, attacker, origin, spell));
         var health = target.Health.At(ticks);
         var left = (float)SpellEffects.Clamp(world, target, health, Math.Max(0, health - damage), ticks); // clamphitpoints: not below its min
         if (left > Math.Max(0, health - damage)) damage = health - left;
@@ -441,6 +459,7 @@ public static class Combat
             var e = HealthUpdate(target.Id, ticks, -damage, left, type, origin, attacker.Id, spell);
             target.Session.Send(e);
             target.SendToObservers(e);
+            world.Modules.HealthChanged(target, health, left, attacker.Id, spell, origin); // Units.OnHealthChange
             DeathRecaps.Hit(target, attacker, spell, origin, -damage, ticks); // stageP: the death recap's mob rows
         }
         if (reflectable) SpellEffects.Reflect(target, attacker, raw, ticks); // reflectdamageactive (batch 2); not a reflectdamage="never" hit
@@ -486,12 +505,14 @@ public static class Combat
     public static void HealPlayer(Player caster, Player target, double amount, HitOrigin origin, short spell, long ticks)
     {
         if (target.Map is null || target.Combat.Down is not null || SpellEffects.CannotBeHealed(target, ticks)) return;
+        if (target.World.Modules.BeforeHeal(caster, target, ref amount, origin, spell)) return; // the modules' Combat.OnBeforeHeal
         var before = target.Health.At(ticks);
         var after = Math.Min(target.Health.Max, before + Math.Max(0, origin == HitOrigin.OverTime ? (float)amount : Rounded(amount)));
         target.Health.Set(after, Math.Max(ticks, target.Health.Stamp));
         var e = HealthUpdate(target.Id, ticks, after - before, after, EffectType.Magic, origin, caster.Id, spell);
         target.Session.Send(e);
         target.SendToObservers(e);
+        target.World.Modules.HealthChanged(target, before, after, caster.Id, spell, origin); // Units.OnHealthChange
         DeathRecaps.Hit(target, caster, spell, origin, after - before, ticks); // stageP: heals in the death recap
         if (target.World.MobAi && target.Map is { } map) AI.MobAI.Healed(map, caster, target, after - before);
     }
@@ -543,6 +564,7 @@ public static class Combat
     /// </summary>
     internal static void Kill(World world, Player killer, Mob mob, long ticks, IReadOnlyList<AlbionEvent> killingHit)
     {
+        if (mob.Dead) return; // a module's hook on the killing hit has done it already
         var map = mob.Map!;
         var bossLooters = world.Bosses.Looters(mob, killer); // stageH: a world boss's contributors, from its threat before the death clears it
         var mistsLooters = world.Mists.Looters(mob, killer); // stageL mists: a mist boss's reward chest takers, the same way
@@ -573,7 +595,7 @@ public static class Combat
                 Reputation.Gain(p, gain / 10000.0, Reputation.MobKill, (short)t.Index);
                 // StageN spells-bosses: the fame buffs of the mob's category (the dungeon and roaming fame events, the world boss's death spell).
                 var buff = FameBuff(world, p, mob, map);
-                Destiny.Award(p, buff == 1 ? gain : Rates.ScaleFame(gain, buff), Destiny.Kill(p, t.Tier), buff == 1 ? bonus : Rates.ScaleFame(bonus, buff));
+                Destiny.Award(p, world.Modules.Fame(p, mob, buff == 1 ? gain : Rates.ScaleFame(gain, buff)), Destiny.Kill(p, t.Tier), buff == 1 ? bonus : Rates.ScaleFame(bonus, buff)); // Formulas.OnCalcFame
             }
         DropSilver(world, killer, mob, ticks, danger);
         Corpses.Drop(world, killer, mob, ticks);
@@ -630,6 +652,7 @@ public static class Combat
         world.Guilds.Killed(map, mob, credited); // guilds SPEC §10.3/§10.6: the clear experience of a dungeon boss, the contracts
         world.GuildGoals.OnKill(map, killer, mob, credited); // stage I: the weekly guild goals (killmobs, bosses, dungeons)
         foreach (var p in credited.Contains(killer) ? credited : [killer, .. credited]) Seasons.OnBossKill(p, mob);
+        world.Modules.MobDied(mob, killer, credited); // the modules' MobDied, after every system's own handling
         Log.Info("combat", string.Create(CultureInfo.InvariantCulture,
             $"'{killer.Character.Name}' killed {mob}: fame {gain / 10000.0:0.####}{(group.Count > 1 ? $" each for {group.Count} party members" : "")} (total {killer.Character.Fame / 10000.0:0.####}), energy +{t.EnergyReward}"));
         // 5./6. A corpse until postDeathLifetime, then off the map; its spawn point respawns.
@@ -661,6 +684,7 @@ public static class Combat
                     world.Config.LootTierCap ? mob.Template.Tier : 0, world.Config.LootBlackMarketSoftCap)
                 : []);
         if (world.LootOverride is null) drops = WithTicket(world, mob, map, drops);
+        drops = world.Modules.LootRolled(mob, killer, drops); // the modules' LootRolled (may add or remove items)
         var items = new List<Item>();
         foreach (var (name, amount) in drops)
         {
@@ -732,6 +756,7 @@ public static class Combat
             // Guilds SPEC §10.3: the silver perk of the killer's guild level, a Rates-like factor.
             var amount = (int)Math.Round(level.ExactYield * mob.Template.SilverModifier * (0.84 + 0.04 * map.Random.NextDouble()) * (map.Difficulty?.Silver ?? 1) * world.Rates.Silver
                 * (1 + world.Guilds.SilverBonus(killer)), MidpointRounding.AwayFromZero);
+            amount = world.Modules.Silver(killer, mob, amount); // Formulas.OnCalcSilver
             if (amount <= 0) continue;
             var factor = (danger?.MobSilverLootFactor ?? 1) * (world.GameData?.GlobalMobSilverLootFactor ?? 1);
             var pile = new SilverPile(world.ObjectIds.Next(), mob, amount, factor, killer.Character.Id, ticks, world.Parties.Of(killer.Character.Id)?.Id ?? 0)
@@ -812,6 +837,7 @@ public static class Combat
         if (first && p.IsMounted) p.Session.Send(PlayerCombo(p, now));
         p.Session.Send(new InCombatStateUpdateEvent { ddn = p.Id, cj3 = true, cj4 = c.Hit });
         if (first && !p.IsMounted) p.Session.Send(RegenerationChanged(p, now));
+        if (first) p.World.Modules.UnitEvent(p.World.Modules.Hooks.EnterCombat, p); // Units.OnEnterCombat
     }
 
     /// <summary>
@@ -838,6 +864,7 @@ public static class Combat
         if (p.Map is { } map)
             foreach (var mob in map.Objects.Values.OfType<Mob>())
                 if (mob.TargetId == p.Id) mob.TargetId = 0;
+        p.World.Modules.UnitEvent(p.World.Modules.Hooks.LeaveCombat, p); // Units.OnLeaveCombat
     }
 
     /// <summary>RegenerationHealthChanged (91, ayl): 0 player, 1 now, 2 current (left out at 0: knocked down), 3 max, 5 regeneration per second (left out at 0: in combat), 6 now (Int64 ticks).</summary>
