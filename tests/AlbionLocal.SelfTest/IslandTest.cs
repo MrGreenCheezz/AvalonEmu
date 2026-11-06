@@ -230,18 +230,22 @@ public static class IslandTest
               && world.Islands.PriceOf(hero.Id, world.Islands.Data.TypeAt(2)!, 2) == 1_125_000 && world.Islands.BuildingsOf(island.Id).Count == 2,
               $"upgrade 0 → 1: bare RC 0, level 1 stamped now (key 7), journeys 8046; favourite kept (key 21); level 2 costs 1,125,000; starter farm + herb garden (got {upgrade.ReturnCode}, {busy.ReturnCode})");
 
-        // The showroom (§2.4): RC 0, push {0: …0001e-SHOWROOM}; from its travel point back to the merchant's travel point.
+        // The showroom (§2.4): RC 0, push {0: …0001e-SHOWROOM}; Depart at its travel point (533 with the travel point, not BuyJourney:
+        // public issue #7) back to the merchant's travel point.
         var before = peer.Responses.Count;
         Call(s, peer, new TravelIslandShowroomRequest { aha = merchant.Id }, 9);
         var trip = peer.Responses.Skip(before).ToList();
         var (s2, peer2, there) = Join(world, hero.Id);
         var tp = s2.Player!.Map!.Objects.Values.OfType<Travelpoint>().Single();
+        var live = s2.Player.Character;
         before = peer2.Responses.Count;
-        Call(s2, peer2, new BuyJourneyRequest { df = tp.Id, dg = target }, 10);
+        Call(s2, peer2, new TravelIslandShowroomRequest { aha = tp.Id }, 10);
         var back = peer2.Responses.Skip(before).ToList();
+        var arrival = city.Travelpoints.Single(t => t.Guid == apSpawn.World!.Travelpoint).SpawnPosition;
         Check(trip is [{ ReturnCode: 0 }, var push] && push.Parameters[0] is "ISLAND-PLAYER-FOREST-0001e-SHOWROOM" && there.a8i == showroom.Id
-              && there.a8j == Islands.ArrivalOf(showroom) && back is [{ ReturnCode: 0 }, var home] && home.Parameters[0] is "1000",
-              $"showroom: RC 0, push {{0: the showroom}}, Join at its travel point; back to 1000 (got {trip.Count} answers, {there.a8i})");
+              && there.a8j == Islands.ArrivalOf(showroom) && back is [{ ReturnCode: 0 }, var home] && home.Parameters[0] is "1000"
+              && s2.Status == SessionStatus.Transferring && live.Cluster == "1000" && new Vector2(live.PositionX, live.PositionY) == arrival,
+              $"showroom: RC 0, push {{0: the showroom}}, Join at its travel point; 533 at its travel point: RC 0, push {{0: 1000}} to the merchant's travel point (got {trip.Count}/{back.Count} answers, {there.a8i}, {live.Cluster} ({live.PositionX}, {live.PositionY}))");
 
         // Phase 3: onto the island after the 130 s; its buildings (343 farm, 344 herb garden, AccessStatus preset 0).
         var (s3, peer3, _) = Join(world, hero.Id);

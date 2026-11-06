@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-06 — Fixes: the expedition Join channel, the way out of an island showroom
+
+- **Expeditions** (issue #8): the Join channel at an expedition agent no longer breaks off at once. The client ends that channel on any answer to `EnteringExpeditionStart` (op 278) and then cancels it itself, so the server now sends no answer when it accepts; the player enters the expedition after the full 10 s.
+- **Island showroom** (issue #7): Depart at the showroom's Travel Point takes the player back to the city's island merchant. There the client sends `TravelIslandShowroom` (op 533) with the travel point rather than `BuyJourney`, and the server now answers it.
+
+Both checked in the game client. Thanks to JumpingY for the detailed reports.
+
 ## 2026-10-26 (evening) — PvP end-game (the parts the client code and data settle)
 
 Everything below is on under `Preset: official`, where the official game has it; each system has its own switch.

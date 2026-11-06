@@ -52,12 +52,17 @@ public sealed partial class WorldSession
         return new GenericResponse();
     }
 
-    /// <summary>EnteringExpeditionStart (278, r9; §2.5): the Join click. RC 0 whatever happens (cw4.ai7 takes any answer).</summary>
+    /// <summary>
+    /// EnteringExpeditionStart (278, r9; §2.5): the Join click. The client ends its channel on ANY op-278 response, whatever the RC
+    /// (cw4.ai7 0x1809DEEF0 calls ct7.f5(1) on the current action, as the 265 {1: false} handler cw4.aft does) and then sends 279
+    /// itself (public issue #8: 279 17-20 ms after 278), so an accepted channel gets no response; refused: RC 0 after 265 {1: false}.
+    /// </summary>
     [Handles(OperationCodes.EnteringExpeditionStart, Status = SessionStatus.InWorld)]
     private AlbionResponse? EnteringExpeditionStart(EnteringExpeditionStartRequest req)
     {
-        if (Player is { } player && world.Expeditions.StartEntering(player) is { } why)
-            Log.Info(Name, $"'{player.Character.Name}' expedition Join refused: {why}");
+        if (Player is not { } player) return null;
+        if (world.Expeditions.StartEntering(player) is not { } why) return null; // accepted: a response would end the 10 s channel at once
+        Log.Info(Name, $"'{player.Character.Name}' expedition Join refused: {why}");
         return new GenericResponse();
     }
 

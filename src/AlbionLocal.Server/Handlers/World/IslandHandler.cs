@@ -65,12 +65,13 @@ public sealed partial class WorldSession
     /// SPEC §2.4: the merchant in view, its city's showroom (world.xml ISLAND-PLAYER-&lt;BIOME&gt;-0001e-SHOWROOM; none for Caerleon and the
     /// Mists) resolved (the merchant's GetIslandInfos asks for it) → RC 0, then the push ChangeCluster {0: the showroom} and the arrival
     /// at its travel point + spawnpos, as a journey. Refused: the bare {253, 255} with RC 1 (nothing misleading shows). The way back is
-    /// BuyJourney from the showroom's travel point to the city (JourneyHandler).
+    /// the same op from the showroom's travel point (<see cref="LeaveShowroom"/>), not BuyJourney.
     /// </summary>
     [Handles(OperationCodes.TravelIslandShowroom, Status = SessionStatus.InWorld)]
     private AlbionResponse? TravelIslandShowroom(TravelIslandShowroomRequest req)
     {
         if (Player is not { } p) return null;
+        if (p.Map is { } room && room.Objects.GetValueOrDefault(req.aha) is Travelpoint tp) return LeaveShowroom(p, room, tp, null, RequestId, RequestEncrypted);
         string why;
         if (_changing is not null) why = "a cluster change is under way";
         else if (!world.Islands.Enabled) why = "islands are off";
@@ -98,6 +99,65 @@ public sealed partial class WorldSession
     /// that is BuyJourney's table (ggd.as); this callback (ggd.at) knows only 21320 / 21321, so 8040 would show nothing either.
     /// </summary>
     public const short NoShowroom = 1;
+
+    /// <summary>
+    /// TravelIslandShowroom with the showroom's own travel point (533 {0: the Travelpoint}): the way back (SPEC §2.4, Q5; public issue #7).
+    /// In a showroom the travel window (ggq.n 0x180c63ad0) offers one destination, the travel point of the island merchant of the city
+    /// whose island type lists the showroom, flagged ggg+0x50; Depart on it (ggd.aq 0x181cd5f50) sends c32.m(long) 0x180a7a530 = 533 with
+    /// the travel point used instead of BuyJourney, and ggd.at waits for the RC as on the way in. RC 0, then the push to that city at the
+    /// merchant's travel point + spawnpos, at no cost; a city not resolved yet is resolved first (the answer follows). Refused: RC 1.
+    /// </summary>
+    private AlbionResponse? LeaveShowroom(Player p, Map room, Travelpoint tp, Data.ClusterTemplate? resolved, int? requestId, bool encrypted)
+    {
+        string why;
+        if (_changing is not null) why = "a cluster change is under way";
+        else if (!p.Visibility.Knows(tp)) why = $"travel point {tp.Id} is not in view";
+        else if (world.Islands.CityOfShowroom(room.Cluster) is not { } city) why = $"{room.Cluster} is no island showroom";
+        else if (world.Clusters?.World.Find(city)?.IslandAccessPoints.FirstOrDefault()?.Travelpoint is not { } merchant) why = $"{city} has no island merchant";
+        else if ((resolved ?? world.CachedCluster(city)) is not { } target)
+        {
+            if (world.ResolveCluster(city) is not { } load) why = "this server has no cluster data";
+            else
+            {
+                var pending = new PendingChange(p, room, tp.Id, requestId, encrypted);
+                _changing = pending;
+                Log.Info(Name, $"'{p.Character.Name}' way back from the showroom: resolving {city}, the answer follows");
+                load.ContinueWith(t => world.Post(() => ResumeLeaveShowroom(pending, t)), TaskScheduler.Default);
+                return null;
+            }
+        }
+        else if (target.Travelpoints.FirstOrDefault(t => t.Guid == merchant) is not { SpawnPosition: { } at }) why = $"travel point {merchant} of {city} has no spawnpos";
+        else
+        {
+            Log.Info(Name, $"'{p.Character.Name}' leaves the island showroom {room.Cluster} for {city}");
+            SendResponse(OperationCodes.TravelIslandShowroom, new GenericResponse(), requestId, encrypted);
+            Teleport(new Arrival(city, at, p.Facing), $"showroom:{room.Cluster}:back");
+            return null;
+        }
+        Log.Info(Name, $"'{p.Character.Name}' way back from the showroom refused: {why}");
+        return new GenericResponse { ReturnCode = NoShowroom };
+    }
+
+    /// <summary>The city of a deferred <see cref="LeaveShowroom"/> is in (World.Post, under the lock): checked again, answered with the kept request id.</summary>
+    private void ResumeLeaveShowroom(PendingChange pending, Task<Data.ClusterTemplate> load)
+    {
+        if (_changing != pending) return;
+        _changing = null;
+        if (_closed || Status != SessionStatus.InWorld || Player != pending.Player || pending.Player.Map != pending.Map
+            || pending.Map.Objects.GetValueOrDefault(pending.ExitId) is not Travelpoint tp)
+        {
+            Log.Info(Name, $"way back from the showroom {pending.Map.Cluster}: the player has left it meanwhile, no answer");
+            return;
+        }
+        AlbionResponse? resp;
+        if (load.IsCompletedSuccessfully) resp = LeaveShowroom(pending.Player, pending.Map, tp, load.Result, pending.RequestId, pending.Encrypted);
+        else
+        {
+            Log.Warn(Name, $"way back from the showroom {pending.Map.Cluster}: the city could not be resolved: {load.Exception?.InnerException?.Message ?? "load cancelled"}");
+            resp = new GenericResponse { ReturnCode = NoShowroom };
+        }
+        if (resp is not null) SendResponse(OperationCodes.TravelIslandShowroom, resp, pending.RequestId, pending.Encrypted);
+    }
 
     // ---- farming (SPEC phase 3) ----
 
