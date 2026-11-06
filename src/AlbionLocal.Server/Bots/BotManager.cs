@@ -303,8 +303,12 @@ public sealed partial class BotManager(World world)
                 if (info.Harvest is not null) ShowStep(bot);
                 // On a spell's forced path and 300 ms after it (stageJ pvp-spells SPEC §2.9) the brain waits: a stop or a walk now would cut the path short.
                 if (bot.Map != map || now < info.NextThink || SpellMovement.Holds(bot, world.GameNow)) continue;
-                // A fighting bot decides every Bots:Combat:TickMs (a swing interval is ~1 s), an idle one every Bots:ThinkSeconds.
-                info.NextThink = now + (info.Fight.Active || info.Role == BotRole.Companion ? TimeSpan.FromMilliseconds(Options.CombatTickMs) : Seconds(Options.ThinkSeconds));
+                // A fighting bot decides every Bots:Combat:TickMs (a swing interval is ~1 s), an idle one every Bots:ThinkSeconds; an idle patrol
+                // or drifter a human sees at least every Bots:ScanSeconds, so that it attacks on sight rather than up to 2 s later.
+                var wait = info.Fight.Active || info.Role == BotRole.Companion ? TimeSpan.FromMilliseconds(Options.CombatTickMs) : Seconds(Options.ThinkSeconds);
+                if (info.Role is BotRole.Patrol or BotRole.Drifter && wait.TotalSeconds > Options.ScanSeconds && bot.Observers.Any(p => !p.IsBot))
+                    wait = TimeSpan.FromSeconds(Options.ScanSeconds);
+                info.NextThink = now + wait;
                 // A corrupted dungeon's invader hunts the owner over the whole map, seen or not (stageL corrupted SPEC §4.5); a hellgate's enemy the party.
                 // StageN: a companion thinks wherever its owner is (it is never far from him).
                 if (info.Fight.Active || info.Role is BotRole.Invader or BotRole.Hellgate or BotRole.Arena or BotRole.Companion || Active(map, bot)) info.Brain.Think(bot, now);
@@ -984,6 +988,7 @@ public sealed partial class BotManager(World world)
         info.Slot = null;
         info.StayUntil = TimeSpan.MaxValue;
         info.Role = BotRole.Companion;
+        bot.Map?.BotsChanged(); // a companion now: the mobs fight it
         info.Brain = brain;
         info.Companion = companion(bot);
         info.NextThink = now;

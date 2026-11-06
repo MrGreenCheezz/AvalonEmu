@@ -203,6 +203,23 @@ public static class Pricing
     /// </summary>
     public static decimal CityFactor(decimal x, decimal k84 = 0, decimal k85 = 0) => x * ((k84 - 1) * k85 + 1);
 
+    /// <summary>gamedata.xml TravelSettings: basetravelcost (0) and the TierModifier of every tier 1-8 (30).</summary>
+    public const double TravelBaseCost = 0, TravelTierModifier = 30;
+
+    /// <summary>
+    /// The client's journey price (a0.abo 0x18062ce50; NOTES-protocol.md "Travel-point journeys"), a7m: the route's cost × (basetravelcost
+    /// + the luggage value), only the base on a no-luggage route. The luggage value (ctp.aty 0x1809a8090) sums over the equipped and the
+    /// carried stacks count × weight (a53.bv, a float) × fasttravelfactor × the tier's TierModifier. The client then applies the city
+    /// factor (1 here, <see cref="CityFactor"/>) and the global discount (<see cref="Accepts"/>). The captured 36,922.64 silver =
+    /// 1.156 × route cost 10 × a luggage value of 3,194.
+    /// </summary>
+    public static long JourneyPrice(float routeCost, bool noLuggage, IEnumerable<(ItemTemplate Type, int Count)> carried)
+    {
+        var luggage = noLuggage ? 0m : carried.Sum(s =>
+            (decimal)Math.Round((double)(float)(s.Count * s.Type.Weight), 4) * (decimal)s.Type.FastTravelFactor * (decimal)TravelTierModifier);
+        return (long)Math.Round((decimal)routeCost * ((decimal)TravelBaseCost + luggage) * A7m);
+    }
+
     /// <summary>
     /// The durability fraction as the client works it out: cur / max as an a7m value, truncated to 4 decimals (the verifier:
     /// a plain float gives 6111 instead of the official 6116 for the 103829 repair). <paramref name="curRaw"/> is a7m raw,
@@ -330,10 +347,24 @@ public static class Pricing
             : TimeSpan.FromSeconds((float)recipe.Time * crafts * MathF.Max(0.1f, 1 - (float)reduction));
 
     /// <summary>
-    /// SPEC §0.1's price rule: the client's price <paramref name="client"/> is taken when 0 ≤ client ≤ expected + 1 silver
-    /// (the unknown abp discount may lower it); anything else is PriceChanged.
+    /// SPEC §0.1's price rule: the client's price <paramref name="client"/> is taken when it lies within 1 silver of
+    /// <paramref name="expected"/> after the global discount at <paramref name="goldIndex"/> (<see cref="Discounted"/>), which only
+    /// lowers it; anything else is PriceChanged. Before Join key 83 was sent the client's discount was 100 % and 0 had to pass.
     /// </summary>
-    public static bool Accepts(long client, long expected) => client >= 0 && client <= expected + A7m;
+    public static bool Accepts(long client, long expected, double goldIndex = GoldPriceReference) =>
+        client >= 0 && client >= Discounted(expected, goldIndex) - A7m && client <= expected + A7m;
+
+    /// <summary>bgf.n3, 5000.0 from bgf's constructor (0x1805C5422): the gold price index at and above which there is no global discount.</summary>
+    public const double GoldPriceReference = 5000;
+
+    /// <summary>
+    /// <paramref name="cost"/> (a7m) after the client's global discount (bgf.abp 0x1805CC460, the "Global discount" row of the pay
+    /// dialog, fast travel and trait changes) at Join key 83 = <paramref name="goldIndex"/> (c3d.x): none at or above
+    /// <see cref="GoldPriceReference"/>, else cost × index / 5000, at least 1 silver (a cost of 1 silver or less keeps it).
+    /// </summary>
+    public static long Discounted(long cost, double goldIndex) =>
+        cost <= A7m || goldIndex >= GoldPriceReference ? cost
+            : Math.Max(A7m, (long)Math.Round(cost * (decimal)(goldIndex / GoldPriceReference)));
 
     /// <summary>
     /// The share of the resources a craft gives back (SPEC §6c, Q-C7 assumed): 1 − 1 / (1 + bonus), bonus = the location's

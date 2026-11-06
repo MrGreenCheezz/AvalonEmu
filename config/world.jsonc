@@ -96,6 +96,7 @@
   //   Postage silver and DailyLimit per UTC day are charged and counted, the client always shows gamedata's 50 / 30; KeepDays 0 = player and system mails stay
   // "Trade": { "Enabled": true, "InviteRange": 7, "KeepRange": 9, "InviteSeconds": 15, "AcceptDelaySeconds": 1.5, "Slots": 11, "ClusterRules": true, "AllowGold": false, "AllowInCombat": false }, // player trade (both presets)
   // "Economy": { "SilverPickupFactor": 1, "SilverPickupTax": 0 }, // a taken silver pile pays amount × cluster factor × this, less this share (the captured official pickups: 1.5 premium, 0.15 guild tax)
+  //   "GoldPriceIndex": 5000, // the gold price the client's "Global discount" weighs against 5000: below it NPC services cost index / 5000 (2500 = 50 % off); official 5000, none
   // "Chests": { "PoiLimit": -1 }, // POI chests at once per cluster: -1 = the data's (1), 0 = every spot (pve: 0), n = at most n
   // "Bank": { "Shared": false }, // false = one bank vault per city (both presets); true = one for every city, the other vaults' items move in when a bank opens
   // "Bm": { "BuyFactor": 0, "DailyLimit": 1000000 }, // the Black Market's NPC buy orders in Caerleon: T4-T8 equipment at item value × BuyFactor (0 = none, as officially: its orders come from players; pve: 5), at most DailyLimit silver per character per day (from 10:00 UTC; 0 = no limit)
@@ -171,6 +172,7 @@
   //   "ArrivalSeconds": "20-90", // ... and the next one of its slot arrives through an exit this much later
   //   "ActiveRange": 120,      // a bot thinks only while a human is within this many metres (or sees it)
   //   "ThinkSeconds": "0.5-2", // time between two decisions of a bot
+  //   "ScanSeconds": 0.25,    // an idle patrol or drifter a human sees decides at least this often: it attacks on sight
   //   "MoveResendSeconds": 0.5, // a walk under way is sent again this often while a human sees the bot
   //   "Move": { "PauseChance": 0.15 }, // a short pause at a corner of a path
   //   "Look": "Presets",       // Presets = characters.xml's 22 avatar looks; Random = a free face, hair, beard and colours
@@ -202,7 +204,7 @@
   //   "Pvp": { "Enabled": true, // both presets; false = world bots never start a fight with a player (they still answer an attack; arena/hellgate/invader bots unaffected)
   //            "EngageSeconds": 20, "EngageParty": true, "CrimesAgainstBots": true, // a bot answers its attacker (and party) this long; attacking a bot is a crime (pve: false)
   //            "LethalToPlayers": false }, // true: a bot's lethal hit kills a player in a lethal zone (with Pvp:LethalDeath); false: a knockdown
-  //   "Combat": { "TickMs": 200, "ReactionMs": 600, // a fighting bot decides this often; its first swing this long after the first hit
+  //   "Combat": { "TickMs": 200, "ReactionMs": 300, // a fighting bot decides this often; its first swing this long after the first hit (a player's reaction)
   //               "DamageFactor": 1.0, "HealthFactor": 1.0, // on their hits on players, on their maximum health (both presets 1.0 since botpower; pve was 0.7)
   //               "Spells": "Full", "SpellChance": 0.6, // both presets: a fighting bot casts its gear's spells (this chance per second, attacks first); Off = swings only
   //               "Tactics": true,  // spells by situation at once (dash when far, heal/shield when low, cc on a caster, burst a low target), potion/fall-back, kiting

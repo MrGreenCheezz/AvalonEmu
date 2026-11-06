@@ -27,7 +27,7 @@ namespace AlbionLocal.Server.AI;
 /// <item><b>Sight</b> (stageN mobnav): it aggroes only a player it sees (<see cref="WalkGrid.Sight"/> on the grid), and swings
 /// only at a target in reach it sees; in reach without sight it walks at the target until it does.</item>
 /// <item><b>Attack</b>: in range it stops and swings every 1 / attackspeed (from the last swing's start, on the first tick
-/// at or after; the first one CombatSettings.MobReactionTime + meleeattackdamagetime after the combat entry): Attack (13) to the mob's observers {0 mob,
+/// at or after; the first one CombatSettings.MobReactionTime after the combat entry): Attack (13) to the mob's observers {0 mob,
 /// 1 start, 2 target, 3 type 1 melee / 2 ranged / 4 magic, 4 start + meleeattackdamagetime, 5 impact (= key 4 for melee,
 /// + distance / AutoAttackProjectileSpeed otherwise), 6 0}; at the impact the HealthUpdate on the player stamped key 4
 /// (<see cref="Combat.DamagePlayer"/>): attackdamage × the player's resistance, unscaled. The &lt;AI&gt; spells are
@@ -224,9 +224,9 @@ public class AggressiveAI(Mob me) : MobAI(me)
 
     /// <summary>
     /// Combat starts (an aggro pick, damage, a fellow's alert) on <paramref name="target"/> with <paramref name="threat"/>:
-    /// it becomes the NewMob key 12 target, the first swing waits CombatSettings.MobReactionTime + meleeattackdamagetime (SPEC
-    /// §5d.1 "1.0 s + the swing windup": soldier 2.0 s, ghoul 1.35 s, against the captured first Attack about 1.8 s after the
-    /// player's first hit); with <paramref name="alert"/>
+    /// it becomes the NewMob key 12 target, the first swing starts CombatSettings.MobReactionTime later at the earliest (0.15 s:
+    /// the captured standing ghoul's Attack came 137 ms after the player's first hit, a chasing mob swings once in range; the
+    /// windup, meleeattackdamagetime, runs after the start as on every swing); with <paramref name="alert"/>
     /// the idle mobs of its alertsfactions within its alertradius join on the same target (they do not alert further).
     /// </summary>
     private void EnterCombat(World world, Map map, Player target, double threat, bool alert)
@@ -234,7 +234,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
         State = MobState.Combat;
         Me.Threat[target] = Me.Threat.GetValueOrDefault(target) + threat;
         Me.TargetId = target.Id;
-        _nextSwing = world.GameNow + world.Combat.MobReactionTime.Ticks + SpellCasts.Seconds(Me.Template.MeleeAttackDamageTime);
+        _nextSwing = world.GameNow + world.Combat.MobReactionTime.Ticks;
         _lastSwing = world.Now;
         _aim = null;
         _idleUntil = null;

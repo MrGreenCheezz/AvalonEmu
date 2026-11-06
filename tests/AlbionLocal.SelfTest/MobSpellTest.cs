@@ -369,7 +369,8 @@ public static class MobSpellTest
         var start = mine.First(e => e.Code == EventCodes.CastStart).P;
         var at = L(start, 1);
         var end = at + Ms(1300);
-        Check(at >= entry + SpellCasts.Seconds(3) && at < entry + SpellCasts.Seconds(3.15) && !start.ContainsKey(7) && L(start, 4) == end
+        // At 3 s, or once the swing under way then has hit (its 1 s windup).
+        Check(at >= entry + SpellCasts.Seconds(3) && at < entry + SpellCasts.Seconds(3.15 + soldier.Template.MeleeAttackDamageTime) && !start.ContainsKey(7) && L(start, 4) == end
               && Vector2.Distance(V(start, 2), me.PositionAt(DateTime.UtcNow)) < 0.01f,
               $"the frenzy once fight ≥ 3 s: CastStart without key 7, key 2 the target's position, end + 1.3 s (got +{(at - entry) / 10000} ms, {Show([new Timed(0, EventCodes.CastStart, start)])})");
         var energy = mine.First(e => e.Code == EventCodes.EnergyUpdate).P;

@@ -51,7 +51,18 @@ public sealed class Map(string cluster)
     /// StageN companions: the units mobs fight on the map: the joined players, then the hired companions (<see cref="Player.IsCompanion"/>);
     /// the other bots never meet a mob.
     /// </summary>
-    public IEnumerable<Player> Fighters => _bots.Count == 0 ? _players.Values : _players.Values.Concat(_bots.Values.Where(b => b.IsCompanion));
+    public IEnumerable<Player> Fighters => Companions.Count == 0 ? _players.Values : _players.Values.Concat(Companions);
+
+    /// <summary>
+    /// The hired companions among <see cref="Bots"/>, kept apart so that every mob's every aggro scan does not walk all the bots (with a
+    /// thousand world bots that was most of the tick); made anew after a bot came, went or became a companion (<see cref="BotsChanged"/>).
+    /// </summary>
+    private IReadOnlyList<Player> Companions => _companions ??= [.. _bots.Values.Where(b => b.IsCompanion)];
+
+    private List<Player>? _companions;
+
+    /// <summary>A bot of the map became a companion (or stopped being one): <see cref="Fighters"/> is made anew.</summary>
+    internal void BotsChanged() => _companions = null;
 
     /// <summary>The players, then the bots (stageJ pvp-spells SPEC §2.1): what the scans of a player's spells look at (areas, auras, radius nodes, chains).</summary>
     public IEnumerable<Player> Characters => _players.Values.Concat(_bots.Values);
@@ -200,12 +211,14 @@ public sealed class Map(string cluster)
     {
         _bots.Add(bot.Id, bot);
         bot.Map = this;
+        _companions = null;
     }
 
     /// <summary>A bot off the map.</summary>
     internal void RemoveBot(Player bot)
     {
         if (_bots.Remove(bot.Id)) bot.Map = null;
+        _companions = null;
     }
 
     internal void Remove(Player player, TimeSpan now)

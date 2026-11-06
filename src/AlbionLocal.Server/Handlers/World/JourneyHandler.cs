@@ -59,9 +59,10 @@ public sealed partial class WorldSession
     /// target a world.xml travel point that the client's route rule reaches (<see cref="Transfers.Route"/>; the no-luggage
     /// route only with an empty inventory, else 8042). Refused with 8040 otherwise. Island trips (stageH islands SPEC §1.3, §1.4):
     /// from the island merchant onto an own island (<see cref="IslandPlan"/>), and from an island's travel point back to its city. Price (stage 6 SPEC §0): the client's key 4 is charged as it is, with UpdateMoney
-    /// before the bare RC-0 response as official (refused with 8041 when the wallet holds less, 8040 for a negative price);
-    /// the server's own price (Transfers.Route's cost × the client's luggage value, NOTES-protocol.md "Travel-point journeys")
-    /// is not worked out, so the §0.1 upper bound is not checked.
+    /// before the bare RC-0 response as official (refused with 8041 when the wallet holds less), once it lies within 1 silver of
+    /// the server's own price after the global discount (<see cref="Game.Pricing.JourneyPrice"/>: Transfers.Route's cost × the
+    /// luggage value of the equipped and carried items, NOTES-protocol.md "Travel-point journeys"; 8040 otherwise, a negative or
+    /// zero price for a paid journey too). Island, showroom and hideout trips have no route cost: 0.
     /// Arrival = the target travel point's spawnpos turned with its tile (its pos + the rotated spawnpos, exact in the
     /// capture), facing = the player's last Move direction (<see cref="Player.Facing"/>; the atan2 rule of exits would have
     /// given 225.88 instead of 310.45593). A target cluster not resolved yet is resolved in the background first, as for an
@@ -102,12 +103,18 @@ public sealed partial class WorldSession
         if (Systems.Flagging.EntryRefusal(player, target.Pvp) is { } barred) // stageE: the target's PvP entry rules, as at an exit [infer: no own code]
             return RefuseJourney(player, req.df, BuyJourneyRefusal.NotPossible, barred.Why);
         var from = player.Map!.Cluster;
-        if (req.dj < 0) return RefuseJourney(player, req.df, BuyJourneyRefusal.NotPossible, $"a negative price {req.dj}");
+        // The server's own price (the client's formula, Pricing.JourneyPrice) bounds the client's: within 1 silver after the global discount.
+        var inventory = player.Inventory;
+        var price = Game.Pricing.JourneyPrice(plan.Route.Cost, plan.Route.NoLuggage,
+            inventory.Equipment.Items.Concat(inventory.Bag.Items).Select(i => (i.Template, i.Count)));
+        if (!Game.Pricing.Accepts(req.dj, price, world.Config.GoldPriceIndex))
+            return RefuseJourney(player, req.df, BuyJourneyRefusal.NotPossible, string.Create(CultureInfo.InvariantCulture,
+                $"the client's price {req.dj / 10000.0:0.####} is not the server's {price / 10000.0:0.####} silver"));
         if (!Systems.Wallet.TrySpend(player, req.dj, $"journey to {plan.Cluster}"))
             return RefuseJourney(player, req.df, BuyJourneyRefusal.NotEnoughSilver, $"{player.Character.Silver / 10000} silver, the journey costs {req.dj / 10000}");
         Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
             $"'{player.Character.Name}' journey {from} -> {plan.Cluster} via {string.Join(" -> ", plan.Route.Clusters)} (cost {plan.Route.Cost:0.##}"
-            + $"{(plan.Route.NoLuggage ? ", no luggage" : "")}): the client's price {req.dj / 10000.0:0.##} silver, charged"));
+            + $"{(plan.Route.NoLuggage ? ", no luggage" : "")}): the client's price {req.dj / 10000.0:0.##} silver (the server's {price / 10000.0:0.##}), charged"));
         Systems.TutorialJourney.Departed(player);
         Commit(player, new Arrival(plan.Cluster, at, player.Facing), plan.Island is { } island ? $"island:{island.Id}" : plan.Hideout is { } home ? $"hideout:{home.Id}:journey" : $"journey:{Short(plan.FromGuid)}");
         SendResponse(OperationCodes.BuyJourney, new GenericResponse(), requestId, encrypted);

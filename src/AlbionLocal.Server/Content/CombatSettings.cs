@@ -37,10 +37,12 @@ public sealed record CombatSettings
     public float MobReaimDistance { get; init; } = 0.5f;
 
     /// <summary>
-    /// A mob's first swing comes this long + its meleeattackdamagetime after it enters combat at the earliest (1.0 s, SPEC
-    /// §5d.1: the first captured mob Attack came about 1.8 s after the player's first hit, "use 1.0 s + the swing windup").
+    /// A mob's first swing starts this long after it enters combat at the earliest (0.15 s). The captures: a standing ghoul's
+    /// Attack (swing start) 137 ms after the HealthUpdate of the player's first hit (114814, mob 354782), a mage's 20 ms after,
+    /// chasing mobs' on the tick they reached their range. SPEC §5d.1's "1.0 s + the swing windup" (a first hit 1.35-2 s late)
+    /// read the 1.8 s of a mob that first had to walk as its reaction.
     /// </summary>
-    public TimeSpan MobReactionTime { get; init; } = TimeSpan.FromSeconds(1);
+    public TimeSpan MobReactionTime { get; init; } = TimeSpan.FromSeconds(0.15);
 
     /// <summary>
     /// A mob resets when its last swing started this long ago while its target is out of its reach (4 s, SPEC §5d.3, §9 Q3:

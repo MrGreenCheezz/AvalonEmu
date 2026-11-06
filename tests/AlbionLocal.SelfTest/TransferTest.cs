@@ -376,18 +376,22 @@ public static class TransferTest
         _ = Store.Get("0000");
         var dir = NewDir();
         var characters = Repository(dir);
-        var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, Items()) { Sync = new object(), Clock = new ManualClock(), Clusters = Store };
+        var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, Client.Items) { Sync = new object(), Clock = new ManualClock(), Clusters = Store };
         var hero = NewHero(characters, "1000", new Vector2(-28.5f, 49.5f));
         hero.Silver = 40_000 * 10_000L; // stage 6: the journey charges the client's price
+        hero.Inventory = [new("T4_ORE", 10)]; // luggage: 10 × weight × fasttravelfactor 2 × 30 per route cost
         characters.Save(hero);
         var (s, peer, _) = Join(world, hero.Id);
         var map = world.Maps.Find("1000")!;
         var point = map.Objects.Values.OfType<Travelpoint>().Single(t => t.Spawn.Guid.ToString() == lymhurst[..36]);
         s.OnRequest(Request(new MoveRequest { wf = DateTime.UtcNow.Ticks, v6 = [-28.5f, 49.5f], v7 = 310.45593f, v8 = [-28.5f, 49.5f], v9 = 0f }, null), encrypted: false);
-        List<OperationResponse> Buy(long objectId, string target, int kind, int requestId)
+        // The price as the client works it out: Lymhurst -> Thetford costs 10 with luggage, × the luggage value of the starter kit.
+        var inventory = s.Player!.Inventory;
+        var price = Pricing.JourneyPrice(10, false, inventory.Equipment.Items.Concat(inventory.Bag.Items).Select(i => (i.Template, i.Count)));
+        List<OperationResponse> Buy(long objectId, string target, int kind, int requestId, long? offer = null)
         {
             var before = peer.Responses.Count;
-            s.OnRequest(Request(new BuyJourneyRequest { df = objectId, dg = target, dh = kind, dj = 369226400 }, requestId), encrypted: false);
+            s.OnRequest(Request(new BuyJourneyRequest { df = objectId, dg = target, dh = kind, dj = offer ?? price }, requestId), encrypted: false);
             return peer.Responses.Skip(before).ToList();
         }
         bool RefusedJourney(List<OperationResponse> got, int requestId) =>
@@ -398,6 +402,8 @@ public static class TransferTest
               && RefusedJourney(Buy(point.Id, lymhurst, 0, 3), 3) && RefusedJourney(Buy(point.Id, thetford, 1, 4), 4),
               "8040 with the request id for an exit, an unknown target, the travel point itself, the home kind; still in the world");
 
+        Check(price > Pricing.A7m && RefusedJourney(Buy(point.Id, thetford, 0, 6, 0), 6) && RefusedJourney(Buy(point.Id, thetford, 0, 7, price + 2 * Pricing.A7m), 7),
+              $"the server's own price ({price / 10000.0:0.##} silver): 0 and 2 silver over it are refused with 8040");
         var sent = peer.Sequence.Count;
         var got = Buy(point.Id, thetford, 0, 5);
         Check(got is [{ ReturnCode: 0 } bought, { ReturnCode: 0 } push]
@@ -406,7 +412,7 @@ public static class TransferTest
               && push.Parameters.Keys.Order().SequenceEqual(new byte[] { 0, ReservedKeys.OperationCode }) && push.Parameters[0] is "0000"
               && push.Parameters[ReservedKeys.OperationCode] is (short)OperationCodes.ChangeCluster && peer.Sequence.Count == sent + 3
               && peer.Sequence[sent] is EventData money && Convert.ToInt16(money.Parameters[ReservedKeys.EventCode]) == (short)EventCodes.UpdateMoney
-              && Convert.ToInt64(money.Parameters[1]) == 40_000 * 10_000L - 369226400,
+              && Convert.ToInt64(money.Parameters[1]) == 40_000 * 10_000L - price,
               $"the journey: UpdateMoney with the client's price taken, then exactly {{253: 201, 255: 5}} RC 0, then {{0: \"0000\", 253: 41}} without 255, nothing else (got {got.Count} responses: {string.Join(", ", peer.Sequence.Skip(sent).Select(x => x is EventData e ? $"event {e.Parameters[ReservedKeys.EventCode]} {string.Join(" ", e.Parameters.Select(p => $"{p.Key}={p.Value}"))}" : $"response rc {((OperationResponse)x).ReturnCode}"))})");
         Check(s.Status == SessionStatus.Transferring && map.Players.Count == 0
               && world.Saves.Load(hero.Id) is { Cluster: "0000", PreviousCluster: "1000", PendingTransfer.Via: var via } && via.StartsWith("journey:7e5a37ea", StringComparison.Ordinal),

@@ -85,6 +85,9 @@ public sealed class World : IDisposable
     /// <summary>Saves the live characters: snapshot under <see cref="Sync"/>, write on its own thread.</summary>
     public SaveScheduler Saves { get; }
 
+    /// <summary>Where the ticks' time goes, by section of <see cref="Update"/> (.tick; the slow-tick warning).</summary>
+    public TickProfile Profile { get; } = new();
+
     public ItemStore Items { get; }
 
     /// <summary>Item values (the repair cost and crafting numbers of stage 6), worked out from items.xml and cached.</summary>
@@ -473,6 +476,13 @@ public sealed class World : IDisposable
     /// </summary>
     public void Update()
     {
+        Profile.Begin();
+        try { Tick(); }
+        finally { Profile.End(); }
+    }
+
+    private void Tick()
+    {
         var now = Clock.Now;
         Delta = now - Now;
         Now = now;
@@ -482,6 +492,7 @@ public sealed class World : IDisposable
             try { action(); }
             catch (Exception e) { Log.Error("world", $"posted action failed: {e}"); }
         }
+        Profile.Mark("posted");
         var utc = DateTime.UtcNow;
         foreach (var map in Maps.Maps)
             foreach (var player in map.Players.Values)
@@ -491,30 +502,37 @@ public sealed class World : IDisposable
         foreach (var map in Maps.Maps)
             foreach (var bot in map.Bots.Values)
                 if (bot.Movement is not null) bot.UpdateVisibility(botTime);
+        Profile.Mark("visibility");
         foreach (var map in Maps.Maps) Harvesting.Update(map, now, Rates.Regrowth);
         foreach (var map in Maps.Maps) Systems.Fishing.Update(map, now, Rates.Regrowth); // stageG: fishing zone charges
         foreach (var map in Maps.Maps) Islands.Update(map, now); // stageH islands: crops that ripen, growth refreshes
+        Profile.Mark("harvest");
         // Combat (stage 5b/5c): the casts, hits, ticks, corpses and loot bags that are due, then the players' combat timeouts.
         foreach (var map in Maps.Maps) map.Timers.Run(now);
+        Profile.Mark("timers");
         // Mob AI (stage 5d): aggro, chase, swings, leash and idle walks of every map with players.
         if (MobAi)
             foreach (var map in Maps.Maps) AI.MobAI.Update(map, this);
+        Profile.Mark("mob ai");
         foreach (var map in Maps.Maps)
         {
             foreach (var player in map.Players.Values) PlayerSystems(player, now);
             foreach (var bot in map.Bots.Values) PlayerSystems(bot, now); // stage I: a bot is a player to these
         }
+        Profile.Mark("player systems");
         foreach (var map in Maps.Maps) SpawnManager.Update(map, this, now);
         foreach (var map in Maps.Maps) WorldChests.Update(map); // stageH: chests gone and due again, the camp quest circles
         Bosses.Update(); // stageH: world bosses due, despawned ones
         Territories.Update(); // stageP P5: the castle fights, capture zones, chests and castle season points
         Hideouts.Update(); // stageP hideouts: construction phases, upgrades, the daily food and tribute
         Events.Update(); // PVE-DESIGN step 7: world events due, their waves, ends and rewards
+        Profile.Mark("spawns and world");
         // Stage I: the bot populations, walks and brains, guarded so that a fault there never costs the tick its keepalives and saves.
         try { Bots.Update(now); }
         catch (Exception e) { Log.Error("bots", $"bot update failed: {e}"); }
         try { Companions.Update(); } // stageN: companions follow their owners over cluster changes, left behind or stuck
         catch (Exception e) { Log.Error("bots", $"companion update failed: {e}"); }
+        Profile.Mark("bots");
         Expeditions.Update(); // stageH: ready timeouts, the Join and exit channels, instance timeouts and closing
         FakeCasts.Update(); // the slot-25 server casts: the corrupted dungeon and mists enter casts, the chest openings
         Corrupted.Update(); // stageL: the corrupted instances' time limits and closing
@@ -527,6 +545,7 @@ public sealed class World : IDisposable
         Hunts.Update(); // stageN hunts: find casts, track readings, hunt timeouts, escapes and fled targets
         Systems.MarketExpiry.Update(this, now); // stageJ mail: once a minute the expired market orders and mails
         Systems.LearningPoints.Update(this, now); // stageJ focus-lp: once a minute the learning points of the online players
+        Profile.Mark("instances");
         // World timers: the keepalive of every joined connection, then the saves that are due.
         foreach (var map in Maps.Maps)
             foreach (var player in map.Players.Values)
@@ -542,6 +561,7 @@ public sealed class World : IDisposable
         Hideouts.UpdateChannels(); // stageP hideouts: the 4 s channels into and out of a hideout
         Dungeons.Update(now); // stageG: exit rerolls, despawns and refills, dungeons that close
         Saves.Update(now);
+        Profile.Mark("sessions and saves");
         if (Config.MapIdleUnload > TimeSpan.Zero)
             // A floor of a live random dungeon stays until the dungeon closes (its own empty lifetime, RandomDungeons.Close).
             // So does an expedition instance's map (Expeditions.Close), a corrupted dungeon's (CorruptedDungeons.Close), a hellgate's (Hellgates.Close)

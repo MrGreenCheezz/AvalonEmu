@@ -18,7 +18,7 @@ namespace AlbionLocal.Server.Bots;
 /// beyond Bots:Patrol:LeashRadius (40) of where the fight began or (a gatherer) is no longer engaged (its or its party's last hit older than
 /// the engage time, whatever Pvp:Mode makes the pair); the most recent attacker that is still valid comes next, and one that dealt at least
 /// 1.5 × the target's health damage in the last 5 s takes its place (<see cref="Hurt"/>). The first swing
-/// comes Bots:Combat:ReactionMs (600) after the first hit; then auto-attacks with its mainhand (a gatherer's tool, or the weapon an armed one draws, <see cref="Arm"/>) at the weapon's interval
+/// comes Bots:Combat:ReactionMs (300) after the first hit; then auto-attacks with its mainhand (a gatherer's tool, or the weapon an armed one draws, <see cref="Arm"/>) at the weapon's interval
 /// within its range (<see cref="Pvp.Swing"/>: Attack to its observers, the target's HealthUpdate at the impact), a riding bot dismounted
 /// first (<see cref="Mounts.BeforeAction"/>), out of range a chase (<see cref="BotNav.ChaseTo"/>); with Bots:Combat:Spells Full the spells of
 /// its gear too (<see cref="CastSpell"/>, stageJ pvp-spells SPEC §2.9), and no swing or chase while its cast or channel runs. A gatherer below Bots:Gatherer:FleeHealth

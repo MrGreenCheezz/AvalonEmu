@@ -111,6 +111,15 @@ public sealed class ItemTemplate
     /// <summary>Every attribute of the element (the enchantment's over the item's for @N), raw.</summary>
     public IReadOnlyDictionary<string, string> Attrs { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>weight (kg; bdi+0x2C), 0 without: a stack weighs count × this (a53.bv).</summary>
+    public double Weight => Number("weight", 0);
+
+    /// <summary>fasttravelfactor (bdi+0x30, read by bdi.li 0x1805F4060 with a7m 1 as the default): the weight's share in a journey's luggage value (T4_ORE 2, T8_WOOD 32).</summary>
+    public double FastTravelFactor => Number("fasttravelfactor", 1);
+
+    private double Number(string key, double fallback) =>
+        Attrs.TryGetValue(key, out var v) && double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : fallback;
+
     /// <summary>Unique name without the @N enchantment suffix.</summary>
     public string BaseName => Name.IndexOf('@') is var i and >= 0 ? Name[..i] : Name;
 

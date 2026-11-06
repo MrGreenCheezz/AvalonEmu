@@ -171,7 +171,8 @@ public sealed partial class WorldSession
             a8v = mount.Value, a8w = mount.Max, a8x = mount.RegenCap, a8y = mount.RegenPerSecond,
             a8z = mount.Max > 0 ? mount.Stamp : 0,
             a87 = c.Silver,   // [33] silver, a7m raw (stage 6 SPEC §0; ctp+0x2c8)
-            a88 = c.Gold,     // [34] gold, a7m raw (ctp+0x2d0); keys 83-86 (the city price factor) are left out: factor 1 (SPEC §0.1)
+            a88 = c.Gold,     // [34] gold, a7m raw (ctp+0x2d0); keys 84-86 (the city price factor) are left out: factor 1 (SPEC §0.1)
+            bal = (long)Math.Round(world.Config.GoldPriceIndex * Pricing.A7m), // [83] gold price index (c3d.x): official 5000, no global discount
             a96 = nowTicks,   // [68] clock anchor GameTimeStamp (UTC ticks)
             a97 = nowMs,      // [69] Photon server time (ms) at the anchor
             // Item containers (cx2.ai7): equipment via ctp.af (10 EquipmentSlot slots), inventory via
