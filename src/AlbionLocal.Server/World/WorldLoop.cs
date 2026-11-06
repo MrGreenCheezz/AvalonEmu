@@ -31,15 +31,17 @@ public sealed class WorldLoop(World world) : IDisposable
             while (await timer.WaitForNextTickAsync(_cts.Token))
             {
                 TimeSpan took;
+                string? slowest = null;
                 lock (world.Sync)
                 {
                     var start = Stopwatch.GetTimestamp();
                     try { world.Update(); }
                     catch (Exception e) { Log.Error("world", $"tick failed: {e}"); }
                     took = Stopwatch.GetElapsedTime(start);
+                    if (took > SlowTick) slowest = world.Profile.Slowest();
                 }
                 if (took > SlowTick)
-                    Log.Warn("world", $"tick took {took.TotalMilliseconds:0} ms (over {SlowTick.TotalMilliseconds:0} ms; the lock also holds back ENet acks)");
+                    Log.Warn("world", $"tick took {took.TotalMilliseconds:0} ms (over {SlowTick.TotalMilliseconds:0} ms; the lock also holds back ENet acks): {slowest}");
             }
         }
         catch (OperationCanceledException) { }

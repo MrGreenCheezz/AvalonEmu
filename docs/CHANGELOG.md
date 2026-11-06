@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-06 (later) — Fixes: the 100 % global discount, the journey price; faster mobs and bots; tick profile
+
+- **Global discount** (bug): every NPC service (repairs, crafting fees, enchanting, fast travel and the rest) showed a 100 % "Global discount" and cost nothing. The client weighs prices against a gold price index of 5000 and reads the index from Join key 83, which the server never sent. It now sends 5000, as every captured official Join does (no discount); `Economy:GoldPriceIndex` sets it (2500 = 50 % off). A price of 0 is no longer accepted.
+- **Fast travel**: the server works out the journey price itself, the way the client does (route cost × the luggage value: count × weight × fasttravelfactor × 30 over the equipped and carried items), and refuses a client price more than 1 silver off it.
+- **Mobs react as on the official server**: a mob's first swing starts 0.15 s after it enters a fight, not 1 s plus its windup (`MobReactionSeconds` in `content/combat.json`). In the captures a standing mob swung about 0.14 s after the first hit, and chasing mobs swung as soon as they reached their range.
+- **Bots**: an idle patrol or drifter that a player sees decides at least every 0.25 s (`Bots:ScanSeconds`), so it attacks on sight; a bot's first swing after the first hit comes after 300 ms instead of 600 (`Bots:Combat:ReactionMs`).
+- **Performance**: every mob's aggro scan walked all bots of its map to find hired companions. With 1000 bots on a map of 1090 mobs a tick now takes about 3 ms of CPU instead of 15 (2000 bots: about 5 ms).
+- **Diagnostics**: `.tick` (GameMaster) shows the world tick's average and peak by section; a tick over 20 ms names its slowest sections in the log. `SelfTest --bench=<bots>` runs a stress test with that many bots (it needs the client data).
+
 ## 2026-11-06 — Fixes: the expedition Join channel, the way out of an island showroom
 
 - **Expeditions** (issue #8): the Join channel at an expedition agent no longer breaks off at once. The client ends that channel on any answer to `EnteringExpeditionStart` (op 278) and then cancels it itself, so the server now sends no answer when it accepts; the player enters the expedition after the full 10 s.

@@ -126,7 +126,7 @@ public sealed partial class WorldSession
         if (damaged.Count == 0) return Refuse(RepairError.ItemHasFullDurability, "every listed item is at full durability");
         var silver = damaged.Sum(i => Pricing.RepairBase(world.ItemValues.Of(i.Template), i.DurabilityRaw, i.Template.MaxDurability, i.Count, world.Economy));
         var expected = silver * Pricing.A7m;
-        if (!Pricing.Accepts(req.r, expected))
+        if (!Pricing.Accepts(req.r, expected, world.Config.GoldPriceIndex))
             return Refuse(RepairError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.r / 10000.0:0.####} is not the server's {silver}"));
         if (player.Character.Silver < req.r) return Refuse(RepairError.NotEnoughSilver, $"{player.Character.Silver / 10000} silver of {req.r / 10000}");
         var now = world.GameNow;
@@ -328,7 +328,7 @@ public sealed partial class WorldSession
         if (world.Mists.TraderRefusal(player, recipe, crafts) is { } gated) return Refuse(CraftError.NotEnoughResources, gated);
         if (world.Factions.ShopRefusal(player, recipe, crafts, building.Template) is { } faction) return Refuse(CraftError.NotEnoughResources, faction); // stageN faction SPEC §3
         var price = Pricing.CraftPrice(recipe, crafts);
-        if (!Pricing.Accepts(req.r, price))
+        if (!Pricing.Accepts(req.r, price, world.Config.GoldPriceIndex))
             return Refuse(CraftError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.r / 10000.0:0.####} is not the server's {price / 10000.0:0.####}"));
         if (player.Character.Silver < req.r) return Refuse(CraftError.NotEnoughSilver, $"{player.Character.Silver / 10000} silver of {req.r / 10000}");
         var bag = player.Inventory.Bag;

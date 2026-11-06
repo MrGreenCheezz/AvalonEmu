@@ -28,9 +28,10 @@
   // Metres the chased player may move from the mob's last aim point before the mob aims again (SPEC §5d.1).
   "MobReaimDistance": 0.5,
 
-  // Seconds from a mob's combat entry to its first swing at the earliest, plus the mob's meleeattackdamagetime (SPEC §5d.1:
-  // the first captured mob Attack came about 1.8 s after the player's first hit; "1.0 s + the swing windup").
-  "MobReactionSeconds": 1,
+  // Seconds from a mob's combat entry to the start of its first swing at the earliest (its windup follows, as on every swing).
+  // Captured: a standing ghoul's Attack 137 ms after the player's first hit landed, chasing mobs' as soon as they were in range
+  // (SPEC §5d.1's "1.0 s + the swing windup" made the first hit 1.35-2 s late).
+  "MobReactionSeconds": 0.15,
 
   // Seconds since the mob's last swing started, while its target is out of reach, after which it resets and walks home
   // (SPEC §9 Q3: the captured resets started 3.8-4.0 s after the mob's last Attack).

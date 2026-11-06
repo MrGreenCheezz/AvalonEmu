@@ -141,7 +141,7 @@ public sealed partial class WorldSession
         if (item.Template.Enchantment < data.MinEnchant) return Refuse(AwakenError.ItemEnchantmentTooLow, $"{item.Template.Name} is below enchantment {data.MinEnchant}");
         if (item.Template.MaxDurability > 0 && item.DurabilityRaw <= 0) return Refuse(AwakenError.ItemDamaged, $"{item} is broken");
         var (silver, resources) = AwakenCost(data, item);
-        if (!Pricing.Accepts(req.ae, silver))
+        if (!Pricing.Accepts(req.ae, silver, world.Config.GoldPriceIndex))
             return Refuse(AwakenError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.ae / 10000.0:0.####} is not the server's {silver / 10000.0:0.####}"));
         var price = Math.Max(req.ae, 0);
         if (player.Character.Silver < price) return Refuse(AwakenError.NotEnoughSilver, $"{player.Character.Silver / 10000} silver of {price / 10000}");
@@ -228,7 +228,7 @@ public sealed partial class WorldSession
             case LegendaryAction.Reattune:
                 if (soul.AttunedTo(player.Character.Id)) return Refuse(TraitError.ReattuneAlreadyAttuned, "attuned to the player already");
                 silver = ReattuneCost(data, item);
-                if (!Pricing.Accepts(req.ae, silver)) // ReattuneItemErrorCode has no PriceChanged: the generic error
+                if (!Pricing.Accepts(req.ae, silver, world.Config.GoldPriceIndex)) // ReattuneItemErrorCode has no PriceChanged: the generic error
                     return StationRefused(player, req, StationGenericError, 0, string.Create(CultureInfo.InvariantCulture, $"Reattune: the client's price {req.ae / 10000.0:0.####} is not the server's {silver / 10000.0:0.####}"));
                 silver = Math.Max(req.ae, 0);
                 if (player.Character.Silver < silver) return Refuse(TraitError.ReattuneNotEnoughSilver, $"{player.Character.Silver / 10000} silver of {silver / 10000}");
@@ -243,7 +243,7 @@ public sealed partial class WorldSession
                 if (!generate && soul.Traits[slot].Roll >= 1) return Refuse(TraitError.RerollMaxRollValueReached, $"slot {slot} is at 1");
                 var free = generate && soul.PendingSlot == slot;
                 (attunement, silver) = free ? (0, 0) : TraitCost(data, item, generate ? data.AddReplaceBase : data.RerollBase);
-                if (!Pricing.Accepts(req.ae, silver))
+                if (!Pricing.Accepts(req.ae, silver, world.Config.GoldPriceIndex))
                     return Refuse(generate ? TraitError.GenerateSilverCostsChanged : TraitError.RerollSilverCostsChanged,
                         string.Create(CultureInfo.InvariantCulture, $"the client's silver {req.ae / 10000.0:0.####} is not the server's {silver / 10000.0:0.####}"));
                 if (req.af < 0 || req.af > attunement + Pricing.A7m)

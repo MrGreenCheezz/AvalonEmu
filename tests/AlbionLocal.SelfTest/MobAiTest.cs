@@ -158,22 +158,24 @@ public static class MobAiTest
               && Vector2.Distance(run[0].Target, here) <= reach && run[0].Target != run[0].Pos,
               $"aggro inside 8 m: target = the player, event 3 at {t.AttackMoveSpeed} m/s towards it, ending within reach {reach:0.##} (got {run.Count} samples, {soldier.AI.Describe()})");
 
-        // 2. It stops in reach, then swings at 1 s + its 1 s windup + n × 2.5 s, each Attack {1 start, 2 me, 3 melee, 4 = 5 =
-        //    start + 1 s, 6 0}.
+        // 2. It stops in reach and swings at once (MobReactionTime after the aggro at the earliest), then every 2.5 s, each Attack
+        //    {1 start, 2 me, 3 melee, 4 = 5 = start + 1 s (the windup), 6 0}.
         arena.Run(6);
         var events = Since(peer, mark);
         var moves = Moves(peer, mark, soldier);
         Check(moves.Count >= 2 && moves[^1].Speed == 0 && moves[^1].Pos == moves[^1].Target && Vector2.Distance(soldier.Position, here) <= reach,
               $"then a stop (speed 0, pos = target) in reach (got {moves.Count} samples, the mob {Vector2.Distance(soldier.Position, here):0.##} m away)");
         var attacks = events.Where(e => e.Code == EventCodes.Attack && L(e.P, 0) == soldier.Id).Select(e => e.P).ToList();
-        Check(attacks.Count == 2 && L(attacks[0], 1) == entry + SpellCasts.Seconds(2) && L(attacks[1], 1) - L(attacks[0], 1) == SpellCasts.Seconds(2.5)
+        Check(attacks.Count >= 2 && L(attacks[0], 1) >= entry + world.Combat.MobReactionTime.Ticks && L(attacks[0], 1) < entry + SpellCasts.Seconds(2)
+              && attacks.Zip(attacks.Skip(1)).All(p => L(p.Second, 1) - L(p.First, 1) == SpellCasts.Seconds(2.5))
               && attacks.All(a => L(a, 2) == me.Id && Convert.ToByte(a[3]) == 1 && L(a, 4) - L(a, 1) == SpellCasts.Seconds(1) && L(a, 5) == L(a, 4) && Convert.ToByte(a[6]) == 0),
-              $"two Attacks in 6 s: the first 1 s + 1 s windup after the aggro, then 2.5 s apart (1 / 0.4), k4 − k1 = 1000 ms, k3 = 1 (got {Show(attacks.Select(a => (EventCodes.Attack, a)))})");
+              $"Attacks in 6 s: the first once in reach, under 2 s after the aggro, then 2.5 s apart (1 / 0.4), k4 − k1 = 1000 ms, k3 = 1 (got {Show(attacks.Select(a => (EventCodes.Attack, a)))})");
         var r = Combat.ResistanceOf(me, EffectType.Physical);
         var hits = events.Where(e => e.Code == EventCodes.HealthUpdate && L(e.P, 0) == me.Id).Select(e => e.P).ToList();
         var dmg = Combat.Rounded(431 * r);
-        Check(hits.Count == 2 && hits.Select(h => L(h, 1)).SequenceEqual(attacks.Select(a => L(a, 4))) && hits.All(h => F(h, 2) == -dmg && Convert.ToByte(h[4]) == 1
-              && Convert.ToByte(h[5]) == 0 && L(h, 6) == soldier.Id && Convert.ToInt16(h[7]) == -1) && F(hits[1], 3) == me.Health.Max - 2 * dmg,
+        var landed = attacks.Where(a => L(a, 4) <= world.GameNow).ToList();
+        Check(hits.Count >= 2 && hits.Select(h => L(h, 1)).SequenceEqual(landed.Select(a => L(a, 4))) && hits.All(h => F(h, 2) == -dmg && Convert.ToByte(h[4]) == 1
+              && Convert.ToByte(h[5]) == 0 && L(h, 6) == soldier.Id && Convert.ToInt16(h[7]) == -1) && F(hits[^1], 3) == me.Health.Max - hits.Count * dmg,
               $"each hit: HealthUpdate on the player {{1 = Attack k4, 2: -round(431 × {r:0.###}), 3 left, 4: 1, 5: 0, 6 mob, 7: -1}} (got {Show(hits.Select(h => (EventCodes.HealthUpdate, h)))})");
         var state = events.Where(e => e.Code == EventCodes.InCombatStateUpdate).Select(e => e.P).ToList();
         Check(me.Combat.InCombat && me.Combat.Hit && state.Count == 1 && state[0][1] is true && state[0][2] is true && me.Health.RegenPerSecond == 0
@@ -364,18 +366,18 @@ public static class MobAiTest
         var (_, peer, me) = arena0.Join("Target", new InventoryItem("T4_MAIN_SWORD"));
         var (arena, map) = Quiet(arena0);
 
-        // A mage 6 m away, hit: it swings at once in reach (magic, range 9): Attack {3 4, 4 = 1 + 0.417 s, 5 = 4 + the flight
+        // A mage 6 m away, hit: it swings MobReactionTime later in reach (magic, range 9): Attack {3 4, 4 = 1 + 0.417 s, 5 = 4 + the flight
         // at 20 m/s}, the HealthUpdate {1 = k4, 2 -round(damage × R magic), 4 2, 5 1, 6 mage} at the impact; 2 s apart.
         var mage = arena.Spawn("T4_MOB_ROAMING_UNDEAD_MAGE", new Vector2(6, 0));
         var t = mage.Template;
         var mark = peer.Events.Count;
         var entry = world.GameNow;
         lock (world.Sync) Combat.Damage(me, mage, 1, EffectType.Physical, HitOrigin.Direct, -1, world.GameNow);
-        arena.Run(4.5);
+        arena.Run(3.5);
         var events = Since(peer, mark);
         var attacks = events.Where(e => e.Code == EventCodes.Attack && L(e.P, 0) == mage.Id).Select(e => e.P).ToList();
         var flight = SpellCasts.Seconds(Vector2.Distance(mage.Position, me.PositionAt(DateTime.UtcNow)) / world.Combat.AutoAttackProjectileSpeed);
-        var first = entry + SpellCasts.Seconds(1) + SpellCasts.Seconds(t.MeleeAttackDamageTime);
+        var first = entry + world.Combat.MobReactionTime.Ticks;
         Check(t is { AttackType: "magic", AttackSpeed: 0.5f } && attacks.Count == 2 && L(attacks[0], 1) >= first && L(attacks[0], 1) < first + SpellCasts.Seconds(0.05)
               && L(attacks[1], 1) - L(attacks[0], 1) == SpellCasts.Seconds(2)
               && attacks.All(a => Convert.ToByte(a[3]) == 4 && L(a, 4) - L(a, 1) == SpellCasts.Seconds(t.MeleeAttackDamageTime) && Math.Abs(L(a, 5) - L(a, 4) - flight) <= 1),

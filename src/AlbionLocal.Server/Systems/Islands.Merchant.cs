@@ -49,7 +49,7 @@ public sealed partial class Islands
         else
         {
             var charge = world.Config.IslandsFreeIslands ? 0 : clientPrice;
-            if (!world.Config.IslandsFreeIslands && !Pricing.Accepts(clientPrice, price * Pricing.A7m)) why = $"the client's price {clientPrice / Pricing.A7m} is not {price}";
+            if (!world.Config.IslandsFreeIslands && !Pricing.Accepts(clientPrice, price * Pricing.A7m, world.Config.GoldPriceIndex)) why = $"the client's price {clientPrice / Pricing.A7m} is not {price}";
             else if (!Wallet.TrySpend(p, charge, $"island {type.Name}")) why = $"{p.Character.Silver / Pricing.A7m} silver, the island costs {charge / Pricing.A7m}";
             else if (Give(p.Character, type, 0, out why) is { } island)
             {
@@ -80,7 +80,7 @@ public sealed partial class Islands
         else
         {
             var charge = world.Config.IslandsFreeIslands ? 0 : clientPrice;
-            if (!world.Config.IslandsFreeIslands && !Pricing.Accepts(clientPrice, price * Pricing.A7m)) why = $"the client's price {clientPrice / Pricing.A7m} is not {price}";
+            if (!world.Config.IslandsFreeIslands && !Pricing.Accepts(clientPrice, price * Pricing.A7m, world.Config.GoldPriceIndex)) why = $"the client's price {clientPrice / Pricing.A7m} is not {price}";
             else if (!Wallet.TrySpend(p, charge, $"upgrade of {island}")) why = $"{p.Character.Silver / Pricing.A7m} silver, the upgrade costs {charge / Pricing.A7m}";
             else
             {

@@ -2,7 +2,7 @@ namespace AlbionLocal.SelfTest;
 
 /// <summary>Options belong to the runner, rather than to the server's configuration.</summary>
 public sealed record TestRunOptions(string? ClientGameData = null, string? Only = null,
-    string? Report = null, string? Lab = null, bool Trace = false, bool Verbose = false, bool Help = false)
+    string? Report = null, string? Lab = null, bool Trace = false, bool Verbose = false, bool Help = false, int? Bench = null)
 {
     public static TestRunOptions Parse(IEnumerable<string> args)
     {
@@ -22,6 +22,7 @@ public sealed record TestRunOptions(string? ClientGameData = null, string? Only 
                 ("--lab", 2) when parts[1] is "all" or "serialization" or "transport" or "session" or "messages"
                     => result with { Lab = parts[1] },
                 ("--protocol-trace", 1) => result with { Trace = true },
+                ("--bench", 2) when int.TryParse(parts[1], out var bots) && bots >= 0 => result with { Bench = bots },
                 ("-v", 1) => result with { Verbose = true },
                 ("--help", 1) => result with { Help = true },
                 _ => throw new ArgumentException($"unknown or invalid option: {parts[0]}"),

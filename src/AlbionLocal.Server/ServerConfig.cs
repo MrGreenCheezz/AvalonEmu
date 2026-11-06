@@ -409,6 +409,13 @@ public sealed record ServerConfig
     public double SilverPickupTax { get; init; }
 
     /// <summary>
+    /// Economy:GoldPriceIndex (5000): Join key 83, the gold price the client weighs its silver services against a fixed 5000
+    /// (<see cref="Game.Pricing.Discounted"/>): below it repairs, crafting fees, journeys and the like cost index / 5000 of their price
+    /// (the "Global discount" row). Every captured official Join sent 5000, no discount; without the key the client read 0, 100 %.
+    /// </summary>
+    public double GoldPriceIndex { get; init; } = Game.Pricing.GoldPriceReference;
+
+    /// <summary>
     /// Loot:BlackMarketChance (0.1): the chance that a mob drops a rolled loot.xml item marked useblackmarket="true" (all the
     /// DIRECTLOOTDROP equipment). The client's loot printer calls them "drops only via blackmarket": the official server drops
     /// such an item only when its Black Market holds one, which a local server has no stock for. 0.1 fits the 18 captured mob
@@ -1142,6 +1149,7 @@ public sealed record ServerConfig
                     ? TimeSpan.FromSeconds(bi) : throw new InvalidDataException($"Consumables:BatchInterval: '{batch}' is not 0..60"),
             SilverPickupFactor = Number("Economy:SilverPickupFactor", 1, 0, 100),
             SilverPickupTax = Number("Economy:SilverPickupTax", 0, 0, 1),
+            GoldPriceIndex = Number("Economy:GoldPriceIndex", Game.Pricing.GoldPriceReference, 1, 1_000_000),
             LootBlackMarketChance = Number("Loot:BlackMarketChance", d.LootBlackMarketChance, 0, 1),
             LootBlackMarketSoftCap = Int("Loot:BlackMarketSoftCap", d.LootBlackMarketSoftCap, 0, 1000),
             LootTierCap = Flag("Loot:TierCap", d.LootTierCap),
@@ -1672,6 +1680,7 @@ public sealed record ServerConfig
             ArrivalSeconds = Range("Bots:ArrivalSeconds", d.ArrivalSeconds, 0, 86400),
             ActiveRange = Number("Bots:ActiveRange", d.ActiveRange, 0, 10000),
             ThinkSeconds = Range("Bots:ThinkSeconds", d.ThinkSeconds, 0.05, 60),
+            ScanSeconds = Number("Bots:ScanSeconds", d.ScanSeconds, 0.05, 60),
             MoveResendSeconds = Number("Bots:MoveResendSeconds", d.MoveResendSeconds, 0.05, 10),
             PauseChance = Number("Bots:Move:PauseChance", d.PauseChance, 0, 1),
             Look = Choice("Bots:Look", d.Look),
@@ -2702,6 +2711,9 @@ public sealed record BotOptions
     /// <summary>Bots:ThinkSeconds ("0.5-2"): the time between two decisions of a bot.</summary>
     public (double Min, double Max) ThinkSeconds { get; init; } = (0.5, 2);
 
+    /// <summary>Bots:ScanSeconds (0.25): a patrol or drifter a human sees decides at least this often, so it attacks on sight, not up to ThinkSeconds later.</summary>
+    public double ScanSeconds { get; init; } = 0.25;
+
     /// <summary>Bots:MoveResendSeconds (0.5): a leg under way is sent again this often while a human sees the bot (the client dead-reckons 1 s).</summary>
     public double MoveResendSeconds { get; init; } = 0.5;
 
@@ -2787,10 +2799,10 @@ public sealed record BotOptions
     /// <summary>Bots:Pvp:CrimesAgainstBots (official true, pve false): a Red player's hit on a bot that is not Red is a crime (reputation, OUTLAW).</summary>
     public bool CrimesAgainstBots { get; init; } = true;
 
-    /// <summary>Bots:Combat:TickMs (200): how often a fighting bot decides; Bots:Combat:ReactionMs (600): its first swing after the first hit.</summary>
+    /// <summary>Bots:Combat:TickMs (200): how often a fighting bot decides; Bots:Combat:ReactionMs (300, a player's reaction): its first swing after the first hit.</summary>
     public int CombatTickMs { get; init; } = 200;
 
-    public int ReactionMs { get; init; } = 600;
+    public int ReactionMs { get; init; } = 300;
 
     /// <summary>
     /// Bots:Combat:Spells (Full, both presets; stageJ pvp-spells SPEC §2.9, D10): a fighting bot casts the active spells of its gear (its

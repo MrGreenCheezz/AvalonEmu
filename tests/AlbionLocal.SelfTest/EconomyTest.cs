@@ -27,7 +27,7 @@ public static class EconomyTest
     public static IEnumerable<(string, Action)> All =>
     [
         ("economy: item values 384/256/65536, repair 3168 (c5 3662.208, nutrition 22), c5(31940) = 36922.64, seed prices, crafts, refining recipes, Thetford ore returns 36.7/53.9 %, quality weights", Formulas),
-        ("economy: Join keys 33/34, UpdateMoney {0, 1, 2}, .money, silver saved; a Player account cannot run .item add, an Admin can (.account level)", MoneyAndLevels),
+        ("economy: Join keys 33/34/83, UpdateMoney {0, 1, 2}, .money, silver saved; a Player account cannot run .item add, an Admin can (.account level)", MoneyAndLevels),
         ("economy: op 55 at Thetford: repair (no response, the corrected burst), shop purchase (the captured order), failures {0 building, 1 ACT, 2 counter, 3 error} with RC 2202, a timed smelter batch", Stations),
         ("economy: salvage (ACT 3) at the repair shop: the T4 sword at half durability gives no silver (no itemvalue), 1-2 bars, 0-1 leather, kept over a relog; a worn sword; one destroyed meanwhile gives nothing; refusals; AccessStatus of the shop", Salvage),
         ("economy: enchanting (ACT 7) T4 sword .0 → .1 with 288 runes at the meld building (quality and spells kept, new object, saved), refused without runes; quality reroll (ACT 6) 1 → better at the repair shop (event 67, silver); crafting quality bonus", Enchanting),
@@ -222,6 +222,10 @@ public static class EconomyTest
         var (session, peer, me) = town.Join("Moneybags", 1234, new InventoryItem("T4_ORE", 3));
         var join = peer.Responses.First(r => Convert.ToInt16(r.Parameters[ReservedKeys.OperationCode]) == (short)OperationCodes.Join);
         Check(L(join.Parameters, 33) == 12_340_000 && !join.Parameters.ContainsKey(34) && !join.Parameters.ContainsKey(84), "Join key 33 = 1234 silver (a7m), no gold, no price factor keys");
+        // The global discount: key 83 as every captured official Join (5000, none); without it the client took 100 % off and sent 0.
+        Check(L(join.Parameters, 83) == 50_000_000 && !Pricing.Accepts(0, 3168 * Pricing.A7m) && Pricing.Accepts(3168 * Pricing.A7m, 3168 * Pricing.A7m)
+              && Pricing.Discounted(3168 * Pricing.A7m, 2500) == 1584 * Pricing.A7m && Pricing.Accepts(1584 * Pricing.A7m, 3168 * Pricing.A7m, 2500),
+              "Join key 83 = 5000 (no global discount); a price of 0 is refused; Economy:GoldPriceIndex 2500 takes half off");
 
         var replies = new List<(string Text, bool Error)>();
         var gm = new CommandContext(world, me, AccountLevel.GameMaster, (t, e) => replies.Add((t, e)));

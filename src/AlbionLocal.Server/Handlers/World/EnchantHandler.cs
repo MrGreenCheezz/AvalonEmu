@@ -81,7 +81,7 @@ public sealed partial class WorldSession
         if (item.Template.IsEquipment && item.Template.MaxDurability > 0 && item.DurabilityRaw <= 0) return Refuse(EnchantError.ItemDamaged, $"{item.Template.Name} is broken");
         if (cost.Gold > 0) return Refuse(EnchantError.NotEnoughGold, "gold upgrades are not made");
         var silver = (long)Math.Round((decimal)cost.Silver * Pricing.A7m) * item.Count;
-        if (!Pricing.Accepts(req.r, silver))
+        if (!Pricing.Accepts(req.r, silver, world.Config.GoldPriceIndex))
             return Refuse(EnchantError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.r / 10000.0:0.####} is not the server's {silver / 10000.0:0.####}"));
         var price = Math.Max(req.r, 0);
         if (player.Character.Silver < price) return Refuse(EnchantError.NotEnoughSilver, $"{player.Character.Silver / 10000} silver of {price / 10000}");
@@ -192,7 +192,7 @@ public sealed partial class WorldSession
         if (req.t is { Length: > 0 } counts && (counts.Length != items.Count || items.Where((i, k) => i.Count != counts[k]).Any()))
             return Refuse(RerollError.ItemsNotMatchingRequest, "the client's counts are not the server's");
         var expected = items.Sum(RerollPrice);
-        if (!Pricing.Accepts(req.r, expected))
+        if (!Pricing.Accepts(req.r, expected, world.Config.GoldPriceIndex))
             return Refuse(RerollError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.r / 10000.0:0.####} is not the server's {expected / 10000.0:0.####}"));
         if (player.Character.Silver < req.r) return Refuse(RerollError.NotEnoughSilver, $"{player.Character.Silver / 10000} silver of {req.r / 10000}");
         var now = world.GameNow;

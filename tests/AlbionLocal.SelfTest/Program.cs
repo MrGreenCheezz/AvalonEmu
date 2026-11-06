@@ -15,7 +15,7 @@ try { options = TestRunOptions.Parse(args); }
 catch (ArgumentException e) { Console.Error.WriteLine(e.Message); return 2; }
 if (options.Help)
 {
-    Console.WriteLine("SelfTest [--client-gamedata=<folder>] [--only=<text>] [--report=<file.json>] [--lab=all|serialization|transport|session|messages] [--protocol-trace] [-v]");
+    Console.WriteLine("SelfTest [--client-gamedata=<folder>] [--only=<text>] [--report=<file.json>] [--lab=all|serialization|transport|session|messages] [--protocol-trace] [-v] [--bench=<bots>]");
     return 0;
 }
 AlbionTests.ClientGameDataOverride = options.ClientGameData;
@@ -136,6 +136,8 @@ tests.AddRange(LabTests.All);
 Log.Level = options.Verbose ? LogLevel.Trace : LogLevel.Warn;
 // As the server's Program.cs: compressed GameTimeStamps count from the Login key 251 value.
 AlbionLocal.Server.Protocol.AlbionSerializer.CompressedTimeBase = AlbionLocal.Server.Game.GameTime.StartTicks;
+// --bench=<bots>: the tick benchmark instead of the tests.
+if (options.Bench is { } bench) return Bench.Run(bench);
 // --only=<text>: just the tests whose name contains it (a quick run while working on one system).
 if (options.Lab is { } lab)
     tests = [.. tests.Where(t => LabExercises.InStage(t.Name, lab))];
