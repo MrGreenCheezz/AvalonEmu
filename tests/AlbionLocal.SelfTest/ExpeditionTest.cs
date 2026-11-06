@@ -137,12 +137,14 @@ public static class ExpeditionTest
                   && Int(e, 2) == 3 && e.Parameters[5] is (byte)1 && Int(e, 10) == 3 && e.Parameters.ContainsKey(4)),
               $"register: 10858 for category 99, RC 0 (255 echoed, no body) and 263 kinds 1, 5 {{0 me, 1 T3_STANDARD, 2 3, 5 1, 10 3}}, then 10856 (got {bad.ReturnCode}/{good.ReturnCode}/{twice.ReturnCode}, {infos.Count} x 263)");
 
-        // The Join channel (§2.5): 278 → kind 6; 279 → 265 false, kind 5; 278 again, 10 s → 265 true and the push {0: id, 1: Mine-SOLO}.
+        // The Join channel (§2.5): 278 → kind 6 and no response; 279 → 265 false, kind 5; 278 again, 10 s → 265 true and the push {0: id, 1: Mine-SOLO}.
+        var answered = peer.Responses.Count;
         Call(s, peer, new EnteringExpeditionStartRequest { wf = world.GameNow }, 10);
+        var silent = peer.Responses.Count == answered;
         Call(s, peer, new EnteringExpeditionCancelRequest { wf = world.GameNow }, 11);
         var cancelled = Of(peer, EventCodes.EnteringExpeditionCancel);
-        Check(Of(peer, EventCodes.ExpeditionRegistrationInfo).Skip(2).Select(e => Int(e, 3)).SequenceEqual([6, 5]) && cancelled is [var c0] && c0.Parameters.GetValueOrDefault((byte)1) is null or false,
-              "278: 263 kind 6; 279: 265 {1: false} and kind 5 again");
+        Check(silent && Of(peer, EventCodes.ExpeditionRegistrationInfo).Skip(2).Select(e => Int(e, 3)).SequenceEqual([6, 5]) && cancelled is [var c0] && c0.Parameters.GetValueOrDefault((byte)1) is null or false,
+              "278: 263 kind 6, no response (any ends the client's channel); 279: 265 {1: false} and kind 5 again");
         Call(s, peer, new EnteringExpeditionStartRequest { wf = world.GameNow }, 12);
         Tick(9.5);
         Check(world.Expeditions.Instances.Count == 0, "no instance before the 10 s");

@@ -159,6 +159,7 @@ public sealed partial class WorldSession
             return (new JourneyPlan(from, from.Spawn.Guid, to, cluster.Id, new JourneyRoute(0, false, [map.Cluster, cluster.Id])), default, "");
         }
         // StageH islands (SPEC §2.4, Q5): from an island showroom only back to the travel point of its city's island merchant, at no cost.
+        // The client's Depart there sends TravelIslandShowroom 533 instead (IslandHandler LeaveShowroom); this is the same way by BuyJourney.
         if (world.Islands.CityOfShowroom(map.Cluster) is { } showroomCity)
         {
             var merchant = info.Find(showroomCity)?.IslandAccessPoints.FirstOrDefault()?.Travelpoint;
