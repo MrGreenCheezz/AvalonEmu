@@ -1,0 +1,95 @@
+name: Bug report
+description: The server breaks, refuses something, or behaves differently from the official game (start-up problems too).
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. You can write in English, Russian or Spanish. Questions about the official game, its servers, the client, client patches or anti-cheat are out of scope: see [CONTRIBUTING.md](https://github.com/MrGreenCheezz/AvalonEmu/blob/main/CONTRIBUTING.md).
+  - type: input
+    id: commit
+    attributes:
+      label: AvalonEmu commit
+      description: "`git rev-parse --short HEAD` in your copy of the repository."
+      placeholder: 4f6b8af
+    validations:
+      required: true
+  - type: dropdown
+    id: branch
+    attributes:
+      label: Branch
+      options:
+        - main
+        - modules
+        - a fork or my own branch
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Client build
+      description: The first line of the client's `version.txt`. Only the build in the README is supported.
+      placeholder: 1.32.030.345319
+    validations:
+      required: true
+  - type: dropdown
+    id: preset
+    attributes:
+      label: Preset
+      description: "`Preset` in `config/common.jsonc`."
+      options:
+        - official
+        - pve
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Server OS
+      placeholder: Windows 11, Ubuntu 24.04, macOS 15
+    validations:
+      required: true
+  - type: textarea
+    id: changes
+    attributes:
+      label: Local changes
+      description: Configuration keys you changed, modules or plugins you use, code you changed. "None" is a fine answer.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Log in and go to ...
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should happen, and what the official game does if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: What happens instead, including any message in the client.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log
+      description: The lines of `data/server.log` around the problem (start the server with `-v` for more detail). Remove account and character names and other players' data first.
+      render: text
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This is about this server, not about the official servers, the client itself, client patches or anti-cheat.
+          required: true

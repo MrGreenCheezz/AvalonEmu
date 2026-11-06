@@ -157,7 +157,8 @@ Client build 345319 can show an unknown availability status for its built-in Loc
 their status-probe address is unset. The server menu's availability label is separate from ping;
 the performance HUD measures latency through the active game connection. This does not prevent local login or gameplay.
 Issues about protocol details or server architecture are welcome; requests involving the official game, its servers,
-its client or anti-cheat are not.
+its client or anti-cheat are not. Before you open an issue or a pull request, please read
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

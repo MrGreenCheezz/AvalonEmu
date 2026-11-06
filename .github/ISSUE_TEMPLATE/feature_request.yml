@@ -1,0 +1,55 @@
+name: Feature or missing behaviour
+description: Something the official game has that the server lacks, or a new option for the server.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        You can write in English, Russian or Spanish. Behaviour of the official game is the default under `Preset: official`; anything else goes behind a configuration switch or into a server module. Web shops, real-money payments and other monetization are not accepted. See [CONTRIBUTING.md](https://github.com/MrGreenCheezz/AvalonEmu/blob/main/CONTRIBUTING.md).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Missing behaviour of the official game
+        - A new option or a non-official feature
+        - A change for modules or other tooling
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What is missing or wanted
+      description: What a player or a server operator should be able to do.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: How the official game does it
+      description: What you know and how you know it (playing it, the client code, a capture of your own session, a wiki page). Remove account and character names. Write "not applicable" for a non-official feature.
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Switch and default
+      description: For a non-official feature, the configuration key you have in mind and its default under each preset.
+  - type: dropdown
+    id: help
+    attributes:
+      label: Will you work on it?
+      options:
+        - "Yes, I plan a pull request"
+        - "Maybe, with some guidance"
+        - "No, this is a request"
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This does not involve the client, client files, client patches, anti-cheat, the official servers or monetization.
+          required: true

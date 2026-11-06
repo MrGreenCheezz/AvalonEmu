@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Installation guide
+    url: https://github.com/MrGreenCheezz/AvalonEmu/blob/main/docs/INSTALL.md
+    about: Setting up and starting the server, step by step. Many start-up problems are answered here.
+  - name: What this project accepts
+    url: https://github.com/MrGreenCheezz/AvalonEmu/blob/main/CONTRIBUTING.md
+    about: The scope, how to report a bug and how to prepare a pull request. The client, client files, patches and anti-cheat are out of scope.
