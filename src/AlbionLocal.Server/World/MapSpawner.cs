@@ -10,8 +10,8 @@ namespace AlbionLocal.Server;
 /// template object of a sendable kind, its object id taken now, so it stays the same while the map lives. Before an
 /// object is made, what the client needs of its event is checked (SPEC §3 "Required keys and silent failures": the client
 /// throws or drops the object without telling the server), and what fails is left out with a warning. Content patches
-/// (content/spawns) come with the stages that need them; real estates, hall-of-fame spots and outposts are not spawned
-/// yet (the fishing zones are, since stageG). The resource nodes (stage 4b) come from the cluster's <see cref="ResourceLayout"/>, the
+/// (content/spawns) come with the stages that need them; real estates and hall-of-fame spots are not spawned
+/// yet (the fishing zones are, since stageG; the faction warfare towers since stageQ). The resource nodes (stage 4b) come from the cluster's <see cref="ResourceLayout"/>, the
 /// layout the client computes for the same Login key 57. The mobs (stage 5a) stand at the spawn points of the template
 /// and of that layout's prefabs (mob camps, roaming mobs, critters; <see cref="SpawnManager"/>).
 /// </summary>
@@ -116,6 +116,8 @@ public static class MapSpawner
         objects.AddRange(world.Shrines.Populate(map, template));
         // StageP territories (SPEC §6 P1): a watchtower territory's monolith (109) and a castle territory's castle (112), unowned.
         objects.AddRange(world.Territories.Populate(map, template));
+        // StageQ outposts: a faction warfare zone's towers (365, cluster-wide), owned by its duchy's faction at first; their guards stand on the first tick.
+        objects.AddRange(world.Outposts.Populate(map, template));
         // StageL mists (SPEC §6.4): a mists world cluster's city entrances (527); a zone's border exits, city entrance and open-world exit, its mob level and treasures.
         objects.AddRange(world.Mists.Populate(map, template));
         // StageH islands (SPEC §1.5): an island instance's island management, owned by the island's owner.
@@ -164,7 +166,8 @@ public static class MapSpawner
         var later = new (int Count, string What)[]
         {
             (template.RealEstates.Count, "real estates"),
-            (template.Critical.Count(m => m.Type == "placeholderspot"), "hall-of-fame spots"), (template.Info.Outposts.Count, "outposts"),
+            (template.Critical.Count(m => m.Type == "placeholderspot"), "hall-of-fame spots"),
+            (objects.OfType<OutpostObject>().Any() ? 0 : template.Info.Outposts.Count, "outposts"), // FactionWarfare:Outposts off, or no warfare zone
         }.Where(l => l.Count > 0).Select(l => $"{l.Count} {l.What}").ToList();
         var enchanted = map.ResourceNodes.Count(n => n.RareState > 0);
         Log.Info("world", $"map {map.Cluster}: {objects.Count} world objects ({string.Join(", ", counts)})"

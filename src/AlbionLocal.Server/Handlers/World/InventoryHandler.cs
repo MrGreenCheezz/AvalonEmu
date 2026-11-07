@@ -243,23 +243,26 @@ public sealed partial class WorldSession
 
     /// <summary>
     /// InventoryAddToStacks (op 38, rd: 0 from Guid, 1 from revision, 2 to Guid, 3 to revision): every stack of the first
-    /// container whose type has a stack with room in the second moves into it as far as it fits (the answers as op 35).
+    /// container whose type the second holds moves into its stacks with room as far as it fits (the answers as op 35); what is
+    /// left goes into a free slot of the second as it is (InventoryPutItem with key 3's revision), as far as the vault's weight
+    /// limit lets it: a full 999 stack there no longer keeps the rest back (a tester's report) [infer: the official answer is not captured].
     /// </summary>
     [Handles(OperationCodes.InventoryAddToStacks, Status = SessionStatus.InWorld)]
     private AlbionResponse? InventoryAddToStacks(InventoryAddToStacksRequest req)
     {
         if (Player is not { } player || player.FindContainer(req.re) is not { } from || player.FindContainer(req.rg) is not { } to
             || from == to || from == player.Inventory.Equipment || to == player.Inventory.Equipment) return null;
-        var merged = Merge(from, to, req.rf);
+        var merged = Merge(from, to, req.rf, player, req.rh);
         if (merged > 0) player.SaveItems();
         return null;
     }
 
     /// <summary>
     /// Moves stack contents from <paramref name="from"/> into stacks of the same type in <paramref name="to"/> with room (in
-    /// slot order; the same container: into earlier slots only). Returns how many stacks changed.
+    /// slot order; the same container: into earlier slots only). With <paramref name="player"/> (op 38, two containers) the rest of a
+    /// type <paramref name="to"/> holds goes into a free slot there (<paramref name="toRevision"/>). Returns how many stacks changed.
     /// </summary>
-    private int Merge(Container from, Container to, long revision)
+    private int Merge(Container from, Container to, long revision, Player? player = null, long toRevision = 0)
     {
         var changed = 0;
         for (var s = from == to ? 1 : 0; s < from.Size; s++)
@@ -267,9 +270,12 @@ public sealed partial class WorldSession
             if (from[s] is not { } source || MaxStack(source.Template) <= 1) continue;
             var max = MaxStack(source.Template);
             var moved = false;
+            var held = false;
             for (var t = 0; t < (from == to ? s : to.Size) && source.Count > 0; t++)
             {
-                if (to[t] is not { } target || target == source || !target.StacksWith(source) || target.Count >= max) continue;
+                if (to[t] is not { } target || target == source || !target.StacksWith(source)) continue;
+                held = true;
+                if (target.Count >= max) continue;
                 var n = Math.Min(max - target.Count, source.Count);
                 target.Count += n;
                 source.Count -= n;
@@ -281,8 +287,17 @@ public sealed partial class WorldSession
             {
                 from.Take(s);
                 SendEvent(new InventoryDeleteItemEvent { ckr = source.Id, cks = revision });
+                continue;
             }
-            else if (moved) SendCount(source);
+            if (moved) SendCount(source);
+            // Its type's stacks in the other container are full: the rest goes there into a free slot, as it is.
+            if (player is not null && from != to && held && to.FreeSlot() is var free && free >= 0 && VaultTakes(player, to, source.Template, source.Count, from))
+            {
+                from.Take(s);
+                to.Put(free, source);
+                SendEvent(new InventoryPutItemEvent { ckw = source.Id, ckx = free, cky = to.Id, ckz = toRevision });
+                changed++;
+            }
         }
         return changed;
     }

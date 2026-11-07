@@ -659,6 +659,7 @@ public sealed record ServerConfig
         Arena = ArenaOptions.PveDefaults,
         Territories = TerritoryOptions.PveDefaults,
         Hideouts = HideoutOptions.PveDefaults,
+        FactionWarfare = FactionWarfareOptions.PveDefaults,
         GuildCreateCost = 100_000, GuildJoinRole = Game.GuildRole.Member, GuildRejoinCooldownMinutes = 0,
         GuildNoFriendlyFire = true, GuildXpShare = 0.1, GuildClearXp = 2000, GuildShareWithoutParty = true, GuildSilverTax = 0.05, GuildContracts = true,
         AllianceNoFriendlyFire = true,
@@ -966,6 +967,9 @@ public sealed record ServerConfig
 
     /// <summary>StageP: the guild hideouts (Hideouts:*, <see cref="HideoutOptions"/>).</summary>
     public HideoutOptions Hideouts { get; init; } = new();
+
+    /// <summary>StageQ: the faction warfare towers (FactionWarfare:*, <see cref="FactionWarfareOptions"/>).</summary>
+    public FactionWarfareOptions FactionWarfare { get; init; } = new();
 
     /// <summary>StageL: the Roads of Avalon (Roads:*, <see cref="RoadsOptions"/>; the pve preset's .roads for every player).</summary>
     public RoadsOptions Roads { get; init; } = new();
@@ -1277,6 +1281,7 @@ public sealed record ServerConfig
             Vanity = VanityOptions.Load(values, d.Vanity),
             Territories = TerritoryOptions.Load(values, d.Territories),
             Hideouts = HideoutOptions.Load(values, d.Hideouts),
+            FactionWarfare = FactionWarfareOptions.Load(values, d.FactionWarfare),
             Roads = LoadRoads(values, d.Roads),
             Mists = LoadMists(values, d.Mists),
             Companions = LoadCompanions(values, d.Companions),

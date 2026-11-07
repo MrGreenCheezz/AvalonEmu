@@ -127,6 +127,8 @@ public sealed class TestPhotonClient : IDisposable
             case MessageType.Event:
                 {
                     var ev = Protocol18.ReadEventData(new ByteReader(body));
+                    // The periodic PlayerCounts (276, every 10 s) is kept out as FakePeer does, so the exact event orders hold.
+                    if (ev.Parameters.TryGetValue(252, out var code) && Convert.ToInt32(code) == (int)AlbionLocal.Server.Protocol.EventCodes.PlayerCounts) break;
                     (ev.Code == 2 && !ev.Parameters.ContainsKey(252) ? Keepalives : Events).Add(ev);
                     break;
                 }

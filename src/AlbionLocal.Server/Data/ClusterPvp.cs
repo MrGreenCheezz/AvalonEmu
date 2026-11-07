@@ -55,6 +55,14 @@ public sealed record ClusterPvp(PvpRule Rule, bool PlayersAreLethal = true, bool
     public bool AllowEquipmentSwapping { get; init; } = true;
 
     /// <summary>
+    /// allowmounts of the clustertype itself, not of its archetype (true without it; <see cref="WorldArchetypes.PvpOf"/>): false in 80 cluster types,
+    /// every dungeon, the expeditions (T3-T6_EXPEDITION_*, HARDCORE_EXPEDITION_*), the arenas, the corrupted and hell dungeons, the mists dungeons
+    /// and the dragon areas: no mount there (<see cref="Systems.Mounts.Check"/>), and a character that comes in mounted arrives on foot
+    /// (<see cref="Systems.Mounts.Restore"/>; the client offers no dismount there, public issue #8).
+    /// </summary>
+    public bool AllowMounts { get; init; } = true;
+
+    /// <summary>
     /// An archetype with no attributes at all (the client's defaults), as for a cluster type worldsettings.xml does not name:
     /// lethal, but without the full loot of a named lethal zone (<see cref="NoDeathLoss"/>).
     /// </summary>

@@ -18,7 +18,7 @@ public static class OpsAuditTest
     [
         ("ops audit: every listed op answered by a handler or a stub (none unhandled); ignore = no answer, refused with a response class", Classified),
         ("ops audit: SubscribeToCluster -> one ClusterInfoUpdate per known id (outposts 3/3/6, none: 27/28 absent, no 44-47), none for [], unknown or territory ids", ClusterInfo),
-        ("ops audit: TravelIslandShowroom RC 1 bare, event 377 empty, campaign month 24309, GvG rank -1, journal tracker 600 (suggested, echoed, kept over a relog)", SmallAnswers),
+        ("ops audit: TravelIslandShowroom RC 1 bare, event 377 empty, campaign month 24309, GvG rank -1, PlayerCounts every 10 s, journal tracker 600 (suggested, echoed, kept over a relog)", SmallAnswers),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -50,7 +50,7 @@ public static class OpsAuditTest
     /// <summary>A joined player of a Thetford <see cref="EconomyTest.Town"/> whose session has the content stubs.</summary>
     private static (WorldSession Session, FakePeer Peer) Join(EconomyTest.Town town, Guid id, OpcodeStubs stubs)
     {
-        var peer = new FakePeer();
+        var peer = new FakePeer { KeepPlayerCounts = true }; // SmallAnswers checks PlayerCounts
         var session = new WorldSession(peer, town.World) { Stubs = stubs };
         peer.Disconnected = session.OnDisconnected;
         lock (town.World.Sync) session.OnRequest(Request(new JoinRequest { ss = id }, 1), encrypted: false);
@@ -141,11 +141,11 @@ public static class OpsAuditTest
             var entrances = info.Find(id)!.Exits.Any(x => x.Attrs.TryGetValue("staticdungeonid", out var sd) && Guid.TryParse(sd, out var g) && g != Guid.Empty);
             Check(!p.ContainsKey(44) && !p.ContainsKey(45) && !p.ContainsKey(46) && !p.ContainsKey(47) && p.ContainsKey(68) == entrances
                   && Enumerable.Range(4, 15).All(k => !p.ContainsKey((byte)k)) && !p.ContainsKey(1)
-                  && e.bys?.Length == n && (n == 0 ? !p.ContainsKey(27) && !p.ContainsKey(28) : e.by0?.Length == n && e.by1?.Length == 2 * n)
+                  && e.bys?.Length == n && (n == 0 ? !p.ContainsKey(27) && !p.ContainsKey(28) : e.by0?.Length == n && e.by1?.Length == 6) // 28: one per faction (stageQ CLIENT.md)
                   && e.bzo?.Length == 0 && e.bzp?.Length == 0 && e.bzq?.Length == 0 && e.bzr?.Length == 0 && e.bzs?.Length == 0 && e.bzt?.Length == 0
                   && e.bz2?.Length == e.bz3?.Length && e.bz2?.Length == e.bz4?.Length && (entrances || e.bz2?.Length == 0) && e.byt?.Length == 0 && e.byu?.Length == 0
                   && e is { byb: "", byc: "", bzv: "", by7: -1, bzu: -1 },
-                  $"{id}: no cluster value (44-47), no territory keys, 19/27/28 sized by its {n} outpost(s), empty treasure and hideout arrays, static dungeon keys only with entrances, 34/57 = -1");
+                  $"{id}: no cluster value (44-47), no territory keys, 19/27 sized by its {n} outpost(s) and 28 by the 6 factions, empty treasure and hideout arrays, static dungeon keys only with entrances, 34/57 = -1");
         }
         Check(WorldSession.ClusterInfo(info, "4220") is { bys.Length: 3, by0.Length: 3, by1.Length: 6 } && WorldSession.ClusterInfo(info, "0004") is { by0: null, by1: null, bys.Length: 0 },
               "4220: 19/27/28 = 3/3/6; 0004: 27 and 28 absent (as official)");
@@ -179,6 +179,15 @@ public static class OpsAuditTest
               && campaign.Parameters[5] is long[] { Length: 6 } && campaign.Parameters[6] is int[] { Length: 6 } && campaign.Parameters[8] is int[] { Length: 6 },
               "GetFactionWarfareCampaignData: key 4 this month, keys 5-8 six zeros");
         Check(Send(Bare(OperationCodes.GetGvgSeasonRank, 4)).Responses is [{ ReturnCode: 0 } rank] && rank.Parameters[0] is -1, "GetGvgSeasonRank: {0: -1}, no rank");
+        var before = peer.Events.Count;
+        for (var t = 0; t < 2; t++)
+        {
+            town.Clock.Advance(AlbionLocal.Server.World.PlayerCountsEvery);
+            lock (town.World.Sync) town.World.Update();
+        }
+        var counts = peer.Events.Skip(before).Where(e => Code(e) == (int)EventCodes.PlayerCounts).ToList();
+        Check(counts.Count == 2 && counts.All(e => Convert.ToInt32(e.Parameters[0]) >= 1 && Convert.ToInt32(e.Parameters[1]) == -1 && !e.Parameters.ContainsKey(2)),
+              $"PlayerCounts (276) every 10 s: {{0 the players on the map, 1 -1}}, no key 2 (got {counts.Count})");
 
         // The tracker: [] at the Join → the suggestions; a pinned list is echoed and kept, also over a relog.
         string[] Track(WorldSession s, FakePeer p, params string[] names)

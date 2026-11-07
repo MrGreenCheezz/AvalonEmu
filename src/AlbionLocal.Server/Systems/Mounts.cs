@@ -118,12 +118,14 @@ public static class Mounts
     /// <summary>
     /// The server's checks of a Mount request with key 1 = <paramref name="itemId"/> (SPEC §4.1, the client's own in cyk.u): standing,
     /// neither mounting nor mounted, a mount item in slot 7 with that object id (it changes at every Join) and durability left, the
-    /// cooldown after its death over, no harvest, cast or station action under way, and its mounted buff in spells.xml. Returns
-    /// why it is refused; null = accepted.
+    /// cooldown after its death over, no harvest, cast or station action under way, and its mounted buff in spells.xml; not in a cluster
+    /// whose archetype has allowmounts false (dungeons, expeditions, arenas: <see cref="ClusterPvp.AllowMounts"/>). Returns why it is
+    /// refused; null = accepted.
     /// </summary>
     public static string? Check(Player p, long itemId)
     {
         if (p.Map is null || p.Combat.Down is not null) return "knocked down";
+        if (!Pvp.RulesOf(p.World, p.Map).AllowMounts) return "no mounts in this cluster (allowmounts false)";
         if (p.Mount.State != MountState.None) return $"already {p.Mount.State}";
         if (ItemOf(p) is not { } item) return "no mount in slot 7";
         if (item.Id != itemId) return $"key 1 {itemId} is not the mount's object id {item.Id}";
@@ -480,14 +482,18 @@ public static class Mounts
 
     /// <summary>
     /// At Join, before the bars: a character saved mounted with its mount still in slot 7 (and its buff in spells.xml) is mounted
-    /// again, its mounted and halfmounted buffs on with their old start; otherwise it is dismounted.
+    /// again, its mounted and halfmounted buffs on with their old start; otherwise it is dismounted. In a cluster without mounts
+    /// (<see cref="ClusterPvp.AllowMounts"/>: a dungeon, an expedition, an arena) it arrives on foot: the client offers no dismount
+    /// there, so one that came in mounted (an expedition's Join channel taken mounted, public issue #8) could never get off.
     /// </summary>
     public static void Restore(Player p)
     {
         var c = p.Character;
         if (!c.Mounted) return;
-        if (ItemOf(p) is not { DurabilityRaw: > 0 } item || Spell(p, item.Template.Mount!.MountedBuff) is not { } mounted)
+        var noMounts = !Pvp.RulesOf(p.World, p.Map).AllowMounts;
+        if (noMounts || ItemOf(p) is not { DurabilityRaw: > 0 } item || Spell(p, item.Template.Mount!.MountedBuff) is not { } mounted)
         {
+            if (noMounts) Log.Info("mount", $"'{c.Name}' joins {p.Map?.Cluster} mounted, where mounts are not allowed: on foot");
             c.MountedSince = 0;
             p.World.Saves.MarkChanged(c);
             return;

@@ -27,7 +27,7 @@ public sealed partial class WorldSession
         }
         var sent = 0;
         foreach (var id in ids.Distinct(StringComparer.Ordinal))
-            if (ClusterInfo(info, id, world.StaticDungeons, world.Territories) is { } ev)
+            if (ClusterInfo(info, id, world.StaticDungeons, world.Territories, world.Outposts) is { } ev)
             {
                 SendEvent(ev);
                 sent++;
@@ -44,14 +44,16 @@ public sealed partial class WorldSession
     /// WorldmapCluster.UpdateStaticDungeonInfos 0x181be2930): per dungeon with an entrance exit here (key = staticdungeonid, ae+0x70)
     /// whose event runs, its id (65), end (66) and rarity (67), parallel; 68 the value of every such dungeon by id string ("D"), left out
     /// for a cluster without entrances or without <paramref name="dungeons"/> (the client reads a missing one as HIDDEN); per world.xml outpost one entry in 19 (ContestedState)
-    /// and 27 and two in 28, since the outpost loop of WorldmapCluster.UpdateCluster 0x181be11c0 indexes 19 and 27 per outpost
-    /// of its own client data (no outpost: 19 empty, 27 and 28 left out, as official). Left out (null): 1, 4-18 (the territory
+    /// and 27, since the outpost loop of WorldmapCluster.UpdateCluster 0x181be11c0 indexes 19 and 27 per outpost of its own client data,
+    /// and 28 one per faction (6: the presence of the 24-29 state, read only with a key 25; stageQ CLIENT.md), the towers' contest and owners
+    /// from <paramref name="towers"/> (<see cref="Systems.Outposts.FillWorldMap"/>; no outpost: 19 empty, 27 and 28 left out, as official). Left out (null): 1, 4-18 (the territory
     /// reader indexes them without a null check), 31, 35, 37-39, 41-47 (44-47 the cluster value), 49, 50, 59-64. Null for an id not in world.xml
     /// and for a cluster with territories: there is no official sample of those, and UpdateTerritories 0x181be2e30 would
     /// index 4-18 per territory. With Territories:WorldMapInfo (stageP territories SPEC §6 P1, off by default in both presets) a territory cluster
     /// is answered too, keys 4-18 one entry per territory (<see cref="Systems.Territories.FillWorldMap"/>).
     /// </summary>
-    public static ClusterInfoUpdateEvent? ClusterInfo(WorldInfo world, string id, Systems.StaticDungeons? dungeons = null, Systems.Territories? territories = null)
+    public static ClusterInfoUpdateEvent? ClusterInfo(WorldInfo world, string id, Systems.StaticDungeons? dungeons = null, Systems.Territories? territories = null,
+        Systems.Outposts? towers = null)
     {
         if (world.Find(id) is not { } cluster) return null;
         var territory = cluster.Territories > 0;
@@ -64,8 +66,8 @@ public sealed partial class WorldSession
             bx9 = id, byb = "", byc = "", bzv = "",
             by7 = -1, bzu = -1,
             bys = new int[outposts],                          // [19] ContestedState per outpost (0)
-            by0 = outposts > 0 ? new byte[outposts] : null,   // [27] per outpost (official: the cluster's key 32, 0 here)
-            by1 = outposts > 0 ? new bool[2 * outposts] : null, // [28] two per outpost
+            by0 = outposts > 0 ? new byte[outposts] : null,   // [27] owner per outpost (official: the cluster's key 32; Outposts fills it)
+            by1 = outposts > 0 ? new bool[6] : null,          // [28] one per faction
             byt = [], byu = [], byv = [], byw = [],             // [20]-[23] hideouts
             bzo = [], bzp = [], bzq = [], bzr = [], bzs = [], bzt = [], // [51]-[56] treasure markers, parallel
             bz2 = [.. running.Select(x => x.Dungeon.Id)],         // [65]-[67] static dungeon events running: id, end, rarity
@@ -73,6 +75,7 @@ public sealed partial class WorldSession
             bz4 = [.. running.Select(x => x.Event!.Value.Def.Rarity)],
             bz5 = entered.Count > 0 ? entered.ToDictionary(d => d.Id.ToString(), d => dungeons!.Value(d)) : null, // [68] value per dungeon
         };
+        towers?.FillWorldMap(e, cluster);
         return !territory || territories!.FillWorldMap(e, cluster) ? e : null;
     }
 }

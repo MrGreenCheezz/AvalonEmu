@@ -196,6 +196,7 @@ public class AggressiveAI(Mob me) : MobAI(me)
         foreach (var p in map.Fighters)
         {
             if (!Valid(p, map) || (p.IsMounted && !t.CanAggroMountedPlayers)) continue; // mobs.xml canaggromountedplayers (stageD mounts)
+            if (Me.Foes is { } foes && !foes(p)) continue; // stageQ: a tower guard picks only its faction's enemies
             if (Systems.SpellEffects.InvisibleToMobs(p, world.GameNow)) continue; // invisibility to mobs (stageD effects batch 2): no aggro
             var at = p.PositionAt(DateTime.UtcNow);
             var d = Vector2.Distance(here, at);

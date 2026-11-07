@@ -41,6 +41,7 @@ public static class EconomyTest
         ("economy: a T3 horse crafted at a stable from a grown T3 horse + 20 T3 leather (the horse never returned)", StableCraft),
         ("economy: split 10 into 6 + 4 (revision echoed), stack all, destroy", Housekeeping),
         ("economy: bank: tab-0 Guid, RegisterToObject attaches the default tab (items first, 128 slots), deposit, relog, withdraw, shift+click both ways, relog; refusals (keys 0-2 echoed, out of range, slots, weight); two views; LoadoutReadHeaders echo", Bank),
+        ("economy: bank add to stacks (op 38): the vault's ore at 999, the bag's other ore goes into free vault slots, the wood (not in the vault) stays", BankAddToStacks),
         ("economy: market: DTO fields, empty market, fees and tax, filters and pages, offer bought and collected, buy order sold into (quick-sell query first) and aborted, overbuy refused, an offline seller's silver at its next Join", Market),
         ("economy: market price history (op 95/96, econ SPEC §1): two buys of ore summed in the current hour, average 100; another city's and another quality's sales left out", PriceHistory),
         ("economy: gathering extras (econ SPEC §2): T4 wood's bonus loot rolls its gathering tome; T1 fishing bait used from the bag: fishingspeed 0.5, 10 charges, the bite 1.5x faster, the 10th strike takes the buff", GatheringExtras),
@@ -944,6 +945,32 @@ public static class EconomyTest
         Check(me3.Inventory.Bag[3] is { Count: 10 } && Register(third, peer3, bank.Id) is { Events: [{ Code: EventCodes.AttachItemContainer } empty] }
               && ((long[])empty.P[3]!).All(i => i == 0),
               "after another relog the ore is in inventory slot 3 and the vault is empty");
+    }
+
+    /// <summary>
+    /// A tester's report: with the vault's T4_ORE stack at 999, "add to stacks" (op 38) left the rest of the ore in the bag. Now the rest
+    /// goes into free vault slots as it is (InventoryPutItem with the request's key 3); a type the vault does not hold stays in the bag.
+    /// </summary>
+    private static void BankAddToStacks()
+    {
+        using var town = new Town();
+        var world = town.World;
+        var (session, peer, me) = town.Join("Stacker", 0, new InventoryItem("T4_ORE", 999), new InventoryItem("T4_ORE", 999),
+            new InventoryItem("T4_ORE", 20), new InventoryItem("T4_WOOD", 5));
+        var bank = town.Station("T1_BANK");
+        lock (world.Sync) session.OnRequest(Request(new RegisterToObjectRequest { zg = bank.Id }, null), encrypted: false);
+        var vault = me.OpenVaults.Values.Single().Container;
+        var bag = me.Inventory.Bag;
+        lock (world.Sync)
+            session.OnRequest(Request(new InventoryMoveItemRequest { ru = 0, rv = bag.Id, rx = 0, ry = vault.Id, rz = 1 }, null), encrypted: false);
+        var mark = peer.Events.Count;
+        lock (world.Sync)
+            session.OnRequest(Request(new InventoryAddToStacksRequest { re = bag.Id, rf = 3, rg = vault.Id, rh = 4 }, null), encrypted: false);
+        var puts = Since(peer, mark).Where(e => e.Code == EventCodes.InventoryPutItem).ToList();
+        Check(vault.Items.Where(i => i.Template.Name == "T4_ORE").Sum(i => i.Count) == 2018 && vault.Count == 3
+              && bag.Items.All(i => i.Template.Name == "T4_WOOD") && bag.Count == 1
+              && puts.Count == 2 && puts.All(p => new Guid((byte[])p.P[2]!) == vault.Id && L(p.P, 3) == 4),
+              $"op 38 with the vault's ore at 999: the other 999 and 20 go into free vault slots (2 × InventoryPutItem {{2 vault, 3 revision 4}}), the wood stays (vault: {string.Join(", ", vault.Items.Select(i => i.Count))})");
     }
 
     private static void Market()

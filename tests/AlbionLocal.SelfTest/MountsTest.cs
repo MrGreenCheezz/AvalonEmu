@@ -31,6 +31,8 @@ public static class MountsTest
         ("mounts: the battle mammoth's spells end with the mount: BIGCLEAVE under way -> CastCancel {1 true}; the PROTECTIONAURA channel -> ChannelingEnded; SPRINT_MAMMOTH off by TerminateToggleSpell, on again then gone with the dismount", MountSpellsEndWithMount),
         ("mounts: carry load as the client (stageJ carry-load): the reported kit with the T8 fire drake is 535.44 / 1252.98 kg = 43 % mounted, half-mounted and on foot; SWORD_SPIN dashes; overloaded it does not", CarryLoad),
         ("mounts: the mount object despawns beyond halfmountrange 18 m (Leave to owner and observer, then the list without 1253, max load back), the next mount is full; within 18 m it stays and the remount is quick", ObjectDespawn),
+        ("mounts: allowmounts false (an expedition's cluster type, not a royal city's): a character saved mounted joins there on foot (no Mounted), Mount refused there", NoMountClusters),
+        ("mounts: the speed emblems' zone spells: on Caerleon's SPELLZONE_CITY_SPEEDBUFF emblem a player gets its effect each second, 10 m away not", SpeedEmblems),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -327,6 +329,50 @@ public static class MountsTest
         arena.Run(1);
         Ride(session, me);
         Check(peer.Responses[^1].ReturnCode == Mounts.Refused && me.Mount.State == MountState.None, "Mount within the 30 s: rc != 0");
+    }
+
+    /// <summary>
+    /// Public issue #8 (an expedition entered mounted, and no way to dismount inside): the expedition archetypes have allowmounts false, the
+    /// royal city's true; in such a cluster a character saved mounted joins on foot, and a Mount request is refused.
+    /// </summary>
+    private static void NoMountClusters()
+    {
+        var store = Client.Clusters!;
+        var expedition = store.World.Clusters.First(c => c.Type.Contains("_EXPEDITION_", StringComparison.Ordinal));
+        Check(!store.Get(expedition.Id).Pvp.AllowMounts && store.Get("0000").Pvp.AllowMounts,
+              $"allowmounts: {expedition.Id} ({expedition.Type}) false, 0000 true");
+        using var arena = new Arena(pvp: AlbionLocal.Server.Data.ClusterPvp.Default with { AllowMounts = false }); // 0204's stand under such an archetype
+        var c = StarterKit.Default.NewCharacter("Rider");
+        c.Equipment[0] = new InventoryItem("T4_MAIN_SWORD");
+        c.Equipment[Mounts.MountSlot] = new InventoryItem(Ox);
+        (c.Cluster, c.PositionX, c.PositionY, c.MountedSince) = ("0204", arena.Stand.X, arena.Stand.Y, arena.World.GameNow); // left mounted
+        c.Progression = new Progression();
+        Check(arena.Characters.Create(c), "character Rider created");
+        var (session, peer, me) = Rejoin(arena, c.Id);
+        Check(!me.IsMounted && !me.Character.Mounted && !Since(peer, 0).Any(e => e.Code == EventCodes.Mounted),
+              "saved mounted, it joins on foot: not mounted, no Mounted event, saved dismounted");
+        var answers = peer.Responses.Count;
+        Ride(session, me);
+        arena.Run(3.1);
+        Check(!me.IsMounted && peer.Responses.Skip(answers).Any(r => r.ReturnCode == Mounts.Refused), "a Mount request there: refused, still on foot");
+    }
+
+    /// <summary>
+    /// A tester's report (the Roads' speed buff did nothing): the template tiles' &lt;spellzone&gt; are read and the speed emblems run (SpellZones).
+    /// Caerleon's city emblem (SPELLZONE_CITY_SPEEDBUFF, radius 3, no mount needed) gives SPELLZONE_CITY_SPEEDBUFF_EFFECT to a player on it within
+    /// a second; a player 10 m away gets nothing. The Roads' emblem is the same with a mount condition in its effect.
+    /// </summary>
+    private static void SpeedEmblems()
+    {
+        var caerleon = Client.Clusters!.Get("3003");
+        var emblem = caerleon.SpellZones.First(z => z.Spell == "SPELLZONE_CITY_SPEEDBUFF").Position;
+        using var arena = new Arena();
+        var (_, _, on) = Join(arena, "Sprinter", ox: false, cluster: "3003", at: emblem);
+        var (_, _, off) = Join(arena, "Walker", ox: false, cluster: "3003", at: emblem + new Vector2(10, 0));
+        arena.Run(1.5);
+        var effect = Id("SPELLZONE_CITY_SPEEDBUFF_EFFECT");
+        Check(on.Effects.Find(effect, on.Id) is not null && off.Effects.Find(effect, off.Id) is null,
+              $"Caerleon has {caerleon.SpellZones.Count(z => z.Spell == "SPELLZONE_CITY_SPEEDBUFF")} city speed emblems; the player on one has its effect, the one 10 m away not");
     }
 
     private static void HarvestAndJoin()

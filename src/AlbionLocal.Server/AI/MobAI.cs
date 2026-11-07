@@ -32,13 +32,14 @@ public abstract class MobAI(Mob me)
     /// The AI of <paramref name="mob"/> by its mobs.xml attributes (SPEC §5d.1): npchostility guard, decoration or friendly →
     /// <see cref="NullAI"/>; hostile with aggroradius &gt; 0 → <see cref="AggressiveAI"/>; otherwise (aggroradius 0, or the
     /// client's default hostility) → <see cref="PassiveAI"/>; either of the last two with a non-empty resolved &lt;AI&gt; →
-    /// <see cref="BehaviourAI"/> with the same aggro rules (stageD mobspells §4.1).
+    /// <see cref="BehaviourAI"/> with the same aggro rules (stageD mobspells §4.1). A mob with <see cref="Mob.Foes"/> (stageQ: a tower's guards)
+    /// fights as a hostile one, its aggro limited to those players.
     /// </summary>
     public static MobAI For(Mob mob)
     {
         var t = mob.Template;
-        if (t.Hostility is not (NpcHostility.Hostile or NpcHostility.None)) return new NullAI(mob);
-        var aggressive = t is { Hostility: NpcHostility.Hostile, AggroRadius: > 0 };
+        if (t.Hostility is not (NpcHostility.Hostile or NpcHostility.None) && mob.Foes is null) return new NullAI(mob);
+        var aggressive = (t.Hostility == NpcHostility.Hostile || mob.Foes is not null) && t.AggroRadius > 0;
         // A fighting mob with a non-empty <AI> (after its references) runs its rotation (stageD mobspells, BehaviourAI).
         if (t.AI is not null && mob.World?.Clusters?.MobsIfLoaded?.Scripts.For(t) is { Empty: false } script) return new BehaviourAI(mob, script, aggressive);
         return aggressive ? new AggressiveAI(mob) : new PassiveAI(mob);

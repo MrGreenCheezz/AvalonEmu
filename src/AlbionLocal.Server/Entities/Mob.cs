@@ -133,14 +133,26 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
     /// <summary>Stage I: a factor on its kill fame (a T9/T10 invasion's wave mob); 1 for every other mob.</summary>
     public double FameFactor { get; init; } = 1;
 
+    /// <summary>
+    /// StageQ: the players a faction mob picks a fight with (a tower's guards: the players flagged for another faction, <see cref="Systems.Outposts"/>);
+    /// with it an npchostility guard mob fights (<see cref="AI.MobAI.For"/>) instead of standing by. Null = its mobs.xml hostility alone decides.
+    /// </summary>
+    public Func<Player, bool>? Foes { get; init; }
+
     /// <summary>StageG: the dungeon level's mobmodifier it carries from its spawn (<see cref="SpawnManager.LevelBuff"/>); null off a dungeon floor of level 1-4.</summary>
     public SpellTemplate? LevelBuff { get; internal set; }
 
     /// <summary>An event about the mob to every client that knows it.</summary>
     public void SendAround(AlbionEvent e) => Map?.SendToObservers(this, e);
 
-    /// <summary>Whether attacks and spells may target it: alive, on its map, and a mob players fight (not a guard, decoration or friendly NPC).</summary>
-    public bool Attackable => !Dead && !Removed && Map is not null && Template.Hostility is NpcHostility.Hostile or NpcHostility.None;
+    /// <summary>
+    /// Whether attacks and spells may target it: alive, on its map, and a mob players fight (not a guard, decoration or friendly NPC; stageQ: a
+    /// guard with <see cref="Foes"/> is, by those players only, <see cref="FoeOf"/>).
+    /// </summary>
+    public bool Attackable => !Dead && !Removed && Map is not null && (Template.Hostility is NpcHostility.Hostile or NpcHostility.None || Foes is not null);
+
+    /// <summary>Whether <paramref name="p"/> may fight it: any player, or for a mob with <see cref="Foes"/> one of them (a tower's guards: another faction's flag).</summary>
+    public bool FoeOf(Player p) => Foes is not { } foes || foes(p);
 
     /// <summary>Where it is now: its movement sample extrapolated to the world's GameTimeStamp (the stored target once it has arrived).</summary>
     public override Vector2 Position => Movement.PositionAt(Time);
