@@ -59,6 +59,12 @@ public sealed class ClusterTemplate
     /// <summary>fasttravelpoint members with a fasttravelpoint component (NewTravelpoint 213).</summary>
     public IReadOnlyList<TravelpointSpawn> Travelpoints { get; init; } = [];
 
+    /// <summary>StageQ: the faction warfare towers, the outpost members world.xml criticalObjects names (NewOutpostObject 365).</summary>
+    public IReadOnlyList<OutpostSpawn> Outposts { get; init; } = [];
+
+    /// <summary>The ground emblems' zone spells (tile &lt;spellzone spell&gt;: the Roads' and the cities' speed buffs, …; <see cref="Systems.SpellZones"/>).</summary>
+    public IReadOnlyList<SpellZoneSpot> SpellZones { get; init; } = [];
+
     /// <summary>Members with a factionwarfareportal component, the city's war wagon (fasttravelpoint_02 in Thetford; NewFactionWarfarePortal 662).</summary>
     public IReadOnlyList<FactionWarfarePortalSpawn> FactionWarfarePortals { get; init; } = [];
 
@@ -223,7 +229,7 @@ public sealed class ClusterTemplate
 
     /// <summary>The typed objects of every list.</summary>
     public IEnumerable<ClusterObject> Objects =>
-        Enumerable.Empty<ClusterObject>().Concat(Buildings).Concat(Exits).Concat(Travelpoints).Concat(FactionWarfarePortals)
+        Enumerable.Empty<ClusterObject>().Concat(Buildings).Concat(Exits).Concat(Travelpoints).Concat(Outposts).Concat(FactionWarfarePortals)
             .Concat(IslandAccessPoints).Concat(ExpeditionAgents).Concat(LocationMarkers).Concat(Harvestables).Concat(MobSpawnPoints)
             .Concat(ResourceNodes).Concat(RealEstates).Concat(FishingZones).Concat(RespawnPoints);
 
@@ -232,7 +238,7 @@ public sealed class ClusterTemplate
     {
         var parts = new (int Count, string What)[]
         {
-            (Buildings.Count, "building"), (Exits.Count, "exit"), (Travelpoints.Count, "travel point"),
+            (Buildings.Count, "building"), (Exits.Count, "exit"), (Travelpoints.Count, "travel point"), (Outposts.Count, "outpost"),
             (FactionWarfarePortals.Count, "faction warfare portal"), (IslandAccessPoints.Count, "island access point"),
             (ExpeditionAgents.Count, "expedition agent"), (LocationMarkers.Count, "location marker"), (Harvestables.Count, "harvestable"),
             (MobSpawnPoints.Count, "mob spawn point"), (ResourceNodes.Count, "resource node tile"), (RealEstates.Count, "real estate"),
@@ -420,6 +426,8 @@ public sealed class ClusterTemplate
         public readonly List<BuildingSpawn> Buildings = [];
         public readonly List<ExitSpawn> Exits = [];
         public readonly List<TravelpointSpawn> Travelpoints = [];
+        public readonly List<OutpostSpawn> Outposts = [];
+        public readonly List<SpellZoneSpot> SpellZones = [];
         public readonly List<FactionWarfarePortalSpawn> Portals = [];
         public readonly List<IslandAccessPointSpawn> Islands = [];
         public readonly List<ExpeditionAgentSpawn> Agents = [];
@@ -467,7 +475,10 @@ public sealed class ClusterTemplate
         {
             foreach (var m in layout.Members)
             {
-                if (m.Layer.Length > 0 && !active.Contains(m.Layer)) continue;
+                // StageQ outposts: a tower template has one outpost member per state (OUTPOST_SAFE_1 … LETHAL_3, all on the same spot); the
+                // tower is the one world.xml criticalObjects names, whatever its layer (RED S_ST puts outpost_02 on Layer_01), the others are left out.
+                if (m.Type == "outpost" ? criticalObjects.GetValueOrDefault($"{slot}/{m.Id}") is not { Unused: false }
+                    : m.Layer.Length > 0 && !active.Contains(m.Layer)) continue;
                 if (store.Tiles.Collision(m.Tile) is { } memberGrid) // stage I bots: a building's walls block, its criticalObjects entry or not
                 {
                     var (mx, _, mz) = place.Apply(m.X, m.Y, m.Z);
@@ -537,6 +548,25 @@ public sealed class ClusterTemplate
                         {
                             Key = key, Tile = m.Tile, Position = pos, Height = (float)y, Direction = dir, Component = travel, Guid = guid,
                             World = info.Travelpoints.FirstOrDefault(t => t.Id == guid), SpawnPosition = Spawn(travel),
+                        });
+                        break;
+                    case "outpost" when Of("outpost") is { } tower:
+                        // capturezonepos is the tile's (16 0 -16 from the tower: the template centre); the 8 guardspawnpoints spread ±23 m around
+                        // (0, 0) of the template, inside its ±25 m bounds, so they are read as the template's [infer], turned with it.
+                        var zone = ((string?)tower.Attribute("capturezonepos"))?.Split(' ', StringSplitOptions.RemoveEmptyEntries) ?? [];
+                        var (zx, zz) = zone.Length >= 3 ? TileMath.Rotate(TileMath.Float(zone[0]), TileMath.Float(zone[2]), m.Yaw) : (0d, 0d);
+                        var (cx, _, cz) = place.Apply(m.X + zx, m.Y, m.Z + zz);
+                        Outposts.Add(new OutpostSpawn
+                        {
+                            Key = key, Tile = m.Tile, Position = pos, Height = (float)y, Direction = dir, Component = tower, Guid = guid,
+                            World = info.Outposts.FirstOrDefault(o => o.Id == guid), Type = (string?)tower.Attribute("type") ?? "",
+                            CaptureZone = new Vector2((float)cx, (float)cz),
+                            Guards = [.. tower.Elements("guardspawnpoint").Select(g =>
+                            {
+                                var gp = TileMath.V2((string?)g.Attribute("pos")) ?? Vector2.Zero;
+                                var (gx, _, gz) = place.Apply(gp.X, m.Y, gp.Y);
+                                return new OutpostGuardSpot(new Vector2((float)gx, (float)gz), (float)TileMath.Mod360(place.Yaw + TileMath.Float((string?)g.Attribute("roty"))));
+                            })],
                         });
                         break;
                     case "islandaccesspoint":
@@ -704,6 +734,10 @@ public sealed class ClusterTemplate
                     case "localquestarea":
                         QuestAreas.Add(new LocalQuestAreaSpawn { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, QuestId = A("questid") ?? "", Radius = TileMath.Float(A("radius")) });
                         break;
+                    // A ground emblem's zone spell (the Roads' and the cities' speed buffs; Systems/SpellZones).
+                    case "spellzone" when A("spell") is { Length: > 0 } zoneSpell:
+                        SpellZones.Add(new SpellZoneSpot(pos, zoneSpell));
+                        break;
                 }
             }
         }
@@ -855,7 +889,7 @@ public sealed class ClusterTemplate
             var template = new ClusterTemplate
             {
                 Info = info, Name = name, Origin = origin, Size = size, Instances = instances, CriticalObjects = criticalObjects, Critical = Critical,
-                Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
+                Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, Outposts = Outposts, SpellZones = SpellZones, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
                 ExpeditionAgents = Agents, LocationMarkers = Markers, TutorialBlockers = TutorialBlockers, Harvestables = Harvestables, MobSpawnPoints = Mobs, ResourceNodes = Nodes,
                 RealEstates = Estates, FishingZones = Fishing, RespawnPoints = Respawns, Resources = resources, DungeonMarkers = DungeonMarkers, LootChests = ChestPoints,
                 LocalQuestAreas = QuestAreas, PoiChestLimit = poiLimit, ExpeditionObjects = ExpeditionObjects, Colliders = Colliders, Roads = Roads, IslandManagements = IslandManagements, HideoutManagements = HideoutManagements, BuildCells = BuildCells,
@@ -1181,6 +1215,34 @@ public sealed record TravelpointSpawn : ClusterObject
     /// in a tile's walk-blocking cell is the nearest walkable cell instead (Bridgewatch's, public issue #10).
     /// </summary>
     public Vector2? SpawnPosition { get; init; }
+}
+
+/// <summary>A guard spot of a faction warfare tower: where one of its guards stands and the way it faces.</summary>
+public readonly record struct OutpostGuardSpot(Vector2 Position, float Direction);
+
+/// <summary>A tile's &lt;spellzone&gt;: its world position and its zone spell (SPELLZONE_ROADS_SPEEDBUFF, …).</summary>
+public readonly record struct SpellZoneSpot(Vector2 Position, string Spell);
+
+/// <summary>
+/// StageQ: a faction warfare tower (analysis/work/stageQ/outposts/DATA.md §2): the outpost member of an S_&lt;biome&gt;_FactionOutpost template
+/// that world.xml criticalObjects names. <see cref="ClusterObject.Tile"/> &lt;BIOME&gt;_&lt;GREEN|RED|DEAD&gt;_FACTION_WARFARE_OUTPOST_TOWER and
+/// <see cref="ClusterObject.Position"/> (the template instance + (-16, 16), = world.xml outpost pos on all 274) are NewOutpostObject keys 1 and 3.
+/// </summary>
+public sealed record OutpostSpawn : ClusterObject
+{
+    public required Guid Guid { get; init; }
+
+    /// <summary>The world.xml outpost of the same id, if any.</summary>
+    public WorldOutpost? World { get; init; }
+
+    /// <summary>The member's outpost type (OUTPOST_SAFE_3 …; = world.xml type, an outpost.xml uniquename): NewOutpostObject key 2.</summary>
+    public required string Type { get; init; }
+
+    /// <summary>The capture zone's centre (capturezonepos turned with the tile: the template centre).</summary>
+    public Vector2 CaptureZone { get; init; }
+
+    /// <summary>The tile's 8 guardspawnpoints (their mobname is an editor placeholder; outpost.xml names the guards).</summary>
+    public IReadOnlyList<OutpostGuardSpot> Guards { get; init; } = [];
 }
 
 public sealed record FactionWarfarePortalSpawn : ClusterObject

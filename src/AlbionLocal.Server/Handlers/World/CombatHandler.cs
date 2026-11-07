@@ -55,7 +55,7 @@ public sealed partial class WorldSession
             return new GenericResponse { ReturnCode = AttackInvalidTarget };
         }
         if (map.FindPlayer(req.co) is { } victim && victim != player) return AttackPlayer(player, victim, req); // a bot too (stage I)
-        if (map.Objects.GetValueOrDefault(req.co) is not Mob { Attackable: true } mob || !player.Visibility.Knows(mob))
+        if (map.Objects.GetValueOrDefault(req.co) is not Mob { Attackable: true } mob || !mob.FoeOf(player) || !player.Visibility.Knows(mob))
         {
             Log.Info(Name, $"'{player.Character.Name}' AttackStart on object {req.co}: no living mob in view, refused ({AttackInvalidTarget})");
             return new GenericResponse { ReturnCode = AttackInvalidTarget };

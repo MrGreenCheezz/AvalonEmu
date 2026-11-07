@@ -112,7 +112,8 @@ public static class CombatTest
         {
             Characters = Repository(Dir);
             var anchor = GameTime.Now;
-            World = new World(config ?? new ServerConfig { JoinByCharacterId = true }, Characters, Client.Items, Client.GameData, Client.Spells)
+            // 0204 is a faction warfare zone: by default its towers and their guards (stageQ) are left out of these fights.
+            World = new World(config ?? new ServerConfig { JoinByCharacterId = true, FactionWarfare = new FactionWarfareOptions { Outposts = false } }, Characters, Client.Items, Client.GameData, Client.Spells)
             {
                 Sync = new object(), Clock = Clock, Clusters = Store, MapSeed = 42, GameTicks = () => anchor + Clock.Now.Ticks, LootOverride = loot,
                 MobAi = ai, Combat = combat ?? CombatSettings.Default, PvpOverride = pvp,

@@ -145,7 +145,7 @@ public static class SpawnManager
     /// </summary>
     public static Mob SpawnAt(Map map, MobTemplate template, Vector2 position, float direction, World world, string? behavior = null,
         IReadOnlyList<Waypoint>? waypoints = null, double healthFactor = 1, double damageFactor = 1, Systems.WorldEvents.Run? worldEvent = null,
-        SpellTemplate? levelBuff = null, double fameFactor = 1)
+        SpellTemplate? levelBuff = null, double fameFactor = 1, Func<Player, bool>? foes = null)
     {
         var point = new MobSpawnPoint
         {
@@ -155,7 +155,7 @@ public static class SpawnManager
         };
         var mob = new Mob(world.ObjectIds.Next(), point, template, Mob.FlaggingOf(template, "", map.Template?.Name), world.GameNow, world.Now)
         {
-            World = world, HealthFactor = healthFactor, DamageFactor = damageFactor, Event = worldEvent, FameFactor = fameFactor,
+            World = world, HealthFactor = healthFactor, DamageFactor = damageFactor, Event = worldEvent, FameFactor = fameFactor, Foes = foes,
         };
         if (levelBuff is not null)
         {

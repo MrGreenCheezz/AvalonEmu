@@ -66,6 +66,8 @@ public sealed class World : IDisposable
         FakeCasts = new Systems.FakeSlotCasts(this);
         Shrines = new Systems.BuffShrines(this);
         Territories = new Systems.Territories(this, characters as ITerritoryStore);
+        Outposts = new Systems.Outposts(this);
+        SpellZones = new Systems.SpellZones(this);
         Bounties = new Systems.Bounties(this);
         Hunts = new Systems.Hunts(this);
         Vanity = new Systems.Vanity(this);
@@ -249,6 +251,12 @@ public sealed class World : IDisposable
 
     /// <summary>StageP: the guild territories and castles (world.xml territories, monoliths, castles, the territory window; stageP territories SPEC).</summary>
     public Systems.Territories Territories { get; }
+
+    /// <summary>StageQ: the faction warfare towers, their guards, captures and zone control (FactionWarfare:*).</summary>
+    public Systems.Outposts Outposts { get; }
+
+    /// <summary>The ground emblems' zone spells: the Roads' and the cities' speed buffs (<see cref="Systems.SpellZones"/>).</summary>
+    public Systems.SpellZones SpellZones { get; }
 
     /// <summary>The owned islands, their instances and journeys (stageH islands SPEC phase 1), loaded from the character database's island table.</summary>
     public Systems.Islands Islands { get; }
@@ -472,6 +480,27 @@ public sealed class World : IDisposable
     /// </summary>
     public bool FirstJoin(Character c) => _joined.Add(c.Id) && c.Created.Ticks >= GameTime.StartTicks;
 
+    /// <summary>How often <see cref="PlayerCounts"/> goes out (official: every 10 s, median gap 10.002 s over 78 in capture 002835).</summary>
+    public static readonly TimeSpan PlayerCountsEvery = TimeSpan.FromSeconds(10);
+
+    private TimeSpan _nextPlayerCounts;
+
+    /// <summary>
+    /// PlayerCounts (276, stageH ops-audit SPEC §7) every <see cref="PlayerCountsEvery"/> to every player: {0 the players on its map,
+    /// bots included, 1 -1} as official (key 2 never sent). Its client consumer is not traced; the world map's count is another field.
+    /// </summary>
+    private void PlayerCounts(TimeSpan now)
+    {
+        if (now < _nextPlayerCounts) return;
+        _nextPlayerCounts = now + PlayerCountsEvery;
+        foreach (var map in Maps.Maps)
+        {
+            if (map.HumanCount == 0) continue;
+            var count = new Protocol.PlayerCountsEvent { dmz = (short)Math.Min(short.MaxValue, map.Characters.Count()), dm0 = -1 };
+            foreach (var p in map.Players.Values) p.Session.Send(count);
+        }
+    }
+
     /// <summary>
     /// One tick, under <see cref="Sync"/> (<see cref="WorldLoop"/>; the self-test calls it directly): dt from the
     /// clock, then the posted actions, then the visibility of the players who have moved (while one walks, its
@@ -529,10 +558,13 @@ public sealed class World : IDisposable
         Profile.Mark("player systems");
         foreach (var map in Maps.Maps) SpawnManager.Update(map, this, now);
         foreach (var map in Maps.Maps) WorldChests.Update(map); // stageH: chests gone and due again, the camp quest circles
+        foreach (var map in Maps.Maps) SpellZones.Update(map); // the speed emblems of the Roads and the cities
         Bosses.Update(); // stageH: world bosses due, despawned ones
         Territories.Update(); // stageP P5: the castle fights, capture zones, chests and castle season points
+        Outposts.Update(); // stageQ: the faction warfare towers' guards, contests, captures and zone control
         Hideouts.Update(); // stageP hideouts: construction phases, upgrades, the daily food and tribute
         Events.Update(); // PVE-DESIGN step 7: world events due, their waves, ends and rewards
+        PlayerCounts(now);
         Profile.Mark("spawns and world");
         // Stage I: the bot populations, walks and brains, guarded so that a fault there never costs the tick its keepalives and saves.
         try { Bots.Update(now); }

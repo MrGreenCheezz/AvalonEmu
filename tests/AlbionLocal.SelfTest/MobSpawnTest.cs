@@ -89,7 +89,9 @@ public static class MobSpawnTest
         var dir = NewDir();
         var characters = Repository(dir);
         var clock = new ManualClock();
-        var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, Client.Items, Client.GameData) { Sync = new object(), Clock = clock, Clusters = Store, MapSeed = 42 };
+        // 0204 is a faction warfare zone: its towers' guards (stageQ, mobs of no spawn point) are left out here.
+        var world = new World(new ServerConfig { JoinByCharacterId = true, FactionWarfare = new FactionWarfareOptions { Outposts = false } }, characters, Client.Items, Client.GameData)
+            { Sync = new object(), Clock = clock, Clusters = Store, MapSeed = 42 };
         var template = Store.Get("0204");
         var tower = template.MobSpawnPoints.First(p => p.Mob == "T6_MOB_GUARD_TOWER");
         var c = StarterKit.Default.NewCharacter("Hunter");

@@ -11,7 +11,7 @@ public static class VanityTest
     public static IEnumerable<(string, Action)> All =>
     [
         ("vanity drop: the capture's ids, a forced themed drop unlocks a skin (408), GetVanityUnlocks lists it, buying is refused", Drop),
-        ("vanity apply: wardrobe (387 → 416 to both, an unowned slot dropped), mount skin (386/385), saved (v35), NewCharacter 55", Apply),
+        ("vanity apply: wardrobe (387 → 416 to both, an unowned slot dropped), mount skin (386/385), saved (v35), NewCharacter 55; a worn skin's spell in its vanity slot", Apply),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -65,5 +65,15 @@ public static class VanityTest
         Check(saved is not null && saved.Wardrobe.SequenceEqual(kept) && saved.MountSkins.GetValueOrDefault(category) == ox.Number && saved.Unlocks.Contains(hood.Id),
               "saved with the character (schema v35): unlocks, wardrobe, mount skin");
         Check(a.BuildCreate(DateTime.UtcNow).cxg is { } w55 && w55.SequenceEqual(kept), "NewCharacter key 55 (for the others) is the wardrobe");
+
+        // A tester's report (skin abilities did nothing): a worn skin's spell goes into its vanity slot, here the skull's laugh at VanityHead 10.
+        var skull = v.Catalog.Find("UNIQUE_HEAD_VANITY_SKELETON");
+        if (skull is not null) lock (z.World.Sync) v.Grant(a, skull, "test");
+        am = z.A.P.Events.Count;
+        z.Send(z.A, new SetWardrobeRequest { agb = [-1, -1, skull?.Number ?? -1, -1, -1, -1, -1] });
+        var laugh = z.World.Spells!.IdOf("VANITY_SKELETON_LAUGH");
+        Check(skull is not null && laugh >= 0
+              && Since(z.A.P, am).Any(e => e.Code == EventCodes.CharacterEquipmentChanged && L(e.P, 0) == a.Id && e.P[7] is int[] { Length: 14 } s && s[10] == laugh),
+              $"the skull hood worn: CharacterEquipmentChanged key 7 has VANITY_SKELETON_LAUGH ({laugh}) in VanityHead slot 10");
     }
 }

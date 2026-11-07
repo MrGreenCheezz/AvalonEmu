@@ -271,10 +271,12 @@ public sealed class WorldArchetypes
         var spawnBuffs = new Dictionary<string, IReadOnlyList<SpawnBuff>>(StringComparer.Ordinal);
         var tunnels = new Dictionary<string, string>(StringComparer.Ordinal);
         var entry = new Dictionary<string, (double, bool)>(StringComparer.Ordinal);
+        var noMounts = new HashSet<string>(StringComparer.Ordinal);
         foreach (var e in root.Descendants("clustertype"))
         {
             if ((string?)e.Attribute("name") is not { } n) continue;
             if ((string?)e.Attribute("archetype") is { } a) of.TryAdd(n, a);
+            if (string.Equals((string?)e.Attribute("allowmounts"), "false", StringComparison.OrdinalIgnoreCase)) noMounts.Add(n); // public issue #8
             if ((string?)e.Attribute("tunnelpreset") is { Length: > 0 } tunnel) tunnels.TryAdd(n, tunnel); // stageL roads SPEC §1.3
             // stageP SPEC §2.4: the spell cooldowns on entering and the short spawn buff of the cluster one comes from
             entry.TryAdd(n, (double.TryParse((string?)e.Attribute("spellcooldownsonenteringseconds"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var cd) ? cd : 0,
@@ -289,10 +291,13 @@ public sealed class WorldArchetypes
         }
         foreach (var e in root.Descendants("archetype"))
             if ((string?)e.Attribute("name") is { } n) archetypes.TryAdd(n, new XElement(e.Name, e.Attributes()));
-        return new WorldArchetypes(of, archetypes) { _poiLimits = poi, _spawnBuffs = spawnBuffs, _tunnels = tunnels, _entry = entry };
+        return new WorldArchetypes(of, archetypes) { _poiLimits = poi, _spawnBuffs = spawnBuffs, _tunnels = tunnels, _entry = entry, _noMounts = noMounts };
     }
 
     private Dictionary<string, string> _tunnels = [];
+
+    /// <summary>The cluster types with allowmounts false (an attribute of the clustertype, not of its archetype: 80 types, every dungeon and expedition).</summary>
+    private HashSet<string> _noMounts = [];
 
     private Dictionary<string, (double Cooldown, bool ShortOnLeave)> _entry = [];
 
@@ -335,9 +340,13 @@ public sealed class WorldArchetypes
         return (name, EnumParse(Warnings, (string?)e?.Attribute("pvpwarningtype"), 0), EnumParse(PvpRuleNames, (string?)e?.Attribute("pvprule"), 2));
     }
 
-    /// <summary>The PvP fields of world.xml cluster type <paramref name="clusterType"/>'s archetype (stageE pvp SPEC §1.1; the client's defaults without one).</summary>
+    /// <summary>
+    /// The PvP fields of world.xml cluster type <paramref name="clusterType"/>'s archetype (stageE pvp SPEC §1.1; the client's defaults without one),
+    /// with the cluster type's own allowmounts (<see cref="ClusterPvp.AllowMounts"/>).
+    /// </summary>
     public ClusterPvp PvpOf(string clusterType) =>
-        _archetypeOf.GetValueOrDefault(clusterType) is { } name ? ClusterPvp.Of(_archetypes.GetValueOrDefault(name), name) : ClusterPvp.Default;
+        (_archetypeOf.GetValueOrDefault(clusterType) is { } name ? ClusterPvp.Of(_archetypes.GetValueOrDefault(name), name) : ClusterPvp.Default)
+        with { AllowMounts = !_noMounts.Contains(clusterType) };
 
     /// <summary>
     /// The clusterdangerbonustype of world.xml cluster type <paramref name="clusterType"/>'s archetype (SAFEAREA → GREEN →

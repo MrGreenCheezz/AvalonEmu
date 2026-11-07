@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-11-08 — Faction warfare outposts; no mounts in dungeons and expeditions; smaller fixes
+
+**Faction warfare outposts** (`FactionWarfare:*`, docs/REFERENCE.md "Faction warfare"; on in both presets)
+- Every yellow and red zone shows its towers (1 or 3, from `world.xml`), at first owned by its duchy's faction. All 274 towers of the 100 zones resolve to their template position.
+- Each tower has its owner's guards from `outpost.xml`: 1 boss and 7 guards, T5 in T4-T5 zones and T6 above. They attack players flagged for another faction, and only those players can hurt them.
+- With all guards dead a tower on the front line can be taken: stand in its 12 m circle, flagged and on foot. Alone, your faction empties the owner's points in 8 s and fills its own in 16 s; another faction in the circle holds the claim. The new owner's guards come back 15 s (boss) and 30 s later.
+- A faction that holds more than half of a zone's towers for `FactionWarfare:ControlSeconds` (560 s) controls the zone, which moves the front line. The minimap, the world map's tower flags and the capture circle follow it.
+- `.outpost` lists the zone's towers; GMs have `.outpost owner <1-6>` and `.outpost clear`.
+- Inferred, not captured: the front line rule (the official one follows the campaign's duchy conflicts), the guard respawn rule, the control time. The towers are not saved: a restart gives every tower back to its duchy's faction. Faction camps, supplies and fortresses are not done yet.
+
+**Mounts** (issue #8 follow-up): a character that entered an expedition mounted could not dismount inside. The game data forbids mounts in 80 cluster types: every dungeon, the expeditions, the arenas, the corrupted, hell and mists dungeons, and the dragon areas. The server now reads that rule. A character that comes in mounted arrives on foot, and mounting there is refused.
+
+**Smaller fixes**
+- Bank "add to stacks": a full stack of 999 no longer keeps the rest of that item type out; it goes into free vault slots.
+- Speed emblems: the cities' and the Roads of Avalon's speed zones give their buff (the Roads' one only on a mount, as the data says).
+- Wardrobe skins: a worn skin's spells (the skull hood's laugh, say) take their vanity spell slots.
+- PlayerCounts (event 276) every 10 s, as on the official server.
+
+Thanks to JumpingY for the mount report.
+
 ## 2026-11-07 — Fix: the Bridgewatch fast-travel arrival
 
 - **Fast travel** (issue #10): a journey to Bridgewatch put the character inside a shed next to the travel point, where it could not walk away. The client data places that travel point's arrival (its `spawnpos`, at (7.91, 20.98)) inside the shed's collision. An arrival that lies in a blocked cell is now moved to the nearest walkable cell of the cluster's walk grid, (4.5, 20.5) in Bridgewatch, for journeys, island returns and `.tele` alike. A check of all 161 travel points found no other arrival inside a wall. The official server's arrival there has not been captured.

@@ -266,6 +266,7 @@ public sealed class Vanity(World world)
         var e = new UpdateWardrobeEvent { ddn = p.Id, d59 = [.. kept] };
         p.Session.Send(e);
         p.SendToObservers(e);
+        if (!p.IsBot) p.Session.SendEquipmentChanged(p, intoEquipment: false); // the skins' spells in the vanity slots 6-11 (CharacterEquipmentChanged key 7)
         return kept;
     }
 

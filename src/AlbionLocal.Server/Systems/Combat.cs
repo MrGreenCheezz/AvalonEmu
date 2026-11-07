@@ -359,6 +359,7 @@ public static class Combat
         attacker.World.Modules.HitAvoided(attacker, target, amount, origin, spell, ticks); // Combat.OnHitAvoided
         // StageN companions: a hired companion fights mobs (Companions:DamageFactor); the other bots never do.
         if (!target.Attackable || target.Map is not { } map || target.Immune || attacker.Combat.Down is not null || attacker.IsBot && !attacker.IsCompanion) return;
+        if (!target.FoeOf(attacker)) return; // stageQ: a tower's guard takes no damage from its own faction or the unflagged (an area's hit too)
         if (SpellEffects.Invincible(target, ticks) || SpellEffects.NotHittable(target, ticks)) return; // stageD SPEC §3.4: no HealthUpdate
         var world = attacker.World;
         // A companion whose owner is not in game deals nothing: every kill is credited to a human (fame, loot, journal).

@@ -484,7 +484,7 @@ Further rules:
 | Social | `Party`, `Guilds`, `Alliances`, `Social`, `Mail`, `Trade` |
 | Economy and loot | `Economy`, `Bank`, `Bm`, `Chests`, `Loot` |
 | PvE content | `Events`, `Bounties`, `Season`, `Dungeons`, `Expeditions`, `WorldBosses`, `Corrupted`, `Hellgates`, `Roads`, `Mists`, `Pve` |
-| PvP content | `Pvp`, `PvpGoals`, `DeathRecap`, `Arena`, `Territories`, `Castles`, `Hideouts` |
+| PvP content | `Pvp`, `PvpGoals`, `DeathRecap`, `Arena`, `Territories`, `Castles`, `Hideouts`, `FactionWarfare` |
 | Bots | `Bots`, `Companions` |
 | Housing | `Islands` |
 

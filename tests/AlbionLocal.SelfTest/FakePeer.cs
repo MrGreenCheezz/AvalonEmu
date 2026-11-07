@@ -40,8 +40,16 @@ public sealed class FakePeer : IPeer
         Sequence.Add(resp);
     }
 
+    /// <summary>
+    /// Whether the periodic PlayerCounts (276, every 10 s of the world clock) is recorded; off by default, so that the tests of an exact event
+    /// order over a long run of the clock are not interleaved with it (the ops audit, which checks it, turns it on).
+    /// </summary>
+    public bool KeepPlayerCounts { get; set; }
+
     public void SendEvent(EventData ev, bool encrypt = false)
     {
+        if (!KeepPlayerCounts && ev.Parameters.TryGetValue(AlbionLocal.Server.Protocol.ReservedKeys.EventCode, out var code) && Convert.ToInt32(code) == (int)AlbionLocal.Server.Protocol.EventCodes.PlayerCounts)
+            return;
         Events.Add(ev);
         Sequence.Add(ev);
     }

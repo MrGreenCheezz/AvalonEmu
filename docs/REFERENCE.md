@@ -219,6 +219,10 @@ is a full one (stageJ carry-load SPEC §3.1; inferred, no capture walks that far
 Damage that reaches the rider's health interrupts either mounting cast with `MountCancel` and invalidates its
 completion timer. A hit fully absorbed by a damage shield, or ignored by invulnerability, does not interrupt it.
 
+No mounts where the game data's cluster type says `allowmounts="false"` (every dungeon, the expeditions, the arenas, the
+corrupted and hell dungeons, the mists dungeons, the dragon areas): mounting is refused there, and a character that comes in
+mounted (an expedition's Join channel taken in the saddle, say) arrives on foot, as the client offers no dismount there.
+
 The carry load follows the client's inventory bar (stageJ carry-load SPEC §1): only the bag's items weigh (worn items,
 the mount, the potion and the food stacks weigh nothing), and the maximum is 50 kg plus the worn items' maxload passives
 at their item power (T4 bag 75.6 kg) plus the timed buffs (halfmountedbuff, mountedbuff, potions). A mount whose capacity
@@ -479,9 +483,9 @@ Chests roll their loot for the cluster's tier, × `Rates:Loot` (no zone loot fac
 preset 2) multiplies the weight of the champion, miniboss and boss mobs whenever a RANDOM spawn point picks its mob, so
 more elites (with their own fame and loot) stand in the open world and the dungeons. The chest state lives with the map: a
 cluster unloaded after `World:MapIdleUnloadMinutes` starts afresh. `.chest` lists the cluster's spots, `.chest unlock`
-opens the lock of the nearest chest (for you alone on a camp chest), `.quest local` shows your camp quests. Not yet: the
-faction warfare camp chests and open quests, the Roads of Avalon chests (LootChestSpawnpointChestUpgrade), the camp markers
-of LocalQuestInfos at Join.
+opens the lock of the nearest chest (for you alone on a camp chest), `.quest local` shows your camp quests (the Roads of
+Avalon chests: see Roads of Avalon). Not yet: the faction warfare camp chests and open quests, the camp markers of
+LocalQuestInfos at Join.
 
 ### World bosses
 
@@ -976,8 +980,24 @@ rank's point multiplier) and standing (21 ranks, the game data's thresholds), sh
 The trader sells for those points what the game data lists: faction hearts, cape blueprints (capes are then crafted at the toolmaker
 from a cape, the blueprint and a heart), the faction mount babies and the campaign chests, each behind its standing gate (T5 cape
 blueprint 15 000, mounts 120 000 / 1 400 000, …). `.faction` shows your enlistment, standing, rank and points; GMs: `.faction add
-<points>`, `.pvp faction <faction>` (no cooldown). Not done: outposts and fortresses, the PvP capture part, cluster control and
-payouts, the weekly upkeep and reports, campaign rewards, the faction's PvE fame bonus and group bonus, the nameplate rank (483).
+<points>`, `.pvp faction <faction>` (no cooldown).
+
+**Outposts** (stageQ, `../analysis/work/stageQ/outposts/`: DATA.md the client data, CLIENT.md what the client does with the events;
+`FactionWarfare:*`). Every yellow and red zone shows its towers (1 or 3, `world.xml` outposts), at first its duchy's faction's. Each
+tower has that faction's 1 boss and 7 guards (`outpost.xml`: T5 in T4-T5 zones, T6 above); they attack players flagged for another
+faction. A tower on the front line (a zone with an exit to a zone or city another faction controls; `FactionWarfare:Claimable`) can be
+taken once all its guards are dead: stand in its capture circle (12 m) flagged and on foot; alone, your faction empties the owner's
+points in 8 s and fills its own in 16 s, as `outpost.xml` says (another faction in the circle holds it; nobody: the owner's come back in
+30 s). The tower is then yours, the new owner's guards come back 15 s (boss) and 30 s later. A dead guard comes back after 15 / 30 s
+once the tower has been quiet for 15 s. A faction holding more than half a zone's towers for `FactionWarfare:ControlSeconds` (560 s)
+controls the zone, which moves the front line. The minimap, the world map and the capture circle follow it. `.outpost` lists the
+zone's towers; GMs: `.outpost owner <1-6>` (the nearest tower), `.outpost clear` (its guards go). Inferred, not captured: the front
+line rule (the official one follows the campaign's duchy conflicts), the guard respawn rule, the control time. The towers are not
+saved: a restart gives every tower back to its duchy's faction.
+
+Not done: the faction camps (their layer is switched by the DynamicTemplate event, not sent yet), supplies and the campaign,
+fortresses and red-zone events, the faction points of a capture, payouts, the weekly upkeep and reports, campaign rewards, the
+faction's PvE fame bonus and group bonus, the nameplate rank (483).
 
 ## PvE preset
 

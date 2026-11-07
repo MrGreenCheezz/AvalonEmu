@@ -126,11 +126,15 @@ public sealed class VisibilityTracker(Player player)
         foreach (var q in _players) SendSpawn(player, q, now);
     }
 
-    /// <summary>Phase B: the cluster-wide objects (NewBuilding and QuestGiverInfoForPlayer of the faction trader), once.</summary>
+    /// <summary>
+    /// Phase B: the cluster-wide objects (NewBuilding and QuestGiverInfoForPlayer of the faction trader, a warfare zone's towers with their
+    /// OutpostUpdate), once, then the zone's FactionWarfareClusterState (stageQ).
+    /// </summary>
     public void SendClusterWide()
     {
         if (_map is null) return;
         foreach (var o in _map.ClusterWide) Enter(o);
+        player.World.Outposts.Joined(player);
     }
 
     /// <summary>

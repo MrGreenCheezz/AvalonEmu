@@ -119,8 +119,31 @@ public sealed partial class WorldSession
         {
             if (equipment[8] is { } potion) slots[12] = spells.ConsumeSpell(potion.Template.Name);
             if (equipment[9] is { } food) slots[13] = spells.ConsumeSpell(food.Template.Name);
+            VanitySlots(slots, spells);
         }
         return slots;
+    }
+
+    /// <summary>
+    /// The vanity spell slots 6-11 (CharacterSpellSlot VanityMainHand1 … VanityShoes; a tester's report: skin abilities did nothing): the first
+    /// spell of each list of the session player's worn wardrobe skin (its item's craftingspelllist, UNIQUE_HEAD_VANITY_SKELETON → VANITY_SKELETON_LAUGH):
+    /// the main hand skin's lists 0-2 in 6-8 (8 from the off hand skin's list 0 when the main hand has fewer than 3, as the gear's 0-2), the armor's
+    /// in 9, the head's in 10, the shoes' in 11; -1 where no skin is worn or it has no spell.
+    /// </summary>
+    private void VanitySlots(int[] slots, Game.SpellData spells)
+    {
+        if (Player?.Character is not { } c) return;
+        var wardrobe = Systems.Vanity.Wardrobe(c);
+        if (wardrobe.All(w => w < 0)) return;
+        var catalog = world.Vanity.Catalog;
+        string[][] Lists(int slot) => wardrobe[slot] >= 0 && catalog.WardrobeSkin(wardrobe[slot]) is { } u && world.Items.Find(u.Name) is { } t ? t.SpellLists : [];
+        int First(string[][] lists, int i) => i < lists.Length && lists[i].Length > 0 ? spells.IdOf(lists[i][0]) : -1;
+        var main = Lists(0);
+        for (var i = 0; i < 3; i++) slots[6 + i] = First(main, i);
+        if (main.Length < 3) slots[8] = First(Lists(1), 0);
+        slots[9] = First(Lists(3), 0);
+        slots[10] = First(Lists(2), 0);
+        slots[11] = First(Lists(4), 0);
     }
 
     /// <summary>
@@ -289,7 +312,7 @@ public sealed partial class WorldSession
     /// Both go with the same keys to the players who know this one (stage 7 SPEC §4; official key 3, a long, is rare and left
     /// out): CharacterEquipmentChanged key 2 dresses the remote model, key 7 sets its spells.
     /// </summary>
-    private void SendEquipmentChanged(Player player, bool intoEquipment, bool spellChanged = false)
+    internal void SendEquipmentChanged(Player player, bool intoEquipment, bool spellChanged = false)
     {
         var now = GameTime.Now;
         if (player.RecalculateStats(now)) SendAround(player, Systems.Combat.PlayerCombo(player, now));

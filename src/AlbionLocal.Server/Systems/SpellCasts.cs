@@ -258,7 +258,7 @@ public static partial class SpellCasts
                     : p.World.Config.PvpDuelIsolation && (p.World.Duels.Of(p) is not null || p.World.Duels.Of(q) is not null) ? CastRefusal.InDuel : CastRefusal.NotFriend);
             return Pvp.EdgeDistance(p, here, q) > spell.CastRange + RangeTolerance ? (null, CastRefusal.OutOfRange) : (q, CastRefusal.None);
         }
-        if (map.Objects.GetValueOrDefault(id) is not Mob { Attackable: true } mob || !p.Visibility.Knows(mob) && !p.IsCompanion) return (null, CastRefusal.NoTarget);
+        if (map.Objects.GetValueOrDefault(id) is not Mob { Attackable: true } mob || !mob.FoeOf(p) || !p.Visibility.Knows(mob) && !p.IsCompanion) return (null, CastRefusal.NoTarget);
         if (!SpellTargets.Cast(cls, SpellTargets.Of(p, mob, now))) return (null, Enemy(cls) ? CastRefusal.NoTarget : CastRefusal.NotFriend);
         return Combat.EdgeDistance(p, here, mob) > spell.CastRange + RangeTolerance ? (null, CastRefusal.OutOfRange) : (mob, CastRefusal.None);
     }

@@ -8,7 +8,7 @@ namespace AlbionLocal.Server.Entities;
 // The static world objects of stage 2 (SPEC stage 2 §1 and §3, "SPEC" below): what the client cannot place or use without
 // an event from the server. Each one sends exactly the keys the official server sends (captures 103829, 114814); zero and
 // default values are left out by the serializer. Kinds still missing: NewRealEstate 191 (plot ownership unknown),
-// NewFishingZoneObject 360, NewBannerObject 519, outposts 365/366 (open world). Mobs: Entities/Mob.cs.
+// NewFishingZoneObject 360, NewBannerObject 519. Mobs: Entities/Mob.cs; the faction warfare towers (365/366): Entities/OutpostObject.cs.
 
 /// <summary>
 /// An object whose client gets an AccessStatus (209) with it (<see cref="VisibilityTracker"/>: on a Join in one batch after JoinFinished,

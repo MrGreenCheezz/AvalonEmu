@@ -124,6 +124,7 @@ tests.AddRange(StaticDungeonTest.All);
 tests.AddRange(WebPanelTest.All);
 
 tests.AddRange(TerritoryTest.All);
+tests.AddRange(OutpostTest.All);
 tests.AddRange(TerritoryClaimTest.All);
 tests.AddRange(CastleTest.All);
 tests.AddRange(HideoutTest.All);
