@@ -30,6 +30,7 @@ public static class TransferTest
         ("transfer: arrivals and facings equal SPEC §3 (6 captured transfers, the Thetford doors; 1002 -> 1000 through the server), none in an exit square, exit cooldown by cluster type", Golden),
         ("transfer: deferred answer while the target resolves (1669 meanwhile, 1641 on a failed load); .tele push and refusal; .exits", DeferredAndTele),
         ("transfer: travel-point journey Lymhurst -> Thetford as captured (route via 4000, BuyJourney RC 0 {253, 255}, ChangeCluster pushed, arrival at the travel point, last Move's facing; 8040 refusals)", Journey),
+        ("transfer: a travel point arrival in a wall moves to the nearest walkable cell (Bridgewatch, public issue #10); Lymhurst's stays its spawnpos", WallArrival),
         ("transfer: a stale connection playing the same character is detached with the change (the arrival is saved and joined, its end saves nothing)", StaleDuplicate),
         ("transport: a CONNECT with a new challenge from a known endpoint gets a new peer, the old one closes without a DISCONNECT", StaleEndpoint),
     ];
@@ -423,6 +424,20 @@ public static class TransferTest
         world.Dispose();
         characters.Dispose();
         try { Directory.Delete(dir, true); } catch (IOException) { }
+    }
+
+    /// <summary>
+    /// Public issue #10: Bridgewatch's travel point 330ef7dd at (0, 22) has spawnpos (7.911424, -1.02), inside STEPPE_GREEN_CITY_SHED_A;
+    /// its arrival is the nearest walkable cell, (4.5, 20.5). Lymhurst's 7e5a37ea keeps its clear spawnpos, (-30, 51) + (9.93, -1.02).
+    /// </summary>
+    private static void WallArrival()
+    {
+        var bridgewatch = Store.Get("2000");
+        var arrival = bridgewatch.Travelpoints.Single(t => Short(t.Guid) == "330ef7dd").SpawnPosition;
+        var lymhurst = Store.Get("1000").Travelpoints.Single(t => Short(t.Guid) == "7e5a37ea").SpawnPosition;
+        Check(WalkGrid.BlockedAt(bridgewatch.Colliders, new Vector2(7.911424f, 20.98f)) && arrival is { } a && Near(a, 4.5f, 20.5f)
+              && WalkGrid.Build(bridgewatch).Walkable(a) && lymhurst is { } l && Near(l, -20.07f, 49.98f),
+              $"Bridgewatch's arrival leaves the shed for walkable (4.5, 20.5) (got {arrival}); Lymhurst's stays (-20.07, 49.98) (got {lymhurst})");
     }
 
     /// <summary>
