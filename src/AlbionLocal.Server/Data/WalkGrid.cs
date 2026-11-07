@@ -114,6 +114,22 @@ public sealed class WalkGrid
         return g;
     }
 
+    /// <summary>
+    /// Whether a tile of <paramref name="colliders"/> blocks <paramref name="p"/>'s cell, without the whole grid: only the colliders that can
+    /// reach the cell are rasterised (a travel point's arrival, ClusterTemplate; public issue #10).
+    /// </summary>
+    public static bool BlockedAt(IEnumerable<PlacedCollider> colliders, Vector2 p)
+    {
+        var (x, z) = (Cell(p.X), Cell(p.Y));
+        var g = new WalkGrid(x, z, x + 1, z + 1);
+        foreach (var c in colliders)
+        {
+            var reach = c.Grid.Offset.Length() + MathF.Sqrt(c.Grid.Width * c.Grid.Width + c.Grid.Height * c.Grid.Height) + 2;
+            if (Vector2.Distance(new Vector2((float)c.X, (float)c.Z), p) <= reach) g.Rasterise(c);
+        }
+        return g.Blocked(x, z);
+    }
+
     /// <summary>The cell index of (x, z) in the margin-padded array; null outside it.</summary>
     private int? Index(int x, int z)
     {

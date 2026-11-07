@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-07 — Fix: the Bridgewatch fast-travel arrival
+
+- **Fast travel** (issue #10): a journey to Bridgewatch put the character inside a shed next to the travel point, where it could not walk away. The client data places that travel point's arrival (its `spawnpos`, at (7.91, 20.98)) inside the shed's collision. An arrival that lies in a blocked cell is now moved to the nearest walkable cell of the cluster's walk grid, (4.5, 20.5) in Bridgewatch, for journeys, island returns and `.tele` alike. A check of all 161 travel points found no other arrival inside a wall. The official server's arrival there has not been captured.
+
+Thanks to JumpingY for the report and the `.bot grid` output.
+
 ## 2026-11-06 (later) — Fixes: the 100 % global discount, the journey price; faster mobs and bots; tick profile
 
 - **Global discount** (bug): every NPC service (repairs, crafting fees, enchanting, fast travel and the rest) showed a 100 % "Global discount" and cost nothing. The client weighs prices against a gold price index of 5000 and reads the index from Join key 83, which the server never sent. It now sends 5000, as every captured official Join does (no discount); `Economy:GoldPriceIndex` sets it (2500 = 50 % off). A price of 0 is no longer accepted.

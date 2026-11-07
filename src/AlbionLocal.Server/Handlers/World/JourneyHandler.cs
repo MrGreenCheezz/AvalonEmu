@@ -64,7 +64,7 @@ public sealed partial class WorldSession
     /// luggage value of the equipped and carried items, NOTES-protocol.md "Travel-point journeys"; 8040 otherwise, a negative or
     /// zero price for a paid journey too). Island, showroom and hideout trips have no route cost: 0.
     /// Arrival = the target travel point's spawnpos turned with its tile (its pos + the rotated spawnpos, exact in the
-    /// capture), facing = the player's last Move direction (<see cref="Player.Facing"/>; the atan2 rule of exits would have
+    /// capture; one in a wall moved to walkable ground, <see cref="TravelpointSpawn.SpawnPosition"/>), facing = the player's last Move direction (<see cref="Player.Facing"/>; the atan2 rule of exits would have
     /// given 225.88 instead of 310.45593). A target cluster not resolved yet is resolved in the background first, as for an
     /// exit (SPEC §4.2); a second request meanwhile is refused. The answers are sent here (null to the dispatcher): the
     /// bare RC 0 {253, 255} as official, then the push. No Leave burst (SPEC §2.2).

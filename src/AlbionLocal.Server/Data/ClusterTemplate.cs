@@ -852,7 +852,7 @@ public sealed class ClusterTemplate
             try { poiLimit = ChestPoints.Count > 0 && info.Type is { Length: > 0 } ct ? store.Archetypes.PoiChestLimitOf(ct) : null; }
             catch (Exception e) when (e is InvalidDataException or IOException) { Problem($"POI chest limit unknown: {e.Message}"); }
             watch.Stop();
-            return new ClusterTemplate
+            var template = new ClusterTemplate
             {
                 Info = info, Name = name, Origin = origin, Size = size, Instances = instances, CriticalObjects = criticalObjects, Critical = Critical,
                 Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
@@ -864,6 +864,29 @@ public sealed class ClusterTemplate
                 Problems = [.. _problems.Select(p => p.Value == 1 ? p.Key : $"{p.Key} (x{p.Value})")],
                 LoadTime = watch.Elapsed, MobsBound = mobsBound, DangerType = danger, Pvp = pvp,
             };
+            ClearArrivals(template);
+            return template;
+        }
+
+        /// <summary>How far around a travel point's blocked spawnpos <see cref="ClearArrivals"/> looks for a walkable cell.</summary>
+        private const float ArrivalSearch = 10;
+
+        /// <summary>
+        /// Public issue #10: a travel point whose spawnpos lies in a tile's walk-blocking cell gets the nearest walkable cell of the
+        /// cluster's walk grid instead (within <see cref="ArrivalSearch"/> m; none: it stays), changed in the list <paramref name="t"/>
+        /// holds before anyone sees it. Bridgewatch (2000): spawnpos (7.911424, -1.02) from (0, 22) lands inside STEPPE_GREEN_CITY_SHED_A
+        /// at (9, 23), where the client cannot walk out; the arrival becomes (4.5, 20.5). The only one of the 161 travel points with a
+        /// spawnpos in a blocked cell; the official arrival there is not captured [infer: moved out as here]. The grid is built only then.
+        /// </summary>
+        private void ClearArrivals(ClusterTemplate t)
+        {
+            WalkGrid? grid = null;
+            for (var i = 0; i < Travelpoints.Count; i++)
+            {
+                if (Travelpoints[i].SpawnPosition is not { } at || !WalkGrid.BlockedAt(Colliders, at)) continue;
+                grid ??= WalkGrid.Build(t);
+                if (grid.Nearest(at, ArrivalSearch) is { } to) Travelpoints[i] = Travelpoints[i] with { SpawnPosition = to };
+            }
         }
     }
 
@@ -1153,6 +1176,10 @@ public sealed record TravelpointSpawn : ClusterObject
     /// <summary>The world.xml travelpoint of the same id (connections), if any.</summary>
     public WorldTravelpoint? World { get; init; }
 
+    /// <summary>
+    /// The fasttravelpoint's spawnpos turned with the tile, in world coordinates: where a journey arrives (exact in capture 002835). One
+    /// in a tile's walk-blocking cell is the nearest walkable cell instead (Bridgewatch's, public issue #10).
+    /// </summary>
     public Vector2? SpawnPosition { get; init; }
 }
 
