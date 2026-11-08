@@ -55,11 +55,20 @@ public static class VanityTest
               && Since(z.B.P, bm).Any(e => e.Code == EventCodes.UpdateWardrobe && Is(e.P, a.Id, kept)),
               "SetWardrobe: the owned hood kept at Head, the unowned armor dropped; UpdateWardrobe 416 to Ann and Bob");
         var category = ox.Slot;
+        var categories = v.Catalog.MountCategories.Count;
+        Check(z.Send(z.A, new GetMountSkinsRequest()) is { Parameters: var emptyMounts }
+              && emptyMounts[0] is int[] none && none.Length == categories && none.All(skin => skin == -1),
+              $"GetMountSkins without a selection: {categories} per-category entries, all -1");
+        am = z.A.P.Events.Count;
+        bm = z.B.P.Events.Count;
         Check(z.Send(z.A, new SetMountSkinRequest { afw = category, afx = ox.Number }) is { ReturnCode: 0 }
-              && z.Send(z.A, new GetMountSkinsRequest()) is { Parameters: var mp } && mp[0] is int[] skins && skins.SequenceEqual([ox.Number])
+              && z.Send(z.A, new GetMountSkinsRequest()) is { Parameters: var mp } && mp[0] is int[] skins
+              && skins.Length == categories && skins[category] == ox.Number && skins.Where((skin, i) => i != category).All(skin => skin == -1)
+              && Since(z.A.P, am).Any(e => e.Code == EventCodes.ChangeMountSkin && L(e.P, 0) == a.Id && L(e.P, 1) == category && L(e.P, 2) == ox.Number)
+              && Since(z.B.P, bm).Any(e => e.Code == EventCodes.ChangeMountSkin && L(e.P, 0) == a.Id && L(e.P, 1) == category && L(e.P, 2) == ox.Number)
               && z.Send(z.A, new SetMountSkinRequest { afw = category, afx = v.Pool.First(s => s.Type == UnlockType.Mount && s.Slot == category && s != ox).Number }) is { ReturnCode: Vanity.Refused }
               && v.MountSkinFor(a.Character, z.World.Items.Find("T5_MOUNT_OX")) == ox.Number,
-              $"SetMountSkin {ox}: rc 0, GetMountSkins lists it, another not unlocked: refused; a T5 ox wears it");
+              $"SetMountSkin {ox}: rc 0, GetMountSkins has it at category {category} and -1 elsewhere, ChangeMountSkin to the player and observers, another not unlocked: refused; a T5 ox wears it");
         lock (z.World.Sync) z.Characters.Save(a.Character.Clone());
         var saved = z.Characters.Find(a.Character.Id)?.Vanity;
         Check(saved is not null && saved.Wardrobe.SequenceEqual(kept) && saved.MountSkins.GetValueOrDefault(category) == ox.Number && saved.Unlocks.Contains(hood.Id),
