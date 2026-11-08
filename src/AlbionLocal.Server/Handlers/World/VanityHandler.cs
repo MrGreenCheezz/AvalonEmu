@@ -30,7 +30,7 @@ public sealed partial class WorldSession
     /// <summary>GetMountSkins (op 385, ue no fields; af4 {0 int[]}): the mount skin numbers chosen (cjj.a builds its per-category table from them).</summary>
     [Handles(OperationCodes.GetMountSkins)]
     private AlbionResponse? GetMountSkins(GetMountSkinsRequest req) =>
-        new GetMountSkinsResponse { a1p = Character is { } c ? Vanity.MountSkins(c) : [] };
+        new GetMountSkinsResponse { a1p = Character is { } c ? world.Vanity.MountSkins(c) : [] };
 
     /// <summary>SetMountSkin (op 386, aa5 {0 category index, 1 skin number or -1}; no response class): RC 0 (the client then shows it) or <see cref="Vanity.Refused"/>.</summary>
     [Handles(OperationCodes.SetMountSkin, Status = SessionStatus.InWorld)]
