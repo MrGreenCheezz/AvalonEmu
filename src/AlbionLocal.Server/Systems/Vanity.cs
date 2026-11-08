@@ -270,8 +270,18 @@ public sealed class Vanity(World world)
         return kept;
     }
 
-    /// <summary>GetMountSkins (op 385) key 0: the mount skin numbers chosen, one per category.</summary>
-    public static int[] MountSkins(Character c) => [.. (c.Vanity?.MountSkins ?? []).OrderBy(kv => kv.Key).Select(kv => kv.Value)];
+    /// <summary>
+    /// GetMountSkins (op 385) key 0: one entry per mount category, the chosen skin number or -1. The client indexes this array by
+    /// category, so a sparse list of chosen values makes its mount-selection view fail with IndexOutOfRangeException.
+    /// </summary>
+    public int[] MountSkins(Character c)
+    {
+        var skins = Enumerable.Repeat(-1, Catalog.MountCategories.Count).ToArray();
+        if (c.Vanity is not { } log) return skins;
+        foreach (var (category, skin) in log.MountSkins)
+            if ((uint)category < (uint)skins.Length) skins[category] = skin;
+        return skins;
+    }
 
     /// <summary>SetMountSkin (op 386 {0 category, 1 skin number or -1}): an owned skin of that category, or none. Null, or why not.</summary>
     public string? SetMountSkin(Player p, int category, int skin)
@@ -284,6 +294,9 @@ public sealed class Vanity(World world)
         else if (!Has(p.Character, u)) return $"{u} is not unlocked";
         else log.MountSkins[category] = skin;
         world.Saves.MarkChanged(p.Character);
+        var e = new ChangeMountSkinEvent { ddn = p.Id, bws = category, bwt = skin };
+        p.Session.Send(e);
+        p.SendToObservers(e);
         return null;
     }
 
