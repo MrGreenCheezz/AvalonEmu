@@ -122,6 +122,7 @@ tests.AddRange(ShrineTest.All);
 tests.AddRange(HuntTest.All);
 tests.AddRange(StaticDungeonTest.All);
 tests.AddRange(WebPanelTest.All);
+tests.AddRange(InternalApiTest.All);
 
 tests.AddRange(TerritoryTest.All);
 tests.AddRange(OutpostTest.All);
