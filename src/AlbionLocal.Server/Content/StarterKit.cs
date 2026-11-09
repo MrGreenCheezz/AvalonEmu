@@ -29,14 +29,14 @@ public sealed record StarterKit
     /// <summary>
     /// The built-in kit of a fair start (Progression:NewCharacters = FairStart, content/starter-fair.json): what an empty
     /// destiny board lets a character equip, the items.xml unlockedtoequip T1 items — T1 sword and shield, the T1 leather
-    /// set — and the T1 gathering tools (START unlocks the T2 bag and cape, COMBAT_TRAINEE the T2 weapons and armour).
+    /// set, the T2 mule a tutorial would have given — and the T1 gathering tools (START unlocks the T2 bag and cape, COMBAT_TRAINEE the T2 weapons and armour).
     /// </summary>
     public static StarterKit FairDefault { get; } = new()
     {
         Equipment =
         [
             new("T1_MAIN_SWORD"), new("T1_OFF_SHIELD"), new("T1_HEAD_LEATHER_SET1"), new("T1_ARMOR_LEATHER_SET1"), new("T1_SHOES_LEATHER_SET1"),
-            null, null, null, null, null,
+            null, null, new("T2_MOUNT_MULE"), null, null,
         ],
         Inventory = [new("T1_2H_TOOL_AXE"), new("T1_2H_TOOL_PICK"), new("T1_2H_TOOL_SICKLE"), new("T1_2H_TOOL_HAMMER"), new("T1_2H_TOOL_KNIFE")],
     };

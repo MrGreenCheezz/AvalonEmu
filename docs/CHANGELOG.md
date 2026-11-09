@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-10 — Fix: the mule of a fair start
+
+- **Starter kit** (issue #15): with `Tutorial:Opening` false under the official preset (`Progression:NewCharacters` = `FairStart`) a new character had no mount. Such a character gets the kit of `content/starter-fair.json`, not `content/starter.json`, and that kit left the mule out, although `T2_MOUNT_MULE` needs no destiny board unlock. The fair kit now has the mule equipped. Existing characters are not changed; a server with its own `starter-fair.json` keeps that file's kit.
+
+Thanks to Gostavo2003 for the report.
+
 ## 2026-11-08 — Faction warfare outposts; no mounts in dungeons and expeditions; smaller fixes
 
 **Faction warfare outposts** (`FactionWarfare:*`, docs/REFERENCE.md "Faction warfare"; on in both presets)
