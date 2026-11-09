@@ -165,7 +165,7 @@ public static class ProgressionTest
         var fair = board.FairStart();
         Check(fair.Completed.Count == 0 && fair.Levels.Count == 1 && fair.Levels[693] == 0, "a fair start: nothing finished, START in progress at level 0");
         var equipped = kit.Equipment.OfType<InventoryItem>().Select(i => Client.Items.Find(i.Name)!).ToList();
-        Check(equipped.Count == 5 && equipped.All(t => board.CanEquip(fair, t)) && kit.Inventory.OfType<InventoryItem>().All(i => board.CanEquip(fair, Client.Items.Find(i.Name)!))
+        Check(equipped.Count == 6 && kit.Equipment[7]?.Name == "T2_MOUNT_MULE" && equipped.All(t => board.CanEquip(fair, t)) && kit.Inventory.OfType<InventoryItem>().All(i => board.CanEquip(fair, Client.Items.Find(i.Name)!))
               && !board.CanEquip(fair, Client.Items.Find("T2_MAIN_SWORD")!) && !board.CanEquip(fair, Client.Items.Find("T4_MAIN_SWORD")!),
               "every item of the fair kit is equippable on the empty board; T2 and T4 swords are not");
 
@@ -178,8 +178,9 @@ public static class ProgressionTest
         login.OnRequest(Request(TestLogin("fairplayer", "password1"), 1), encrypted: true);
         login.OnRequest(Request(new CreateCharacterRequest { h7 = "Newcomer" }, 2), encrypted: true);
         Check(arena.Characters.Find("Newcomer") is { Progression: { Completed.Count: 0 } np } created && np.Levels.Keys.SequenceEqual([693])
-              && created.Equipment[0]?.Name == "T1_MAIN_SWORD" && created.Equipment[3]?.Name == "T1_ARMOR_LEATHER_SET1",
-              "CreateCharacter with Progression:NewCharacters = FairStart: START in progress only, the T1 kit");
+              && created.Equipment[0]?.Name == "T1_MAIN_SWORD" && created.Equipment[3]?.Name == "T1_ARMOR_LEATHER_SET1"
+              && created.Equipment[7]?.Name == "T2_MOUNT_MULE",
+              "CreateCharacter with Progression:NewCharacters = FairStart: START in progress only, the T1 kit with the mule");
 
         // A character of before (no board) joined; .progress mode fair gives it an empty board and sends it.
         var (_, peer, me) = arena.Join("Veteran", new InventoryItem("T2_MAIN_SWORD"));

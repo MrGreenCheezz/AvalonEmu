@@ -9,7 +9,7 @@ Local server emulator for the Albion Online client 1.32.030.345319 (research pro
   Regenerate from the workspace root: `python -I analysis/tools/gen_protocol_cs.py analysis server/src/AlbionLocal.Protocol/Generated analysis/protocol-names.json`.
 - `src/AlbionLocal.Server` – login server (5055) and game server (5056); `Data/` reads the client's GameData files.
 - `content/` – server content under git: `starter.json` (start cluster, position and kit of new characters),
-  `starter-fair.json` (the kit under `Progression:NewCharacters` = `FairStart`: the T1 items an empty destiny board allows),
+  `starter-fair.json` (the kit under `Progression:NewCharacters` = `FairStart`: the T1 items and the mule an empty destiny board allows),
   `opcode-stubs.json` (answers of side requests that have no handler: the empty response with the listed field
   values and return code, `"silent"` for no answer at all, `"ack"` for a bare success, as the official server answers
   them, `"ignore"` for the client's telemetry and other requests nobody answers; without the "unhandled" warning; a
@@ -1378,7 +1378,7 @@ the board only).
 
 `Progression:NewCharacters` in `config/*.jsonc` decides the board of a **new** character: `UnlockAll` (the
 default, as before) = no board of its own, everything unlocked, fame only raises the total; `FairStart` = an empty board
-(START in progress) and the kit of `content/starter-fair.json` (T1 sword, shield and leather set, T1 tools): 45 fame
+(START in progress) and the kit of `content/starter-fair.json` (T1 sword, shield and leather set, a T2 mule, T1 tools): 45 fame
 finish START (T2 bag and cape), 250 kill fame then COMBAT_TRAINEE (T2 weapons and armour), and so on. Existing
 characters keep what they have; `.progress mode fair|unlockall` switches one (it starts from an empty board), `.fame add`
 and `.progress set` speed things up. Running a server of this version converts `albionlocal.db` to schema v6 (the fame
