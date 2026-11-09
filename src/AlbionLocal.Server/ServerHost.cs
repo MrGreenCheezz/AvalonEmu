@@ -99,7 +99,9 @@ public sealed class ServerHost : IDisposable
         // The SelectCharacter response names the game and chat servers; with port 0 only the bound ones are right.
         Config = config with { GameEndPoint = GameServer.EndPoint, ChatEndPoint = ChatServer?.EndPoint ?? config.ChatEndPoint };
         // Every client, the local one too, is sent to PublicAddress for the game: a loopback-only listener is not there.
-        if (System.Net.IPAddress.IsLoopback(config.GameEndPoint.Address) && config.PublicAddress is { } pub && !System.Net.IPAddress.IsLoopback(pub))
+        if (System.Net.IPAddress.IsLoopback(config.GameEndPoint.Address) && config.PublicAddress is { } pub
+            && !pub.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            && !(System.Net.IPAddress.TryParse(pub, out var publicIp) && System.Net.IPAddress.IsLoopback(publicIp)))
             Log.Warn("config", $"Network:BindAddress {config.GameEndPoint.Address} is loopback but Network:PublicAddress {pub} is not: no client can reach the game server; use BindAddress 0.0.0.0");
         try
         {
