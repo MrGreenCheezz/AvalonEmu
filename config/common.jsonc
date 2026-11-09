@@ -13,7 +13,9 @@
     "ClientGameData": "../game-local/Albion-Online_Data/StreamingAssets/GameData",
     "Content": "content"
   },
-  // "Web": { "Enabled": false, "BindAddress": "127.0.0.1", "Port": 8080, "Registration": true, "SessionMinutes": 30 }, // the web panel; Preset pve: Enabled true
+  // "Web": { "Enabled": false, "BindAddress": "127.0.0.1", "Port": 8080, "Registration": true, "SessionMinutes": 30,
+  //          "ApiEnabled": false, "ApiBindAddress": "127.0.0.1", "ApiPort": 5059, "ApiToken": "replace with at least 32 characters" },
+  // The internal API is for the PHP website. Keep ApiBindAddress loopback; its token is a secret.
   // "Backup": { "EveryHours": 0, "Keep": 10 },
   "Log": { "Level": "Info", "File": "data/server.log" } // Empty File means console only.
 }

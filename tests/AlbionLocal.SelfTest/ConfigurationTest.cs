@@ -70,6 +70,18 @@ internal static class ConfigurationTest
             Reject(() => ServerConfiguration.Load(directory,
                 ["--Network:BindAddress=0.0.0.0", "--Network:PublicAddress=2001:db8::1"]),
                 "an IPv6 public address");
+            var apiToken = new string('a', 32);
+            var internalApi = ServerConfiguration.Load(directory,
+                ["--Web:ApiEnabled=true", "--Web:ApiBindAddress=127.0.0.1", $"--Web:ApiToken={apiToken}"]);
+            Check(internalApi.Config.Web is { ApiEnabled: true, ApiBindAddress: { } apiAddress, ApiToken: var token }
+                  && apiAddress.Equals(System.Net.IPAddress.Loopback) && token == apiToken,
+                  "the internal API accepts a loopback IPv4 address and a 32-byte token");
+            Reject(() => ServerConfiguration.Load(directory,
+                ["--Web:ApiEnabled=true", "--Web:ApiBindAddress=192.0.2.10", $"--Web:ApiToken={apiToken}"]),
+                "a non-loopback internal API bind address");
+            Reject(() => ServerConfiguration.Load(directory,
+                ["--Web:ApiEnabled=true", "--Web:ApiBindAddress=0.0.0.0", $"--Web:ApiToken={apiToken}"]),
+                "an all-interface internal API bind address");
             Reject(() => ServerConfiguration.Load(directory, ["--Web:Port=5055"]), "web port conflicts with login");
             Check(loaded.Config.ContentPath == Path.Combine(root, "assets") && loaded.Config.SavesPath == Path.Combine(root, "data")
                 && loaded.Config.LogFile == Path.Combine(root, "data", "server.log"), "all relative and default paths use parent of config directory");
