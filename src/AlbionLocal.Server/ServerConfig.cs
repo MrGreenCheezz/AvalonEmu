@@ -19,13 +19,13 @@ public sealed record ServerConfig
     public IPEndPoint GameEndPoint { get; init; } = new(IPAddress.Loopback, 5056);
 
     /// <summary>
-    /// The address the clients are told to connect to for the game server (Network:PublicAddress); null = the bound one.
-    /// Needed when the server listens on all interfaces (0.0.0.0) for clients on other PCs.
+    /// The host name or IPv4 address the clients are told to connect to for the game server (Network:PublicAddress); null = the bound one.
+    /// Needed when the server listens on all interfaces (0.0.0.0) for clients on other PCs. IPv6 is not accepted because the protocol carries host:port text.
     /// </summary>
-    public IPAddress? PublicAddress { get; init; }
+    public string? PublicAddress { get; init; }
 
     /// <summary>Address handed to the client in the SelectCharacter and GetGameServerByCluster responses: <see cref="PublicAddress"/>, else the bound one.</summary>
-    public string GameServerAddress => $"{PublicAddress ?? GameEndPoint.Address}:{GameEndPoint.Port}";
+    public string GameServerAddress => $"{PublicAddress ?? GameEndPoint.Address.ToString()}:{GameEndPoint.Port}";
 
     /// <summary>
     /// The chat listener (stageJ chat SPEC §2.2): Network:BindAddress, Network:ChatPort (5057; 0 = any free port, as the other two).
@@ -34,7 +34,7 @@ public sealed record ServerConfig
     public IPEndPoint ChatEndPoint { get; init; } = new(IPAddress.Loopback, 5057);
 
     /// <summary>SelectCharacter key 7 (stageJ chat SPEC §1.1, "ip:port" as key 0): <see cref="PublicAddress"/>, else the bound one, and the bound chat port.</summary>
-    public string ChatServerAddress => $"{PublicAddress ?? ChatEndPoint.Address}:{ChatEndPoint.Port}";
+    public string ChatServerAddress => $"{PublicAddress ?? ChatEndPoint.Address.ToString()}:{ChatEndPoint.Port}";
 
     /// <summary>
     /// Chat:Enabled (true): the chat server (stageJ chat SPEC: channels, whispers, <see cref="Systems.ChatHub"/>). False: no chat
@@ -1033,9 +1033,17 @@ public sealed record ServerConfig
         IPAddress? Address(string key) => Take(key) is not { } v ? null
             : IPAddress.TryParse(v, out var ip) && ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && v.Count(ch => ch == '.') == 3 ? ip
             : throw new InvalidDataException($"{key}: '{v}' is not an IPv4 address");
+        string? PublicAddress(string key)
+        {
+            var value = Take(key)?.Trim();
+            if (value is null) return null;
+            if (value.Length == 0 || value.Contains(':') || Uri.CheckHostName(value) is UriHostNameType.Unknown or UriHostNameType.IPv6)
+                throw new InvalidDataException($"{key}: '{value}' is not an IPv4 address or host name (IPv6 is not supported here)");
+            return value;
+        }
         var bind = Address("Network:BindAddress") ?? IPAddress.Loopback;
-        var publicAddress = Address("Network:PublicAddress");
-        if (publicAddress is not null && publicAddress.Equals(IPAddress.Any))
+        var publicAddress = PublicAddress("Network:PublicAddress");
+        if (publicAddress == IPAddress.Any.ToString())
             throw new InvalidDataException("Network:PublicAddress: 0.0.0.0 cannot be connected to; give the address the clients reach this PC at");
         if (publicAddress is null && bind.Equals(IPAddress.Any))
             throw new InvalidDataException("Network:BindAddress 0.0.0.0 needs Network:PublicAddress (the address the clients reach this PC at)");

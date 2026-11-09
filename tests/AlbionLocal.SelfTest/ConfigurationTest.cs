@@ -63,6 +63,13 @@ internal static class ConfigurationTest
             Check(loaded.Config.Web is { Enabled: true, Port: 8080 } && loaded.Config.Backup is { EveryHours: 6, Keep: 3 }
                 && loaded.Sources["Web:Enabled"].EndsWith("common.jsonc") && loaded.Sources["Backup:Keep"].EndsWith("common.jsonc"),
                 "existing web panel and backup settings load from the common area without starting services");
+            var publicHost = ServerConfiguration.Load(directory,
+                ["--Network:BindAddress=0.0.0.0", "--Network:PublicAddress=albion.example.test"]);
+            Check(publicHost.Config.PublicAddress == "albion.example.test" && publicHost.Config.GameServerAddress.EndsWith(":5056", StringComparison.Ordinal),
+                  "a DNS public address composes the game server address");
+            Reject(() => ServerConfiguration.Load(directory,
+                ["--Network:BindAddress=0.0.0.0", "--Network:PublicAddress=2001:db8::1"]),
+                "an IPv6 public address");
             Reject(() => ServerConfiguration.Load(directory, ["--Web:Port=5055"]), "web port conflicts with login");
             Check(loaded.Config.ContentPath == Path.Combine(root, "assets") && loaded.Config.SavesPath == Path.Combine(root, "data")
                 && loaded.Config.LogFile == Path.Combine(root, "data", "server.log"), "all relative and default paths use parent of config directory");
