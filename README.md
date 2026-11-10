@@ -56,6 +56,7 @@ the `pve` preset turns the PvE-friendly additions on. What changed lately: [docs
   and follow its quests through departure to a starter town, in a private instance per character (contributed in
   PR #1; not every branch is visually verified yet).
 - **Web panel** (`http://127.0.0.1:8080/`): status, registration, admin pages (players, accounts, bans, log, backups).
+- **Internal website API** (optional, loopback and token-protected): see [docs/INTERNAL_API.md](docs/INTERNAL_API.md).
 
 Modding (C# plugins, no-code rules, the Studio editor, ModKit content packs, extra action bars) and optional client
 mods are kept apart from this classic server, in the

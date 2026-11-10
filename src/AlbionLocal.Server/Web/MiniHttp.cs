@@ -11,6 +11,8 @@ public sealed class WebRequest
     public required string Method { get; init; }
     public required string Path { get; init; }
     public required IPAddress Remote { get; init; }
+    public string Body { get; init; } = "";
+    public string ContentType { get; init; } = "";
     public IReadOnlyDictionary<string, string> Query { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
     public IReadOnlyDictionary<string, string> Form { get; init; } = new Dictionary<string, string>();
@@ -132,15 +134,18 @@ public sealed class MiniHttp : IDisposable
         var target = start[1];
         var q = target.IndexOf('?');
         var path = Uri.UnescapeDataString(q < 0 ? target : target[..q]);
-        var form = headers.TryGetValue("Content-Type", out var ct2) && ct2.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase)
-            ? Urlencoded(Encoding.UTF8.GetString(buffer, bodyStart, length)) : new Dictionary<string, string>();
+        var contentType = headers.TryGetValue("Content-Type", out var contentHeader) ? contentHeader : "";
+        var body = Encoding.UTF8.GetString(buffer, bodyStart, length);
+        var form = contentType.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase)
+            ? Urlencoded(body) : new Dictionary<string, string>();
         var cookies = new Dictionary<string, string>(StringComparer.Ordinal);
         if (headers.TryGetValue("Cookie", out var cookie))
             foreach (var part in cookie.Split(';'))
                 if (part.IndexOf('=') is > 0 and var eq) cookies[part[..eq].Trim()] = part[(eq + 1)..].Trim();
         return new WebRequest
         {
-            Method = start[0].ToUpperInvariant(), Path = path, Remote = remote, Headers = headers, Cookies = cookies, Form = form,
+            Method = start[0].ToUpperInvariant(), Path = path, Remote = remote, Body = body, ContentType = contentType,
+            Headers = headers, Cookies = cookies, Form = form,
             Query = q < 0 ? new Dictionary<string, string>() : Urlencoded(target[(q + 1)..]),
         };
     }
@@ -174,8 +179,8 @@ public sealed class MiniHttp : IDisposable
 
     private static string Reason(int status) => status switch
     {
-        200 => "OK", 303 => "See Other", 400 => "Bad Request", 403 => "Forbidden", 404 => "Not Found", 405 => "Method Not Allowed",
-        429 => "Too Many Requests", 503 => "Service Unavailable", _ => "Error",
+        200 => "OK", 303 => "See Other", 400 => "Bad Request", 401 => "Unauthorized", 403 => "Forbidden", 404 => "Not Found",
+        405 => "Method Not Allowed", 409 => "Conflict", 423 => "Locked", 429 => "Too Many Requests", 503 => "Service Unavailable", _ => "Error",
     };
 
     public void Dispose()

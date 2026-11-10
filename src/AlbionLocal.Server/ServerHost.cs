@@ -262,6 +262,9 @@ public sealed class ServerHost : IDisposable
     /// <summary>The web panel (Web:Enabled); null when off or its port could not be opened.</summary>
     public Web.WebPanel? WebPanel { get; private set; }
 
+    /// <summary>The local JSON API used by the website (Web:ApiEnabled); null when off or its port could not be opened.</summary>
+    public Web.InternalApi? InternalApi { get; private set; }
+
     public void Start()
     {
         Loop.Start(); // first: a bad World:TickMs throws before a listener runs
@@ -279,6 +282,11 @@ public sealed class ServerHost : IDisposable
             try { WebPanel = new Web.WebPanel(World, Config.Web, Backups, Client.Build); }
             catch (System.Net.Sockets.SocketException e) { Log.Error("web", $"web panel not started on {Config.Web.BindAddress}:{Config.Web.Port}: {e.Message} (Web:Port)"); }
         }
+        if (Config.Web.ApiEnabled)
+        {
+            try { InternalApi = new Web.InternalApi(World, Config.Web, Client.Build); }
+            catch (System.Net.Sockets.SocketException e) { Log.Error("api", $"internal API not started on {Config.Web.ApiBindAddress}:{Config.Web.ApiPort}: {e.Message} (Web:ApiPort)"); }
+        }
         Log.Info("main", $"{Characters.List().Count} persisted character(s); new character start cluster {World.OpeningTutorial?.Tutorial.StartCluster ?? Starter.Cluster}");
         if (World.OpeningTutorial is not null)
             Log.Info("tutorial", "tutorial lab enabled for newly created characters; existing progress is retained; client-authored island route continues through starter-town departure (visual validation pending)");
@@ -293,6 +301,7 @@ public sealed class ServerHost : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        InternalApi?.Dispose();
         WebPanel?.Dispose();
         Backups?.Dispose();
         Loop.Dispose();

@@ -1718,6 +1718,9 @@ A small built-in web panel (`../analysis/work/stageN/webpanel/SPEC.md`): plain H
 light, usable on a phone. On by default under `Preset: pve`, off under `Preset: official`; it listens on
 **http://127.0.0.1:8080/** (this PC only) and the log says so at the start (`[web] web panel on http://127.0.0.1:8080/`).
 
+An optional, token-protected JSON bridge for a website process on the same machine is documented in
+[INTERNAL_API.md](INTERNAL_API.md). It is disabled by default and accepts loopback connections only.
+
 - **Public pages:** `/` the status (players online, uptime, server and client build, rules, whether registration is open);
   `/register` makes an account with a login name and a password, by the same rules and at the same level
   (`Accounts:DefaultLevel`) as `.account create` (name: 3 to 254 printable characters without spaces, an email works;

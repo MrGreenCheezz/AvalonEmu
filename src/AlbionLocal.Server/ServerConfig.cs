@@ -1319,6 +1319,10 @@ public sealed record ServerConfig
             throw new InvalidDataException($"{string.Join(" and ", clash.Select(p => p.Key))} are both {clash.Key}: give each listener its own port");
         if (config.Web is { Enabled: true, Port: > 0 } w && ports.FirstOrDefault(p => p.Port == w.Port && (p.Key != "Network:ChatPort" || config.ChatEnabled)) is { Key: { } taken })
             throw new InvalidDataException($"Web:Port and {taken} are both {w.Port}: give the web panel its own port");
+        if (config.Web is { ApiEnabled: true, ApiPort: > 0 } api
+            && (ports.FirstOrDefault(p => p.Port == api.ApiPort) is { Key: { } apiTaken }
+                || config.Web is { Enabled: true, Port: > 0 } panel && panel.Port == api.ApiPort))
+            throw new InvalidDataException($"Web:ApiPort {api.ApiPort} clashes with {(config.Web is { Enabled: true, Port: > 0 } && config.Web.Port == api.ApiPort ? "Web:Port" : "another listener")}: give the internal API its own port");
         return config;
     }
 
