@@ -85,8 +85,7 @@ expedition agent, the location markers and the static trees and rocks. The serve
   "Gathering" below);
 - no "not found in landscape" or "Building Type not existing" error is reported by the client.
 
-Not there yet: the real-estate plots' ownership (the plots themselves are part of the landscape), crafting stations on
-plots, hall-of-fame banners. `.near` lists what the server thinks is in view; to tell a rendering
+The real-estate plots of the cities come as objects too (see City plots below). Not there yet: hall-of-fame banners. `.near` lists what the server thinks is in view; to tell a rendering
 problem from a visibility one, start the server with `--World:AnnounceAll=true`: every object of the cluster is then sent
 at Join and none is ever taken away. The window is set by `Visibility:CellSize`, `EnterCells` and `LeaveCells` (10, 4, 6):
 an object comes at 4 cells and goes at 6, so stepping back and forth over a cell border does not make buildings blink
@@ -1503,6 +1502,42 @@ Not checked in the client yet: the station and market windows themselves (`../an
 C-A1…C-D4); the exact keys of the market's "create order" requests were read from the client's code, not from a capture.
 The Black Market window is not captured either (its SPEC §4: C-BM1, C-BM2).
 
+### City plots
+
+Public issue #18, `../analysis/work/realestate/SPEC.md`. The signs on the plots of the cities (80 in each royal city, 120 in
+Caerleon, fewer in the smaller towns) are real-estate objects now (NewRealEstate), each with its owner, and clicking one opens
+the client's real-estate window. `RealEstate:Enabled` (true in both presets) turns all of it off.
+
+- **Claiming.** A free plot is claimed in its window for its price from gamedata.xml: m² × 12 500 silver × its location
+  quality (A 40, B 9, C 3, D 1.5, E 1), so a 20 × 20 m plot costs 5 000 000 (E) to 200 000 000 silver (A), a 40 × 40 m one four
+  times that; `RealEstate:PriceFactor` scales it. The owner's name shows on the plot for everyone and the owner gets a mail.
+- **Auctions.** Every owned plot is auctioned once per cycle (gamedata: every 28 days from 2017-07-03 12:00 UTC, 7 days long;
+  `RealEstate:AuctionCycleDays`, `AuctionLengthDays`). A bid is the bidder's whole maximum and is held from its silver at once
+  (raising it takes only the difference); it must reach the plot's price and beat the best bid so far. The owner's bids count
+  twice (`OwnerBidMultiplier`); in the final 24 hours only the owner may bid (`OwnerExclusiveMinutes`). When the auction ends
+  the highest bid wins and is kept; every other bid comes back (by mail notice; the silver goes straight into the wallet, or at
+  the next login). Another player's win hands the plot over: the stations on it come down and the previous owner gets half of
+  the winning bid (`RealEstate:OwnerLosingBonus` 0.5, from the client's own text). The window shows the player's own bid, the
+  leading bidder and the auction's times; every bidder, the leader who was outbid and the owner get mails.
+- **Selling and buying.** The owner may list the plot at a price ("Sell", not in the final 24 hours of the auction); any other
+  player buys it at that price ("Buy"), the stations stay with the plot, the seller gets the silver and a mail.
+- **Building.** On the own plot the build menu (as on an island) puts up a crafting station (any buildings.xml craftbuilding:
+  smelter, forge, hunter's lodge …) on a free 20 × 20 m square (one on a 20 × 20 plot, four on a 40 × 40 one), paying its
+  placecost silver and its resources at once; everyone can craft at it like at the public stations. "Give up" on the station
+  takes it down (nothing comes back). The outline (marker, fence, wall) costs gamedata's gold (0 / 1000 / 2000).
+- **Giving up** a plot frees it; its stations come down and open bids on it come back. A deleted character's plots become free.
+- **The city's plots.** The plots under the public stations of `content/spawns` (README Crafting and refining, Stables) stay with
+  the city: they show the city as owner and cannot be claimed, bought or bid on.
+- Upkeep and city tax: gamedata's upkeep prices are all 0, so there is none. No usage fee goes to the station's owner yet.
+- Commands: `.plot list` (the plots of the city with owners, prices, open bids and the auction's times), GM `.plot auction start`
+  (the auction begins now) and `.plot auction end` (it ends now and is settled; both shift the schedule until the next restart),
+  GM `.plot free` (the nearest owned plot within 30 m becomes free).
+- Running a server of this version converts `albionlocal.db` to schema v45 (the tables real_estates, real_estate_bids,
+  real_estate_buildings; an older server build refuses the converted file).
+
+Not checked in the client yet: the claim, bid, sell and buy windows, the plot's colours and outline, building from the build menu
+in a city (SPEC §5).
+
 ## Premium, focus and learning points
 
 `../analysis/work/stageJ/focus-lp/SPEC.md`. **Premium** has no shop on this server: `Premium:Mode` `Free` (the pve preset) makes
@@ -2771,7 +2806,7 @@ building, its centre at x z or here), `.island unbuild` (the nearest one within 
 (buildings and crop growth), `.island ripen [city]` (every crop grown now).
 
 Not done: construction sites (materials are taken at once), house repairs and skins, decorative furniture use (chests), the
-labourers' loot container window (the loot goes straight into the inventory), city plots, the rabbits of the island templates (world.xml `<mobcounts>`; the server spawns no mobcounts, so the SPEC's
+labourers' loot container window (the loot goes straight into the inventory), the rabbits of the island templates (world.xml `<mobcounts>`; the server spawns no mobcounts, so the SPEC's
 `Islands:ExtraMobCounts` would need that first), guests on islands, guild
 islands. Not yet checked with the client (SPEC §1.8 C1-C6, §2.6 C7-C11, §3.5 C12-C15): "Visit" / "Buy" in the merchant
 window, the island's loading and map name, the way back, the login on the island, the island bank and farming merchant,

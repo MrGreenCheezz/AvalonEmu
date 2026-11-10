@@ -875,6 +875,40 @@ public sealed record ServerConfig
     public AlliancePlateText AlliancePlateText { get; init; } = AlliancePlateText.Name;
 
     /// <summary>
+    /// RealEstate:Enabled (true; public issue #18, analysis/work/realestate/SPEC.md): the city plots are sent as NewRealEstate objects and
+    /// can be claimed, auctioned, sold, built on and given up (<see cref="Systems.RealEstates"/>). False: no plot is sent (the landscape signs
+    /// only, as before) and every real-estate request is refused.
+    /// </summary>
+    public bool RealEstateEnabled { get; init; } = true;
+
+    /// <summary>
+    /// RealEstate:AuctionCycleDays (null = "data": gamedata RealEstateAuctionSettings auctioncycledurationdays, 28): an owned plot goes to
+    /// auction once per cycle, counted from auctioncyclereferencetimestamp.
+    /// </summary>
+    public double? RealEstateAuctionCycleDays { get; init; }
+
+    /// <summary>RealEstate:AuctionLengthDays (null = "data": auctionlengthdays, 7): how long an auction runs from the start of its cycle.</summary>
+    public double? RealEstateAuctionLengthDays { get; init; }
+
+    /// <summary>RealEstate:OwnerExclusiveMinutes (null = "data": ownerexclusivebidtimeinmin, 1440): the auction's final minutes in which only the owner may bid.</summary>
+    public double? RealEstateOwnerExclusiveMinutes { get; init; }
+
+    /// <summary>RealEstate:OwnerBidMultiplier (null = "data": ownerbidmultiplier, 2): what the owner's bid on the own plot counts.</summary>
+    public double? RealEstateOwnerBidMultiplier { get; init; }
+
+    /// <summary>
+    /// RealEstate:OwnerLosingBonus (0.5): the share of the winning bid the previous owner gets when the plot goes to another player at auction
+    /// (the client's text "you receive half the amount of Silver of the winning bid"; not in gamedata.xml).
+    /// </summary>
+    public double RealEstateOwnerLosingBonus { get; init; } = 0.5;
+
+    /// <summary>
+    /// RealEstate:PriceFactor (1): a factor on the claim price and the auction's minimum bid (gamedata Sale: m² × 12500 × the location quality
+    /// factor A 40 … E 1, so a 20 × 20 E plot costs 5 000 000 silver).
+    /// </summary>
+    public double RealEstatePriceFactor { get; init; } = 1;
+
+    /// <summary>
     /// Islands:Enabled (true): the personal islands (stageH islands SPEC phase 1, <see cref="Systems.Islands"/>): the merchant lists the
     /// character's islands (GetIslandInfos), the journey there and back, the island instance. False: an empty island list as before,
     /// every island journey refused; a character saved on an island logs in at its city's travel point.
@@ -1246,6 +1280,13 @@ public sealed record ServerConfig
             AlliancePlateText = Take("Alliances:PlateText") is not { } plate ? AlliancePlateText.Name
                 : Enum.TryParse<AlliancePlateText>(plate, ignoreCase: true, out var apt) && Enum.IsDefined(apt) ? apt
                 : throw new InvalidDataException($"Alliances:PlateText: '{plate}' is not Name or Tag"),
+            RealEstateEnabled = Flag("RealEstate:Enabled", true),
+            RealEstateAuctionCycleDays = Data("RealEstate:AuctionCycleDays", 0.001, 3650),
+            RealEstateAuctionLengthDays = Data("RealEstate:AuctionLengthDays", 0.001, 3650),
+            RealEstateOwnerExclusiveMinutes = Data("RealEstate:OwnerExclusiveMinutes", 0, 5_256_000),
+            RealEstateOwnerBidMultiplier = Data("RealEstate:OwnerBidMultiplier", 1, 1000),
+            RealEstateOwnerLosingBonus = Number("RealEstate:OwnerLosingBonus", 0.5, 0, 1),
+            RealEstatePriceFactor = Number("RealEstate:PriceFactor", 1, 0, 1000),
             IslandsEnabled = Flag("Islands:Enabled", true),
             IslandsStarterIsland = Flag("Islands:StarterIsland", d.IslandsStarterIsland),
             IslandsStarterLevel = Int("Islands:StarterLevel", 0, 0, 5),

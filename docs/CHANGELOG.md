@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-11-11 (later) — City plots: claims, auctions and owners
+
+- **City plots** (issue #18, `RealEstate:*`, on in both presets, docs/REFERENCE.md "City plots"): the plot signs in the cities are real-estate objects now (NewRealEstate), each with its owner. Clicking one opens the client's real-estate window. Royal cities have 80 plots each, Caerleon 120.
+- **Claiming:** a free plot costs its price from `gamedata.xml`: m² × 12 500 silver × its location quality (A 40 … E 1). A 20 × 20 m plot costs 5 M to 200 M silver. `RealEstate:PriceFactor` scales the price.
+- **Auctions:** every owned plot goes to auction once per cycle (every 28 days, 7 days long, from the game data). A bid holds its silver at once. The owner's bids count twice, and in the final 24 hours only the owner may bid. The highest bid wins; every other bid is refunded. If another player wins, the plot changes hands: its stations come down and the previous owner gets half of the winning bid. Bidders and owners get mails.
+- **Selling, building, giving up:** an owner can list the plot at a price for another player to buy. On their own plot the owner can build crafting stations with the island build menu, which everyone can use. Giving a plot up frees it.
+- The plots under the public crafting stations and stables of `content/spawns` stay with the city and are not for sale. Upkeep is 0 in the game data, so there is none. GMs: `.plot list`, `.plot auction start|end`, `.plot free`.
+- Database schema v45 (`real_estates`, `real_estate_bids`, `real_estate_buildings`); the migration runs at start.
+- Built from the client's code and data, not checked in the client yet. Assumed where the data says nothing: free plots can be claimed at any time, refusals are plain chat lines, and the mails are plain text. Not done: usage fees for station owners, construction sites, and access rights for plots.
+
+Thanks to Gostavo2003 for the report.
+
 ## 2026-11-11 — Open-world treasure coffers and chests
 
 - **Treasures** (issue #19, `World:TreasureCoffers`, on in both presets, docs/REFERENCE.md "Open-world treasures"): the contested coffers and treasure chests now appear in the open world. Coffers stand on the clusters' coffer tiles; treasure chests stand on the treasure spots that the client's resource placement puts on resource nodes. Which cluster gets which, how many at once and how often all come from `treasuredistribution.xml`. Royal yellow (T5-T6) and red (T6-T7) zones and the Outlands (T5-T8) get up to 5 coffers. The Outlands also get one treasure chest at a time: solo, veteran or elite.

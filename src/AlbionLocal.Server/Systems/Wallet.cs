@@ -37,6 +37,17 @@ public static class Wallet
         return true;
     }
 
+    /// <summary>Takes <paramref name="raw"/> gold (a7m) when the player has that much; false (nothing changed, nothing sent) otherwise.</summary>
+    public static bool TrySpendGold(Player p, long raw, string why)
+    {
+        var c = p.Character;
+        if (raw < 0 || c.Gold < raw) return false;
+        if (raw == 0) return true;
+        c.Gold -= raw;
+        Changed(p, string.Create(CultureInfo.InvariantCulture, $"-{raw / 10000.0:0.####} gold ({why})"));
+        return true;
+    }
+
     /// <summary>Gives <paramref name="raw"/> silver (a7m, ≥ 0) and sends UpdateMoney.</summary>
     public static void Credit(Player p, long raw, string why)
     {

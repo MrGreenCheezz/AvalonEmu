@@ -93,6 +93,9 @@ public sealed record EconomySettings
     /// <summary>MarketPlace OrderDurations durationInHrs (12, 24, 168, 720): the durations the client's dropdown offers.</summary>
     public IReadOnlyList<int> MarketOrderDurations { get; init; } = [12, 24, 168, 720];
 
+    /// <summary>RealEstateAuctionSettings and RealEstateSettings (the city plots, analysis/work/realestate/SPEC.md §1).</summary>
+    public RealEstateSettings RealEstate { get; init; } = RealEstateSettings.Default;
+
     /// <summary>The settings from gamedata.xml's root; a missing part keeps its default.</summary>
     public static EconomySettings From(XElement gamedata)
     {
@@ -149,6 +152,7 @@ public sealed record EconomySettings
             MarketMinimumTax = Num(Tax("minimumtax"), "value", d.MarketMinimumTax),
             MarketOrderHours = (int)Num(expiration, "value", d.MarketOrderHours),
             MarketOrderDurations = durations is { Count: > 0 } ? durations : d.MarketOrderDurations,
+            RealEstate = RealEstateSettings.From(gamedata),
         };
     }
 }

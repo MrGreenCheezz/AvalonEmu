@@ -112,6 +112,7 @@ tests.AddRange(BotPatrolTest.All);
 tests.AddRange(BotStageMTest.All);
 tests.AddRange(BotSupportTest.All);
 tests.AddRange(IslandTest.All);
+tests.AddRange(RealEstateTest.All);
 tests.AddRange(DefenseTest.All);
 tests.AddRange(ChatTest.All);
 tests.AddRange(SocialTest.All);

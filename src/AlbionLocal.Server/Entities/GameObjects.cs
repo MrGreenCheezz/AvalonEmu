@@ -7,8 +7,8 @@ namespace AlbionLocal.Server.Entities;
 
 // The static world objects of stage 2 (SPEC stage 2 §1 and §3, "SPEC" below): what the client cannot place or use without
 // an event from the server. Each one sends exactly the keys the official server sends (captures 103829, 114814); zero and
-// default values are left out by the serializer. Kinds still missing: NewRealEstate 191 (plot ownership unknown),
-// NewFishingZoneObject 360, NewBannerObject 519. Mobs: Entities/Mob.cs; the faction warfare towers (365/366): Entities/OutpostObject.cs.
+// default values are left out by the serializer. Kinds still missing: NewBannerObject 519 (NewRealEstate 191: Entities/RealEstateObject.cs,
+// NewFishingZoneObject 360: Entities/Fishing.cs). Mobs: Entities/Mob.cs; the faction warfare towers (365/366): Entities/OutpostObject.cs.
 
 /// <summary>
 /// An object whose client gets an AccessStatus (209) with it (<see cref="VisibilityTracker"/>: on a Join in one batch after JoinFinished,
@@ -36,6 +36,15 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     public override string Kind => "building";
     public override string TypeName => Template.Name;
     public override AnnounceRange Range => IsQuestGiver ? AnnounceRange.Cluster : AnnounceRange.Window;
+
+    /// <summary>
+    /// The player who put it up on an own city plot (<see cref="Systems.RealEstates"/>; NewBuilding keys 9-12), with its guild; null for the
+    /// NPC buildings and the content/spawns stations. Changes when the plot is sold.
+    /// </summary>
+    public BuildingOwner? Owner { get; set; }
+
+    /// <summary>The city plot it stands on (<see cref="RealEstateBuilding.Plot"/>); null for the NPC buildings.</summary>
+    public Game.RealEstateBuilding? PlotBuilding { get; init; }
     public override bool LeaveOnRange => true;
 
     private XElement? InitialBehaviourState => Template.Kind == "simplebehaviourbuilding"
@@ -124,7 +133,7 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
         bq8 = AccessGroups,
         bq9 = Template.Kind is "bankbuilding" or "marketplacebuilding" or "blackmarketbuilding" or "factionbuilding" || IsQuestGiver
             ? ["owner", "noaccess", "noaccess"] : ["owner", "friend", "user"],
-        bra = ["", "", ""],
+        bra = ["", Owner?.GuildName ?? "", ""],
     };
 
     /// <summary>
@@ -148,11 +157,17 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
             LoadTime = LoadTime,                        // [20]
             CraftCapacity = Raw(Template.CraftCapacity), // [21] only when > 0 (zero is left out)
             CraftCapacityStamp = CraftCapacityStamp,    // [22]
+            cto = Owner?.Id ?? Guid.Empty,              // [9] the owner of a station on a city plot (left out for NPC buildings)
+            ctp = Owner?.Guild ?? Guid.Empty,           // [10] its guild
+            ctq = Owner?.Name, ctr = Owner?.Name,       // [11], [12] its name
             ct5 = true, ct6 = true, ct7 = true,         // [26]-[28] true on every NPC building
             ctv = inUse,                                // [16] in use (a station action under way); left out otherwise
             Extra = new() { [29] = (byte)0 },           // [29] byte 0: the official server always sends it (ByteZero)
         };
 }
+
+/// <summary>The owner of a <see cref="Building"/> on a city plot: the character, its name, its guild (empty without) and the guild's name.</summary>
+public sealed record BuildingOwner(Guid Id, string Name, Guid Guild, string GuildName);
 
 /// <summary>
 /// An exit (NewExit 215, atn): the client placed its tile with the landscape and registered the world.xml exit Guid

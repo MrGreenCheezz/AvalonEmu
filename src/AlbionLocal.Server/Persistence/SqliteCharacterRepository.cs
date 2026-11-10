@@ -574,6 +574,38 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         """
         ALTER TABLE characters ADD COLUMN portal_binding TEXT;                       -- JSON PortalBinding; NULL = never bound
         """,
+        // v45 (analysis/work/realestate/SPEC.md §4): the owned city plots (a row only while owned; it goes with the owner character), the bids
+        // on their auctions (one row per plot, bidder and auction; it goes with the bidder) and the buildings on them (they go with the plot's row).
+        // IF NOT EXISTS: safe at whichever position a merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS real_estates (
+            id          TEXT PRIMARY KEY,                    -- the plot's template Guid (NewRealEstate key 1)
+            cluster     TEXT NOT NULL,                       -- world.xml cluster
+            owner       TEXT NOT NULL REFERENCES characters (id) ON DELETE CASCADE,
+            since       INTEGER NOT NULL DEFAULT 0,          -- GameTimeStamp the owner got it
+            last_price  INTEGER NOT NULL DEFAULT 0,          -- a7m: the last winning bid or claim price
+            sale_price  INTEGER NOT NULL DEFAULT -10000,     -- a7m: the owner's asking price; -10000 = not for sale
+            outline     INTEGER NOT NULL DEFAULT 0           -- OutlineType: 0 Marker, 1 Fence, 2 Wall
+        );
+        CREATE TABLE IF NOT EXISTS real_estate_bids (
+            plot        TEXT NOT NULL,                       -- the plot's Guid (no reference: a bid outlives a plot given up until it is settled)
+            bidder      TEXT NOT NULL REFERENCES characters (id) ON DELETE CASCADE,
+            auction     INTEGER NOT NULL,                    -- GameTimeStamp the auction started
+            amount      INTEGER NOT NULL,                    -- a7m held from the bidder
+            placed      INTEGER NOT NULL,                    -- GameTimeStamp of the last raise
+            settled     INTEGER NOT NULL DEFAULT 0,          -- 1 = paid or given back
+            PRIMARY KEY (plot, bidder, auction)
+        );
+        CREATE TABLE IF NOT EXISTS real_estate_buildings (
+            id          TEXT PRIMARY KEY,                    -- NewBuilding key 1
+            plot        TEXT NOT NULL REFERENCES real_estates (id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,                       -- buildings.xml uniquename
+            x           REAL NOT NULL,
+            z           REAL NOT NULL,
+            rotation    REAL NOT NULL DEFAULT 0,
+            built       INTEGER NOT NULL                     -- GameTimeStamp
+        );
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";

@@ -40,6 +40,7 @@ public static class WorldObjectTest
         (int)EventCodes.NewIslandAccessPoint, (int)EventCodes.NewExpeditionAgent, (int)EventCodes.NewLocationMarker,
         (int)EventCodes.QuestGiverInfoForPlayer, (int)EventCodes.NewSimpleHarvestableObjectList, (int)EventCodes.Leave,
         (int)EventCodes.NewMob, (int)EventCodes.MobChangeState, (int)EventCodes.NewFishingZoneObject, (int)EventCodes.NewShrine,
+        (int)EventCodes.NewRealEstate, // issue #18: the city plots
     ];
 
     internal static int Code(EventData e) => Convert.ToInt32(e.Parameters[ReservedKeys.EventCode]);
@@ -98,7 +99,7 @@ public static class WorldObjectTest
         var (a, b, c) = Phases(peer);
         var player = session.Player!;
         var map = player.Map!;
-        Check(map.Template?.Id == "0000" && map.Objects.Count == 5 + 9 + 1 + 1 + 1 + 1 + 20 + 271 + 66, $"0000 spawned its 309 objects and 66 fishing zones (got {map.Objects.Count})");
+        Check(map.Template?.Id == "0000" && map.Objects.Count == 5 + 9 + 1 + 1 + 1 + 1 + 20 + 271 + 66 + 80, $"0000 spawned its 309 objects, 66 fishing zones and 80 real-estate plots (got {map.Objects.Count})");
         Check(peer.Sequence.FindIndex(x => x is OperationResponse) == a.Count, "phase A is everything before the Join response (no items here)");
 
         string Of(EventData e) => (EventCodes)Code(e) switch
@@ -259,6 +260,8 @@ public static class WorldObjectTest
                 case EventCodes.NewLocationMarker: list.Add(new(383, Masked(S(2)), Pos(e, 1), F(3))); break;
                 // StageG: the fishing zones (the fixture keeps their position only; capacity and prefab: FishingTest).
                 case EventCodes.NewFishingZoneObject: list.Add(new(360, "", Pos(e, 1), 0)); break;
+                // Issue #18: the city plots (the fixture keeps Guid and position; owners are the official server's players).
+                case EventCodes.NewRealEstate: list.Add(new(191, $"{GuidOf(e, 1)}", Pos(e, 2), 0)); break;
                 case EventCodes.QuestGiverInfoForPlayer:
                     list.Add(new(259, $"{buildings.GetValueOrDefault(Convert.ToInt64(p[0]))}|{GuidOf(e, 1)}|{I(2)}", Vector2.Zero, 0));
                     break;
@@ -330,7 +333,6 @@ public static class WorldObjectTest
         // Replaces = the captured object stands for one of ours at the same position, which differs in state only.
         var exceptions = new (string Why, Func<ClusterTemplate, Obj, bool> Is, bool Replaces)[]
         {
-            ("NewRealEstate 191: plots are not sent yet (SPEC §7)", (_, o) => o.Event == 191, false),
             ("NewMob 123: the official server's mobs, its own picks, walks and kills (1207: outpost guards, guard towers, rabbits); ours: MobSpawnTest", (_, o) => o.Event == 123, false),
             // Event 40 carries two kinds (002835, 1207 Join): resources the server spawned at a resource node, sent one at a
             // time (key 6 = -1, no keys 1/3: ROCK T4 at two ROCK_HIGH_NODEs, WOOD T4 at a WOOD_HIGH_NODE ± 0.5), and mob
@@ -452,9 +454,9 @@ public static class WorldObjectTest
         var (world, characters, dir2) = NewWorld(new ServerConfig { AnnounceAll = true });
         var (session, peer) = JoinAt(world, characters, "0000", Vector2.Zero);
         var (a, b, c) = Phases(peer);
-        Check(a.Count == 4 + 9 + 1 + 1 + 1 + 1 + 20 + 66 && b.Count == 2 && c.Count == 7 && c.Sum(e => ((long[])e.Parameters[0]!).Length) == 271
+        Check(a.Count == 4 + 9 + 1 + 1 + 1 + 1 + 20 + 66 + 80 && b.Count == 2 && c.Count == 7 && c.Sum(e => ((long[])e.Parameters[0]!).Length) == 271
               && c.All(e => ((long[])e.Parameters[0]!).Length <= 40),
-              $"AnnounceAll: phase A every object but the trader (66 fishing zones with them), phase B the trader, phase C 271 trees in 7 lists of at most 40 (got {a.Count}, {b.Count}, {c.Count})");
+              $"AnnounceAll: phase A every object but the trader (66 fishing zones and 80 plots with them), phase B the trader, phase C 271 trees in 7 lists of at most 40 (got {a.Count}, {b.Count}, {c.Count})");
         var count = peer.Events.Count;
         session.OnRequest(Request(new MoveRequest { wf = DateTime.UtcNow.Ticks, v6 = [200, 200], v8 = [200, 200], v9 = 0f }, null), encrypted: false);
         Check(peer.Events.Count == count, "AnnounceAll: walking away sends no Leave and nothing new");
