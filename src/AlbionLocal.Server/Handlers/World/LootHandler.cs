@@ -277,7 +277,7 @@ public sealed partial class WorldSession
     /// locked chest (states 0/2/3, at most once per 5 s: its callback cz5.a.b shows "locked" on rc <see cref="ChestLocked"/>) and for an Open one
     /// under a template flag (state 7); an Unlocked chest it opens with the slot-25 cast instead (<see cref="FakeSlotCasts.StartChest"/>, stageM
     /// chest-slot25 NOTES). A chest within reach, openable, of a standing player opens (<see cref="RandomDungeons.UseChest"/>) and the answer is rc 0.
-    /// Refused (logged): <see cref="ChestLocked"/> in those locked states (BossLocked, protected by mobs or watched), rc 1 otherwise.
+    /// Refused (logged): <see cref="ChestLocked"/> in those locked states (BossLocked, protected by mobs or watched) and LockedByTimer, rc 1 otherwise.
     /// </summary>
     [Handles(OperationCodes.UseLootChest, Status = SessionStatus.InWorld)]
     private AlbionResponse? UseLootChest(UseLootChestRequest req)
@@ -290,7 +290,8 @@ public sealed partial class WorldSession
         if (Player is not { Map: { } map } player || player.Combat.Down is not null) return Refused("not standing in the world");
         if (map.Objects.GetValueOrDefault(req.aif) is not LootChest chest) return Refused("no such chest on the map");
         if (!InReach(player, chest)) return Refused($"{chest} out of reach");
-        if (chest.ViewerState(player).State is var state and (0 or 2 or 3)) return Refused($"{chest} locked (ChestState {state})", ChestLocked);
+        // issue #19: a treasure in its protection countdown (LockedByTimer 1) is locked too [assume: the client counts it down and should not ask]
+        if (chest.ViewerState(player).State is var state and (0 or 1 or 2 or 3)) return Refused($"{chest} locked (ChestState {state})", ChestLocked);
         if (world.Dungeons.UseChest(player, chest) is { } why) return Refused(why);
         return new UseLootChestResponse();
     }

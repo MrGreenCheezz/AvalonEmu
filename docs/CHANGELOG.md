@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-11 — Open-world treasure coffers and chests
+
+- **Treasures** (issue #19, `World:TreasureCoffers`, on in both presets, docs/REFERENCE.md "Open-world treasures"): the contested coffers and treasure chests now appear in the open world. Coffers stand on the clusters' coffer tiles; treasure chests stand on the treasure spots that the client's resource placement puts on resource nodes. Which cluster gets which, how many at once and how often all come from `treasuredistribution.xml`. Royal yellow (T5-T6) and red (T6-T7) zones and the Outlands (T5-T8) get up to 5 coffers. The Outlands also get one treasure chest at a time: solo, veteran or elite.
+- Each treasure counts down its protection first: coffer 90 s, solo 3 min, veteran 20 min, elite 40 min. Then it opens with the channelled cast and rolls loot for the cluster's tier. It disappears 5 minutes after opening, or after 24 h if nobody opens it, and its slot draws again.
+- **PvP circle** (`Pvp:Mode` `Official` only, not in safe zones): within 30 m of a treasure (40 m for elite), two players fight each other whatever their flags, unless they are in one party. The Mists treasure chests have the same circle now.
+- `TreasureCoffers:RespawnMinutes` (0 = the data's timing), `TreasureCoffers:Sizes` and `TreasureCoffers:TestAlways` (dev aid) in `config/world.jsonc`. GMs: `.coffer` lists the slots and spots, `.coffer spawn [coffer|solo|veteran|elite]` places one, `.chest unlock` ends the countdown.
+- Built from the client's code and data, not checked in the client yet. Not done: the world-map marker of veteran and elite chests, the faction chests and the Red Zone Event.
+
+Thanks to Gostavo2003 for the request and the research.
+
 ## 2026-11-10 (later) — City portals into the Outlands
 
 - **Realmgates** (issue #14): the portal in a royal city's Conquerors' Hall and the portal of its Outlands portal town stood there but could not be clicked: the server sent neither object and answered none of the portal window's requests. Both are sent now (NewPortalEntrance 322, NewPortalExit 323). The Realmgate leads into the city's portal town (Thetford Portal and so on), the town's portal back into the hall.

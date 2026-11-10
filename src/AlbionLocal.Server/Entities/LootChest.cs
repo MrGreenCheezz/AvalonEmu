@@ -70,6 +70,13 @@ public sealed class LootChest(long id, LootChestSpawn spawn, LootChestTemplate t
     /// <summary>Stage I: an item more in the loot of these characters (Drops.Won: an invasion ticket), by character Guid.</summary>
     public Dictionary<Guid, string> Bonus { get; } = [];
 
+    /// <summary>
+    /// Public issue #19 (coffers SPEC §3): a contested treasure's PvP circle of <see cref="LootChestTemplate.PvpZoneRadius"/> is up: NewLootChest key 27
+    /// (aue.c4w → clj+0x100, the barrier's state; UnrestrictedPvpZoneStatus 309 changes it), and the players inside are unrestricted
+    /// (<see cref="Systems.TreasureCoffers"/>). False for every other chest (key 27 left out, as captured).
+    /// </summary>
+    public bool PvpZone { get; set; }
+
     /// <summary>Protected by mobs (key 19 with <see cref="MinimapDisplay"/>; event 395 changes it).</summary>
     public bool ProtectedByMobs { get; set; }
 
@@ -219,8 +226,8 @@ public sealed class LootChest(long id, LootChestSpawn spawn, LootChestTemplate t
     /// without it the client places nothing), 5 the ChestState, 6 the spawn stamp, 7 the state's stamp (the start of a LockedByTimer
     /// countdown), 17 true, 18 the spawnpoint name, 19 protected (with a MinimapDisplay), 21 the rarity (−1 hidden), 23 the viewer's
     /// ChestState, 29 carriables 0 and 31 FlaggingStatus 0. A static chest adds 8 and 10 (empty Guid lists), 13 MinValue (et), 16
-    /// 10000, 26 and 28 true; a personal one 15 1, 22 true and 24 the viewer's stamp. Keys 9, 11, 12, 14, 20, 25, 27 and 30 stay out
-    /// (as captured).
+    /// 10000, 26 and 28 true; a personal one 15 1, 22 true and 24 the viewer's stamp; a contested treasure 27 true (<see cref="PvpZone"/>,
+    /// issue #19). Keys 9, 11, 12, 14, 20, 25, 27 (otherwise) and 30 stay out (as captured).
     /// </summary>
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
@@ -242,6 +249,7 @@ public sealed class LootChest(long id, LootChestSpawn spawn, LootChestTemplate t
             c4s = mine,                                 // [23] ChestState for this viewer → clj+0x8C
             c4y = 0,                                    // [29] carriables delivered
             c40 = 0,                                    // [31] FlaggingStatus
+            c4w = PvpZone,                              // [27] a treasure's PvP circle up (issue #19; absent = false otherwise)
         };
         if (Personal)
         {

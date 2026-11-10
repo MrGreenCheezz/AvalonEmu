@@ -79,7 +79,8 @@ public static class Pvp
         // StageP: G is one guild or one alliance (the client's a5g.d_1), so the server and the client agree on allies.
         var ally = !guild && a.World.Alliances.Allied(a.Character.Id, b.Character.Id);
         // StageL mists phase B (Pvp:Mode Official only): an active camp's free-for-all circle, guild mates kept apart under NoFriendlyFire.
-        var relation = a.World.Mists.Unrestricted(a, b) ? Relation.Hostile : ModeOf(a.Flag, b.Flag, SameParty(a, b), guild || ally, RulesOf(a.World, a.Map), a.World.Config.PvpMode);
+        // Public issue #19 (Pvp:Mode Official only): two players in treasures' PvP circles, as the client's unrestricted characters.
+        var relation = a.World.Mists.Unrestricted(a, b) || a.World.TreasureCoffers.Unrestricted(a, b) ? Relation.Hostile : ModeOf(a.Flag, b.Flag, SameParty(a, b), guild || ally, RulesOf(a.World, a.Map), a.World.Config.PvpMode);
         // Guilds:NoFriendlyFire (guilds SPEC §10.2): guild mates are never Hostile (the table's case: two factions in one guild); allies under Alliances:NoFriendlyFire.
         var noFriendlyFire = guild && a.World.Config.GuildNoFriendlyFire || ally && a.World.Config.AllianceNoFriendlyFire;
         return relation == Relation.Hostile && noFriendlyFire ? Relation.Neutral : relation;

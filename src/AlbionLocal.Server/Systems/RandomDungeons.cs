@@ -991,6 +991,7 @@ public sealed class RandomDungeons(World world)
         if (chest.Personal) p.Session.Send(chest.Update(p)); // its own Open (or Empty); the others keep theirs
         else foreach (var o in map.ObserversOf(chest)) o.Session.Send(chest.Update(o)); // Open (or Empty) for all at once, the full state per viewer
         world.WorldChests.Opened(chest, p);
+        world.TreasureCoffers.Opened(chest); // issue #19: a treasure goes 300 s after its opening
         world.Vanity.ChestOpened(p, chest); // stageN vanity: a boss chest's first roll may drop a cosmetic
         world.Hellgates.Opened(chest); // stageL: a hellgate's objective chest claims its reward (state 4, the exit portal)
         Log.Info("world", $"'{p.Character.Name}' opened {chest} (T{tier}): {(items.Count == 0 ? "nothing" : string.Join(", ", items.Select(i => $"{i.Template.Name} x{i.Count}")))}");

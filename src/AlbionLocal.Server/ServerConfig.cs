@@ -328,6 +328,36 @@ public sealed record ServerConfig
     public bool OpenWorldChests { get; init; } = true;
 
     /// <summary>
+    /// World:TreasureCoffers (true in both presets; public issue #19, analysis/work/coffers/SPEC.md): the open world's contested treasures, the
+    /// coffers on the clusters' TreasureSpawnpointCoffer tiles and the treasure chests on the resource placement's TreasureSpawnpointLootchest
+    /// prefabs, drawn by treasuredistribution.xml for the cluster's continent, type and tier, with their protection countdown and PvP circle.
+    /// False: none.
+    /// </summary>
+    public bool TreasureCoffers { get; init; } = true;
+
+    /// <summary>
+    /// TreasureCoffers:RespawnMinutes (0 in both presets): 0 = a free treasure slot draws again after treasuredistribution's activationtimemin/max
+    /// (220-660 s in the open world, the Roads 1800-5400 s), ÷ Rates:ChestRespawn; n = after n minutes instead (the server's choice; the chance stays the data's).
+    /// </summary>
+    public double TreasureRespawnMinutes { get; init; }
+
+    /// <summary>
+    /// TreasureCoffers:Sizes (all four in both presets): which treasures may be placed, by the lootchests.xml chesttype of their chests: coffer
+    /// (treasurecoffer), solo (treasurechestsmall), veteran (treasurechestmedium), elite (treasurechestlarge). A draw of a size left out places nothing.
+    /// </summary>
+    public IReadOnlyList<string> TreasureSizes { get; init; } = TreasureSizeNames;
+
+    /// <summary>The treasure sizes of TreasureCoffers:Sizes.</summary>
+    public static readonly string[] TreasureSizeNames = ["coffer", "solo", "veteran", "elite"];
+
+    /// <summary>
+    /// TreasureCoffers:TestAlways (false in both presets; a dev aid): every open-world cluster gets its treasures, also one without a
+    /// treasure distribution for its continent, type and tier (then the Outlands' draw of its tier) or without a spot (then the spots are
+    /// its mob spawn points), and every draw places a treasure (activationchance 1, the first draw at the cluster's fill).
+    /// </summary>
+    public bool TreasureTestAlways { get; init; }
+
+    /// <summary>
     /// Chests:PoiLimit (−1; the pve preset 0): how many POI chests stand at once in a cluster. −1 = the data's (worldsettings.xml
     /// poilootchestspawnlimit: 1 in the open world), 0 = every POI spot has its chest, n = at most n.
     /// </summary>
@@ -1136,6 +1166,10 @@ public sealed record ServerConfig
             Rates = LoadRates(values, d.Rates),
             OpenWorldChests = Flag("World:OpenWorldChests", true),
             ChestsPoiLimit = Int("Chests:PoiLimit", d.ChestsPoiLimit, -1, 1000),
+            TreasureCoffers = Flag("World:TreasureCoffers", d.TreasureCoffers),
+            TreasureRespawnMinutes = Number("TreasureCoffers:RespawnMinutes", d.TreasureRespawnMinutes, 0, 1440),
+            TreasureSizes = Take("TreasureCoffers:Sizes") is not { } sizes ? d.TreasureSizes : Sizes(sizes),
+            TreasureTestAlways = Flag("TreasureCoffers:TestAlways", d.TreasureTestAlways),
             BankShared = Flag("Bank:Shared", d.BankShared),
             BmBuyFactor = Number("Bm:BuyFactor", d.BmBuyFactor, 0, 1000),
             BmDailyLimit = (long)Number("Bm:DailyLimit", d.BmDailyLimit, 0, 1e12),
@@ -1957,6 +1991,26 @@ public sealed record ServerConfig
         if (levels is not { Length: >= 1 and <= 20 } || levels[0] != 0 || levels.Zip(levels.Skip(1)).Any(x => x.Second <= x.First))
             throw new InvalidDataException($"Guilds:Levels: '{value}' is not a list of 1-20 rising thresholds starting at 0");
         return levels;
+    }
+
+    /// <summary>TreasureCoffers:Sizes: a JSON array of strings (the file) or a comma list (the command line) of <see cref="TreasureSizeNames"/>.</summary>
+    private static string[] Sizes(string value)
+    {
+        string[] sizes;
+        try
+        {
+            sizes = value.TrimStart().StartsWith('[') ? JsonSerializer.Deserialize<string[]>(value) ?? []
+                : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        }
+        catch (JsonException)
+        {
+            throw new InvalidDataException($"TreasureCoffers:Sizes: '{value}' is not a list of sizes");
+        }
+        sizes = [.. sizes.Select(x => x.Trim().ToLowerInvariant()).Distinct()];
+        foreach (var size in sizes)
+            if (!TreasureSizeNames.Contains(size))
+                throw new InvalidDataException($"TreasureCoffers:Sizes: '{size}' is not one of {string.Join(", ", TreasureSizeNames)}");
+        return sizes;
     }
 
     /// <summary>World:EventLayers: a JSON array of strings (the file) or a comma list (the command line).</summary>

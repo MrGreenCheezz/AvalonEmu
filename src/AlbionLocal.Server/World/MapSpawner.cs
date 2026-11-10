@@ -170,6 +170,8 @@ public static class MapSpawner
         objects.AddRange(world.Bosses.Populate(map, template));
         // StageH bosses (SPEC §4.2-4.4): the open world's POI and camp chests, after the mobs that lock them.
         objects.AddRange(world.WorldChests.Populate(map, template));
+        // Public issue #19: the open world's coffers and treasure chests on their treasure spots.
+        objects.AddRange(world.TreasureCoffers.Populate(map, template));
         map.Populate(template, objects, world.Config.Visibility.CellSize, now);
         world.Dungeons.BossChecks(map); // stageH: a dungeon floor's boss chests with no boss to guard them unlock
         world.Corrupted.Filled(map); // stageL: a corrupted instance's mob fame for the points, its chests with no guard near unlock
