@@ -40,6 +40,20 @@ public sealed class WorldInfo
     /// </summary>
     public IReadOnlyDictionary<string, CriticalObject>? CriticalOf(string id) => _critical.GetValueOrDefault(id);
 
+    /// <summary>
+    /// The portal exit "&lt;guid&gt;@&lt;cluster&gt;" names (the client's al.m 0x18063fbc0, UsePortalEntrance key 1) with its cluster;
+    /// null = no such world.xml portalexit.
+    /// </summary>
+    public (ClusterInfo Cluster, WorldPortalExit Exit)? PortalExit(string? key)
+    {
+        var at = key?.IndexOf('@') ?? -1;
+        if (at < 0 || !Guid.TryParse(key![..at], out var id) || Find(key[(at + 1)..]) is not { } cluster) return null;
+        return cluster.PortalExits.FirstOrDefault(p => p.Id == id) is { } exit ? (cluster, exit) : null;
+    }
+
+    /// <summary>The portal town of <paramref name="kind"/>: the first cluster with a portal exit of that city; null = none.</summary>
+    public ClusterInfo? PortalTown(PortalKind kind) => _clusters.Values.FirstOrDefault(c => c.PortalExits.Any(p => p.Kind == kind));
+
     public TimeSpan LoadTime { get; }
 
     /// <summary>Values that did not parse (a Guid, a count, a tier), read as their default (Guid.Empty, 0); --check-content fails on any.</summary>
@@ -90,6 +104,13 @@ public sealed class WorldInfo
                 var (target, cluster) = Target((string?)e.Attribute("targetid"), $"{id} exit", problems);
                 return new WorldExit(Id(e, "id", $"{id} exit", problems), Pos(e), target, cluster, (string?)e.Attribute("targettype") ?? "", Attrs(e));
             })],
+            PortalEntrances = [.. List("portalentrances", "portalentrance").Select(p =>
+                new WorldPortalEntrance(Id(p, "id", $"{id} portalentrance", problems), Pos(p), Kind(p, $"{id} portalentrance", problems)))],
+            PortalExits = [.. List("portalexits", "portalexit").Select(p =>
+            {
+                var (target, cluster) = Target((string?)p.Attribute("targetid"), $"{id} portalexit", problems);
+                return new WorldPortalExit(Id(p, "id", $"{id} portalexit", problems), Pos(p), Kind(p, $"{id} portalexit", problems), target, cluster);
+            })],
             Travelpoints = [.. List("travelpoints", "travelpoint").Select(t => new WorldTravelpoint(Id(t, "id", $"{id} travelpoint", problems), Pos(t),
                 [.. (t.Element("connections")?.Elements("connection") ?? []).Select(c =>
                 {
@@ -133,6 +154,15 @@ public sealed class WorldInfo
         return Guid.Empty;
     }
 
+    /// <summary>A portal's kind attribute (<see cref="PortalKind"/>); not one of them = Caerleon and a problem.</summary>
+    private static PortalKind Kind(XElement e, string where, List<string> problems)
+    {
+        var text = (string?)e.Attribute("kind");
+        if (Enum.TryParse<PortalKind>(text, out var kind) && Enum.IsDefined(kind)) return kind;
+        problems.Add($"{where} kind '{text}'");
+        return PortalKind.Caerleon;
+    }
+
     /// <summary>"&lt;guid&gt;@&lt;cluster&gt;" (exit targetid, travel connection to).</summary>
     private static (Guid Target, string Cluster) Target(string? text, string where, List<string> problems)
     {
@@ -163,6 +193,12 @@ public sealed record ClusterInfo
     public Vector2? Size { get; init; }
 
     public IReadOnlyList<WorldExit> Exits { get; init; } = [];
+
+    /// <summary>portalentrances/portalentrance: the Realmgate of a royal city's Conquerors' Hall (0360-HALL-01 Thetford, …).</summary>
+    public IReadOnlyList<WorldPortalEntrance> PortalEntrances { get; init; } = [];
+
+    /// <summary>portalexits/portalexit: the portal of an Outlands portal town (0301 Thetford Portal, …), back to its city's hall.</summary>
+    public IReadOnlyList<WorldPortalExit> PortalExits { get; init; } = [];
     public IReadOnlyList<WorldTravelpoint> Travelpoints { get; init; } = [];
     public IReadOnlyList<WorldIslandAccessPoint> IslandAccessPoints { get; init; } = [];
     public IReadOnlyList<WorldOutpost> Outposts { get; init; } = [];
@@ -196,6 +232,26 @@ public sealed record ClusterInfo
 
 /// <summary>exits/exit: the Guid ddt.al1 registers (NewExit key 1), the position the exit tile sits at, and where it leads.</summary>
 public sealed record WorldExit(Guid Id, Vector2 Position, Guid Target, string TargetCluster, string TargetType, IReadOnlyDictionary<string, string> Attrs);
+
+/// <summary>The city a portal belongs to (client enum Albion.Common.World.PortalExitType; world.xml portalentrance/portalexit kind).</summary>
+public enum PortalKind
+{
+    Caerleon = 0,
+    Bridgewatch = 1,
+    Lymhurst = 2,
+    Martlock = 3,
+    Thetford = 4,
+    FortSterling = 5,
+}
+
+/// <summary>portalentrances/portalentrance: the Guid a0.ab1 registers (NewPortalEntrance key 2), the position its tile sits at, its city.</summary>
+public sealed record WorldPortalEntrance(Guid Id, Vector2 Position, PortalKind Kind);
+
+/// <summary>
+/// portalexits/portalexit: the Guid a0.ab2 registers (NewPortalExit key 2), the position its tile sits at, its city and the
+/// portal entrance it leads back to (targetid "&lt;entrance guid&gt;@&lt;hall cluster&gt;").
+/// </summary>
+public sealed record WorldPortalExit(Guid Id, Vector2 Position, PortalKind Kind, Guid Target, string TargetCluster);
 
 public sealed record WorldTravelpoint(Guid Id, Vector2 Position, IReadOnlyList<TravelConnection> Connections);
 

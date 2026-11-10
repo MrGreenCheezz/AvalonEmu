@@ -78,6 +78,19 @@ public static class MapSpawner
             if (CityFaction(p.Tile, template.Name) is { } faction) objects.Add(new FactionWarfarePortal(Next(), p, faction));
             else Skip("faction warfare portal of an unknown faction");
         }
+        // NewPortalEntrance / NewPortalExit: key 2 must be the world.xml Guid a0.ab1 / a0.ab2 registered, and the position the tile's.
+        foreach (var p in template.PortalEntrances)
+        {
+            if (p.World is not { } gate) Skip("portal entrance without its world.xml portalentrance");
+            else if (!Binds(p.Position, gate.Position)) Skip("portal entrance not at its world.xml position");
+            else objects.Add(new PortalEntrance(Next(), p, gate));
+        }
+        foreach (var p in template.PortalExits)
+        {
+            if (p.World is not { } gate) Skip("portal exit without its world.xml portalexit");
+            else if (!Binds(p.Position, gate.Position)) Skip("portal exit not at its world.xml position");
+            else objects.Add(new PortalExit(Next(), p, gate));
+        }
         foreach (var a in template.IslandAccessPoints) objects.Add(new IslandAccessPoint(Next(), a));
         // NewExpeditionAgent: key 3 within expeditionagents.xml (else a null agent template).
         foreach (var a in template.ExpeditionAgents)

@@ -260,7 +260,7 @@ public static class CastleTest
             {
                 c.Open();
                 using var cmd = c.CreateCommand();
-                cmd.CommandText = "ALTER TABLE progression DROP COLUMN tracked; DROP TABLE territory_owners; PRAGMA user_version=38;";
+                cmd.CommandText = "ALTER TABLE characters DROP COLUMN portal_binding; ALTER TABLE progression DROP COLUMN tracked; DROP TABLE territory_owners; PRAGMA user_version=38;";
                 cmd.ExecuteNonQuery();
             }
             using (var migrated = new SqliteCharacterRepository(path))
@@ -270,7 +270,7 @@ public static class CastleTest
                 c.Open();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "PRAGMA user_version";
-                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 43, "schema version 43 (including Destiny Board tracking)");
+                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 44, "schema version 44 (including Destiny Board tracking)");
             }
         }
         finally { Directory.Delete(dir, true); }

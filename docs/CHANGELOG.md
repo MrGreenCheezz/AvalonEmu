@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-10 (later) — City portals into the Outlands
+
+- **Realmgates** (issue #14): the portal in a royal city's Conquerors' Hall and the portal of its Outlands portal town stood there but could not be clicked: the server sent neither object and answered none of the portal window's requests. Both are sent now (NewPortalEntrance 322, NewPortalExit 323). The Realmgate leads into the city's portal town (Thetford Portal and so on), the town's portal back into the hall.
+- **Binding**, as the client's texts describe it: a pass binds the character to that city and the other cities' Realmgates stay shut until the binding is removed in the portal window, once per 7 days (`PortalSettings bindingresetdays`). Coming back through another city's portal moves the binding there. `Transfer:PortalBinding` (true) switches the rule off, `Transfer:PortalBindingResetDays` overrides the 7 days.
+- Database schema v44 (`characters.portal_binding`); the migration runs at start.
+- Built from the client's code and data, without a capture of the official exchange, and not checked in the client yet. The portal towns' S.A.F.E. portal is not done.
+
+Thanks to Gostavo2003 for the report.
+
 ## 2026-11-10 — Fix: the mule of a fair start
 
 - **Starter kit** (issue #15): with `Tutorial:Opening` false under the official preset (`Progression:NewCharacters` = `FairStart`) a new character had no mount. Such a character gets the kit of `content/starter-fair.json`, not `content/starter.json`, and that kit left the mule out, although `T2_MOUNT_MULE` needs no destiny board unlock. The fair kit now has the mule equipped. Existing characters are not changed; a server with its own `starter-fair.json` keeps that file's kit.

@@ -1299,6 +1299,11 @@ public sealed record ServerConfig
                         ? tol : throw new InvalidDataException($"Transfer:PositionTolerance: '{tolerance}' is not 0..100"),
                 CheckExitCooldown = Take("Transfer:CheckExitCooldown") is not { } cooldown ? true
                     : bool.TryParse(cooldown, out var check) ? check : throw new InvalidDataException($"Transfer:CheckExitCooldown: '{cooldown}' is not true or false"),
+                PortalBinding = Take("Transfer:PortalBinding") is not { } binding ? true
+                    : bool.TryParse(binding, out var portalBinding) ? portalBinding : throw new InvalidDataException($"Transfer:PortalBinding: '{binding}' is not true or false"),
+                PortalBindingResetDays = Take("Transfer:PortalBindingResetDays") is not { } resetDays ? null
+                    : double.TryParse(resetDays, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var bindingDays) && bindingDays is >= 0 and <= 3650
+                        ? bindingDays : throw new InvalidDataException($"Transfer:PortalBindingResetDays: '{resetDays}' is not 0..3650"),
             },
         };
         if (config.Visibility.LeaveCells <= config.Visibility.EnterCells)
@@ -3099,6 +3104,18 @@ public sealed record TransferOptions
 
     /// <summary>Refuse an exit used too soon after the Join (Transfer:CheckExitCooldown, true).</summary>
     public bool CheckExitCooldown { get; init; } = true;
+
+    /// <summary>
+    /// Transfer:PortalBinding (true, as official): a city's Realmgate binds the character to that city, and the Realmgates of the other
+    /// cities stay shut until the binding is removed (analysis/work/portals/SPEC.md §3). Off: every Realmgate is open to everyone.
+    /// </summary>
+    public bool PortalBinding { get; init; } = true;
+
+    /// <summary>
+    /// Transfer:PortalBindingResetDays (unset: gamedata.xml PortalSettings bindingresetdays, 7): the days between two removals of the
+    /// binding. The client's window shows its own data's number whatever this says.
+    /// </summary>
+    public double? PortalBindingResetDays { get; init; }
 }
 
 /// <summary>StageL mists: how the zones behind a portal are shared (Mists:Matchmaking, analysis/work/stageL/mists/SPEC.md §6.2).</summary>

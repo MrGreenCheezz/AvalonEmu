@@ -47,6 +47,7 @@ tests.AddRange(CommandTest.All);
 tests.AddRange(ClusterDataTest.All);
 tests.AddRange(WorldObjectTest.All);
 tests.AddRange(TransferTest.All);
+tests.AddRange(PortalTest.All);
 tests.AddRange(HarvestTest.All);
 tests.AddRange(ResourceNodeTest.All);
 tests.AddRange(MobSpawnTest.All);

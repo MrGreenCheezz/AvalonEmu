@@ -217,6 +217,12 @@ public sealed class GameData
     /// </summary>
     [JsonIgnore] public double ClusterChangeCooldownSeconds { get; init; } = 10;
 
+    /// <summary>
+    /// gamedata.xml &lt;PortalSettings bindingresetdays="7"/&gt;: the days between two removals of a city portal binding (the client's
+    /// portal window counts them from Join key 63, PortalInfoModule.Update 0x1810f57a0); 7 when the element is missing.
+    /// </summary>
+    [JsonIgnore] public double PortalBindingResetDays { get; init; } = 7;
+
     /// <summary>characters.xml's value when it has no collisionradius.</summary>
     public const double DefaultCollisionRadius = 0.75;
 
@@ -581,6 +587,8 @@ public sealed class GameData
             Items = itemData,
             ClusterChangeCooldownSeconds = gd.Num(Attr(gamedata.Descendants("ClusterChange").FirstOrDefault() ?? new XElement("none"), "cooldownseconds"),
                 "cooldownseconds", "<ClusterChange>", 10),
+            PortalBindingResetDays = gd.Num(Attr(gamedata.Descendants("PortalSettings").FirstOrDefault() ?? new XElement("none"), "bindingresetdays"),
+                "bindingresetdays", "<PortalSettings>", 7),
             CollisionRadius = chars.Num(Attr(dv, "collisionradius"), "collisionradius", "<DefaultValues>", DefaultCollisionRadius),
             Looks = CharacterLooks.Read(characters),
             HarvestRange = chars.Num(Attr(dv, "harvestrange"), "harvestrange", "<DefaultValues>", DefaultHarvestRange),

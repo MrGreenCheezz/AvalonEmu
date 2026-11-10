@@ -677,7 +677,7 @@ public static class OpeningTutorialTest
                 Check(repository.Find("PersistOpening")!.Tutorial == progress with { Stage = 8 }, "restart preserves immutable route and quest instance");
             using (var c = new SqliteConnection($"Data Source={path};Pooling=False"))
             {
-                c.Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "ALTER TABLE progression DROP COLUMN tracked; ALTER TABLE characters DROP COLUMN tutorial_opening; PRAGMA user_version=36;"; cmd.ExecuteNonQuery();
+                c.Open(); using var cmd = c.CreateCommand(); cmd.CommandText = "ALTER TABLE characters DROP COLUMN portal_binding; ALTER TABLE progression DROP COLUMN tracked; ALTER TABLE characters DROP COLUMN tutorial_opening; PRAGMA user_version=36;"; cmd.ExecuteNonQuery();
             }
             using var migrated = new SqliteCharacterRepository(path);
             Check(migrated.Find("PersistOpening") is { Tutorial: null, Cluster: "0000" }, "schema30 migration leaves old characters outside tutorial");
