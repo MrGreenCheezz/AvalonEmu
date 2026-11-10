@@ -188,6 +188,7 @@ public sealed partial class LoginSession
         if (deleted) World?.Social.CharacterDeleted(found!.Id); // off its friends' lists first (the rows went with the character)
         if (deleted) World?.Guilds.CharacterDeleted(found!.Id); // then out of its guild, as with LeaveGuild (stageH guilds SPEC §4)
         if (deleted) World?.Islands.CharacterDeleted(found!.Id); // its islands go with it
+        if (deleted) World?.RealEstates.CharacterDeleted(found!.Id); // so do its city plots and bids
         Log.Info(Name, $"delete character '{req.jg}': {deleted}");
         return new GenericResponse();
     }

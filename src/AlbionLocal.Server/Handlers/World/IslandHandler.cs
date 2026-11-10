@@ -453,6 +453,7 @@ public sealed partial class WorldSession
     {
         if (Player is not { } p || p.Map is not { } map) return null;
         var at = req.g4 is { Length: >= 2 } v ? new System.Numerics.Vector2(v[0], v[1]) : p.PositionAt(DateTime.UtcNow);
+        if (world.Islands.Find(map.Cluster) is null) return ConstructOnCityPlot(p, req, at); // issue #18: a station on an own city plot
         var (template, plot, silver, cost, why) = world.Islands.CheckConstruct(p, req.g3, at);
         if (template is not null && world.Islands.Find(map.Cluster) is { } island)
         {
@@ -473,6 +474,28 @@ public sealed partial class WorldSession
     }
 
     /// <summary>
+    /// ConstructionSiteCreate in a city (issue #18, <see cref="Systems.RealEstates.CheckConstruct"/>): a crafting station on a free 20 m square
+    /// of the player's own plot, its placecost silver and resources taken at once as on an island, NewBuilding (with the owner keys) and
+    /// AccessStatus to everyone in view; the response aei {0 its object id}. Refused: RC 1 and a system line.
+    /// </summary>
+    private AlbionResponse? ConstructOnCityPlot(Player p, ConstructionSiteCreateRequest req, System.Numerics.Vector2 at)
+    {
+        var (template, plot, centre, silver, cost, why) = world.RealEstates.CheckConstruct(p, req.g3, at);
+        if (template is not null && plot is not null && world.RealEstates.Build(plot, template, centre, req.g5) is { } built)
+        {
+            Systems.Wallet.TrySpend(p, silver, $"placing {template.Name}");
+            foreach (var (item, count) in cost) TakeItems(p, item, count);
+            world.Saves.SaveNow(p.Character);
+            Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
+                $"'{p.Character.Name}' built {template.Name} on plot {plot.Guid} at ({centre.X:0.#}, {centre.Y:0.#}) for {silver / Game.Pricing.A7m} silver and {string.Join(", ", cost.Select(c => $"{c.Count} x {c.Item.Name}"))}"));
+            return new ConstructionSiteCreateResponse { aoj = built.Id };
+        }
+        Log.Info(Name, $"'{p.Character.Name}' construction of building type {req.g3} refused: {why}");
+        TellIsland(why);
+        return new GenericResponse { ReturnCode = IslandRefused };
+    }
+
+    /// <summary>
     /// BuildingGiveup (op 64, pt {0 the building}; BuildingPropertyModule.OnButtonGiveup 0x181322290): an own island building goes (Leave, out of
     /// the store) with the crops in it; buildings.xml destructionreturnfactor 0: nothing comes back. Refused while an animal stands in it (pick
     /// it up first) and for any other object: RC 1 with a system line.
@@ -481,6 +504,14 @@ public sealed partial class WorldSession
     private AlbionResponse? BuildingGiveup(BuildingGiveupRequest req)
     {
         if (Player is not { } p) return null;
+        // Issue #18: a station on an own city plot comes down (nothing comes back).
+        if (world.RealEstates.CheckGiveup(p, req.c4) is var (station, refusal) && (station is not null || refusal.Length > 0))
+        {
+            if (station is null) return RealEstateRefusal(p, $"give-up of object {req.c4}", refusal);
+            if (world.RealEstates.Find(station.PlotBuilding!.Plot) is { } owned) world.RealEstates.Demolish(owned, station.PlotBuilding);
+            Log.Info(Name, $"'{p.Character.Name}' gave up the {station.Template.Name} on plot {station.PlotBuilding.Plot}");
+            return new GenericResponse();
+        }
         var (building, why) = world.Islands.CheckGiveup(p, req.c4);
         if (building is null)
         {

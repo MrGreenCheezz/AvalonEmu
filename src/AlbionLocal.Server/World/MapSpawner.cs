@@ -10,8 +10,8 @@ namespace AlbionLocal.Server;
 /// template object of a sendable kind, its object id taken now, so it stays the same while the map lives. Before an
 /// object is made, what the client needs of its event is checked (SPEC §3 "Required keys and silent failures": the client
 /// throws or drops the object without telling the server), and what fails is left out with a warning. Content patches
-/// (content/spawns) come with the stages that need them; real estates and hall-of-fame spots are not spawned
-/// yet (the fishing zones are, since stageG; the faction warfare towers since stageQ). The resource nodes (stage 4b) come from the cluster's <see cref="ResourceLayout"/>, the
+/// (content/spawns) come with the stages that need them; hall-of-fame spots are not spawned yet (the fishing zones are, since
+/// stageG; the faction warfare towers since stageQ; the real-estate plots since issue #18). The resource nodes (stage 4b) come from the cluster's <see cref="ResourceLayout"/>, the
 /// layout the client computes for the same Login key 57. The mobs (stage 5a) stand at the spawn points of the template
 /// and of that layout's prefabs (mob camps, roaming mobs, critters; <see cref="SpawnManager"/>).
 /// </summary>
@@ -137,6 +137,8 @@ public static class MapSpawner
         objects.AddRange(world.Islands.Populate(map, template));
         // StageP hideouts (SPEC §2.5): the hideouts standing in a black zone (419); a hideout instance's management (420) and exit (421).
         objects.AddRange(world.Hideouts.Populate(map, template));
+        // Issue #18 (analysis/work/realestate/SPEC.md): the city plots (NewRealEstate 191) and the stations their owners put up on them.
+        objects.AddRange(world.RealEstates.Populate(map, template));
         // StageG: NewFishingZoneObject, one per fishingzone tile whose zone content/fishing.json knows, full charges (all of
         // them at their template position, as the 15 seen in 0204 and the 16 in Thetford; SPEC §7.1, §12.1).
         foreach (var f in template.FishingZones)
@@ -180,7 +182,7 @@ public static class MapSpawner
         var counts = objects.GroupBy(o => o.Kind).Select(g => $"{g.Count()} {g.Key}{(g.Count() == 1 ? "" : "s")}");
         var later = new (int Count, string What)[]
         {
-            (template.RealEstates.Count, "real estates"),
+            (objects.OfType<RealEstateObject>().Any() ? 0 : template.RealEstates.Count, "real estates"), // RealEstate:Enabled off, or an instance
             (template.Critical.Count(m => m.Type == "placeholderspot"), "hall-of-fame spots"),
             (objects.OfType<OutpostObject>().Any() ? 0 : template.Info.Outposts.Count, "outposts"), // FactionWarfare:Outposts off, or no warfare zone
         }.Where(l => l.Count > 0).Select(l => $"{l.Count} {l.What}").ToList();

@@ -482,11 +482,11 @@ Further rules:
 | World | `World`, `Visibility`, `Transfer`, `Rates`, `Tutorial`, `Progression` |
 | Character | `Combat`, `Consumables`, `Crafting`, `Focus`, `LearningPoints`, `Premium`, `Vanity` |
 | Social | `Party`, `Guilds`, `Alliances`, `Social`, `Mail`, `Trade` |
-| Economy and loot | `Economy`, `Bank`, `Bm`, `Chests`, `Loot` |
+| Economy and loot | `Economy`, `Bank`, `Bm`, `Chests`, `TreasureCoffers`, `Loot` |
 | PvE content | `Events`, `Bounties`, `Season`, `Dungeons`, `Expeditions`, `WorldBosses`, `Corrupted`, `Hellgates`, `Roads`, `Mists`, `Pve` |
 | PvP content | `Pvp`, `PvpGoals`, `DeathRecap`, `Arena`, `Territories`, `Castles`, `Hideouts`, `FactionWarfare` |
 | Bots | `Bots`, `Companions` |
-| Housing | `Islands` |
+| Housing | `Islands`, `RealEstate` |
 
 ### Presets
 

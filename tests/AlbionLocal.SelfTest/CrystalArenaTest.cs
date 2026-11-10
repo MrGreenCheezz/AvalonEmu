@@ -145,7 +145,7 @@ public static class CrystalArenaTest
                 c.Open();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "PRAGMA user_version";
-                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 44, "schema version 44 (including arena ranks and tracking)");
+                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 45, "schema version 45 (including arena ranks and tracking)");
             }
         }
         finally { Directory.Delete(dir, true); }

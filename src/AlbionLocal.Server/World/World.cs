@@ -74,6 +74,7 @@ public sealed class World : IDisposable
         Vanity = new Systems.Vanity(this);
         Islands = new Systems.Islands(this, characters as IIslandStore);
         Hideouts = new Systems.Hideouts(this, characters as IHideoutStore);
+        RealEstates = new Systems.RealEstates(this, characters as IRealEstateStore);
         Chat = new Systems.ChatHub(this);
         Social = new Systems.Social(this, characters as ISocialStore);
         Bots = new Bots.BotManager(this);
@@ -261,6 +262,9 @@ public sealed class World : IDisposable
 
     /// <summary>StageP: the guild hideouts (analysis/work/stageP/hideouts/SPEC.md H1-H4).</summary>
     public Systems.Hideouts Hideouts { get; }
+
+    /// <summary>The city plots (public issue #18): their owners, auctions, sales and buildings.</summary>
+    public Systems.RealEstates RealEstates { get; }
 
     /// <summary>The chat server's channels, its connections and their lines and whispers (stageJ chat SPEC §2.3).</summary>
     public Systems.ChatHub Chat { get; }
@@ -561,6 +565,7 @@ public sealed class World : IDisposable
         Territories.Update(); // stageP P5: the castle fights, capture zones, chests and castle season points
         Outposts.Update(); // stageQ: the faction warfare towers' guards, contests, captures and zone control
         Hideouts.Update(); // stageP hideouts: construction phases, upgrades, the daily food and tribute
+        RealEstates.Update(); // issue #18: the city plot auctions that ended
         Events.Update(); // PVE-DESIGN step 7: world events due, their waves, ends and rewards
         PlayerCounts(now);
         Profile.Mark("spawns and world");

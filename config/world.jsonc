@@ -93,6 +93,10 @@
   //   GrowthSpeed 4 = crops grow 4 x as fast, WaterFocusFactor 0 = watering takes no focus (pve: StarterIsland true, StarterBuildings true, GrowthSpeed 4, WaterFocusFactor 0).
   //   PremiumDays = Join key 91 (the merchant sells and upgrades from 7; 0 = none), sent to premium characters, and with BuyWithoutPremium to everyone:
   //   BuyWithoutPremium true in both presets FOR NOW (no gold shop, no premium to buy yet); the strict official rule is false. FreeIslands = buying and upgrading for 0 silver
+  // "RealEstate": { "Enabled": true, "AuctionCycleDays": "data", "AuctionLengthDays": "data", "OwnerExclusiveMinutes": "data", "OwnerBidMultiplier": "data", "OwnerLosingBonus": 0.5, "PriceFactor": 1 },
+  //   the city plots (README City plots): claimed at gamedata's price (m² x 12500 x location quality A 40 ... E 1) x PriceFactor, auctioned every 28 days for 7 (data),
+  //   the owner's bids count 2 x and only the owner bids in the final 1440 minutes (data); OwnerLosingBonus = the previous owner's share of the winning bid
+  //   (the client's text says half; not in the data). Same in both presets.
   // "Premium": { "Mode": "None" }, // None = nobody is premium (no premium shop); Free = everyone, always (pve: Free). FameFactor, SilverFactor, GatherBonusChance, CropYieldFactor: "data" = characters.xml
   // "Focus": { "Start": 0, "Max": "data", "RegenPerDay": "data", "Crafting": true }, // a new character's focus (pve: 30000, the premium lifetime reward); the cap and the premium regeneration of characters.xml
   // "LearningPoints": { "Start": 0, "SecondsPerPoint": "data", "Max": "data" }, // a new character's learning points (pve: 500)
