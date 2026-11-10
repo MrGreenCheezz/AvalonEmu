@@ -49,6 +49,9 @@ public sealed class LootChestData
                 Spell = (string?)c.Attribute("spell") is { Length: > 0 } spell ? spell : null,
                 // every chest of the file has it (325 OnUnlock, 14 OnSpawn); none = shown from the spawn [assume]
                 HideRarityUntil = (string?)c.Element("RareStates")?.Attribute("hiderarityuntil") ?? "OnSpawn",
+                // public issue #19 (analysis/work/coffers/SPEC.md §1): the contested treasures' countdown, PvP circle, channel and size
+                ProtectionSeconds = D(c, "protectiontimeseconds", 0), PvpZoneRadius = D(c, "pvpzoneradius", 0),
+                AlwaysChannel = (string?)c.Attribute("alwaysrequireschanneling") == "true", ChestType = (string?)c.Attribute("chesttype") ?? "",
             });
         }
         // The spawnpoint kinds of the file (stageH bosses SPEC §4.2-4.4; LootChestSpawnpointChestUpgrade, the Roads of Avalon chests,
@@ -201,6 +204,21 @@ public sealed record LootChestTemplate(string Name, string Prefab, string? NameL
 
     /// <summary>RareStates hiderarityuntil (bdy.RevealRarityEvent Never, OnSpawn, OnUnlock, OnOpen): until when NewLootChest key 21 is −1.</summary>
     public string HideRarityUntil { get; init; } = "OnSpawn";
+
+    /// <summary>
+    /// protectiontimeseconds (public issue #19, coffers SPEC §1): how long a treasure stands LockedByTimer (ChestState 1) after its spawn; the client
+    /// counts NewLootChest key 7 down by it (clj.af 0x180B47580: template +0x108). 0 = none (every non-treasure chest).
+    /// </summary>
+    public double ProtectionSeconds { get; init; }
+
+    /// <summary>pvpzoneradius: the PvP circle around a treasure (30 m, the elite chests 40 m; the client's barrier, LootChestObjectView.CreateBarrier); 0 = none.</summary>
+    public double PvpZoneRadius { get; init; }
+
+    /// <summary>alwaysrequireschanneling: the opening is always a channelled cast (the client's; the server's slot-25 cast path, FakeSlotCasts).</summary>
+    public bool AlwaysChannel { get; init; }
+
+    /// <summary>chesttype (treasurecoffer, treasurechestsmall, treasurechestmedium, treasurechestlarge, factionchest…); "" without.</summary>
+    public string ChestType { get; init; } = "";
 
     /// <summary>
     /// NewLootChest key 4, the tile the client places (clj.arn 0x180B496D0: "No tileid set loot chest" and nothing placed without one;

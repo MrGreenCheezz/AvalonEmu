@@ -42,6 +42,7 @@ public sealed class ClusterStore
         public required Retrying<LootTables> Loot;
         public required Retrying<RandomDungeonData> Dungeons;
         public required Retrying<LootChestData> LootChests;
+        public required Retrying<TreasureDistributionData> Treasures;
         public required Retrying<LocalQuestData> LocalQuests;
         public required Retrying<JournalCatalog> Journal;
         public required Retrying<PersonalSeasonData> Seasons;
@@ -91,6 +92,7 @@ public sealed class ClusterStore
             Loot = new(() => LootTables.Load(GameDataFile.Open(Folder, "loot.bin").Root())),
             Dungeons = new(() => RandomDungeonData.Load(GameDataFile.Open(Folder, "randomdungeons.bin").Root(), GameDataFile.Open(Folder, "templatemetadata.bin").Root())),
             LootChests = new(() => LootChestData.Load(GameDataFile.Open(Folder, "lootchests.bin").Root())),
+            Treasures = new(() => TreasureDistributionData.Load(GameDataFile.Open(Folder, "treasuredistribution.bin").Root())),
             LocalQuests = new(() => LocalQuestData.Load(GameDataFile.Open(Folder, "localquests.bin").Root())),
             Journal = new(() => JournalCatalog.Load(GameDataFile.Open(Folder, "albionjournal.bin").Root())),
             Seasons = new(() => PersonalSeasonData.Load(GameDataFile.Open(Folder, "personalseasons.bin").Root())),
@@ -185,6 +187,12 @@ public sealed class ClusterStore
 
     /// <summary>lootchests.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
     public LootChestData? LootChestsIfLoaded => _shared.LootChests.IsValueCreated ? _shared.LootChests.Value : null;
+
+    /// <summary>treasuredistribution.xml (public issue #19, the open-world coffers and treasure chests): read with the first open-world cluster that has a treasure spot.</summary>
+    public TreasureDistributionData Treasures => _shared.Treasures.Value;
+
+    /// <summary>treasuredistribution.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
+    public TreasureDistributionData? TreasuresIfLoaded => _shared.Treasures.IsValueCreated ? _shared.Treasures.Value : null;
 
     /// <summary>localquests.xml (stageH bosses SPEC §4.4, the camp quests): read with the first cluster that has a localquestarea tile.</summary>
     public LocalQuestData LocalQuests => _shared.LocalQuests.Value;

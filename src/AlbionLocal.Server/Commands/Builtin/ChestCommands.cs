@@ -48,6 +48,40 @@ public static class ChestCommands
         }
     }
 
+    /// <summary>
+    /// Public issue #19: .coffer [list]: the cluster's treasure slots (their draw) and spots, nearest first. .coffer spawn [coffer|solo|veteran|elite]:
+    /// a treasure of that size 3 m in front of the player with its protection countdown and PvP circle (it never comes back). .chest unlock ends
+    /// the countdown.
+    /// </summary>
+    [Command("coffer", Level = AccountLevel.GameMaster,
+        Help = ".coffer lists the cluster's treasure slots and spots; .coffer spawn [coffer|solo|veteran|elite] puts a contested treasure in front of the player")]
+    public static void Coffer(CommandContext ctx, string what = "list", string size = "coffer")
+    {
+        var player = ctx.RequirePlayer();
+        var world = ctx.World;
+        if (player.Map is not { } map) throw new CommandError("the player is on no map");
+        var at = player.PositionAt(DateTime.UtcNow);
+        switch (what.ToLowerInvariant())
+        {
+            case "spawn":
+                var (dx, dz) = TileMath.Rotate(0, 3, player.Facing);
+                try
+                {
+                    var chest = world.TreasureCoffers.SpawnAt(map, size, at + new Vector2((float)dx, (float)dz), (float)TileMath.Mod360(player.Facing + 180));
+                    ctx.Reply(string.Create(CultureInfo.InvariantCulture,
+                        $"{chest}: tile {chest.Tile}, ChestState {chest.LockState} for {chest.Template.ProtectionSeconds:0} s, PvP circle {(chest.PvpZone ? $"{chest.Template.PvpZoneRadius:0} m" : "off (Pvp:Mode)")}"));
+                }
+                catch (InvalidOperationException e) { throw new CommandError(e.Message); }
+                return;
+            case "list":
+                var lines = world.TreasureCoffers.Describe(map, at).ToList();
+                ctx.Reply(lines.Count == 0 ? $"{map.Cluster}: no treasure slots (World:TreasureCoffers, no spot or no distribution here)" : $"{map.Cluster}:\n{string.Join("\n", lines)}");
+                return;
+            default:
+                throw new CommandError(".coffer [list] | spawn [coffer|solo|veteran|elite]");
+        }
+    }
+
     /// <summary>.quest [local]: the player's camp quests on this cluster (fame so far of the target, done, inside).</summary>
     [Command("quest", Level = AccountLevel.GameMaster, Help = ".quest local shows the player's camp quest progress on this cluster")]
     public static void Quest(CommandContext ctx, string what = "local")

@@ -487,6 +487,30 @@ opens the lock of the nearest chest (for you alone on a camp chest), `.quest loc
 Avalon chests: see Roads of Avalon). Not yet: the faction warfare camp chests and open quests, the camp markers of
 LocalQuestInfos at Join.
 
+### Open-world treasures (coffers and treasure chests)
+
+Public issue #19 (`../analysis/work/coffers/SPEC.md`; `World:TreasureCoffers`, on in both presets) puts the contested treasures into the
+open world, as the client data distributes them (treasuredistribution.xml):
+
+- **Where**: coffers on the clusters' coffer tiles (in the day's rolled mob camps), treasure chests on the treasure prefabs the
+  client's resource placement puts on resource nodes. Royal yellow zones (T5-T6) and red zones (T6-T7) and the Outlands (T5-T8)
+  get coffers, up to 5 at once per cluster; the Outlands one treasure chest at a time (solo 75.5 %, veteran 22.5 %, elite 2 %), the
+  Royal yellow and red zones a solo chest one draw in six (the other five are faction chests, not run yet: that draw places nothing).
+- **When**: a free slot draws again 220-660 s later (the data's activationtime, ÷ `Rates:ChestRespawn`) with the data's chance (20.5 %
+  for a coffer, 62 % for a chest), on a spot unused for 5 min; the first draw comes with the cluster. `TreasureCoffers:RespawnMinutes`
+  n replaces the data's time with n minutes.
+- **The treasure**: it counts down its protection (coffer 90 s, solo 3 min, veteran 20 min, elite 40 min; locked until then), is
+  opened with the client's channelled cast and rolls its loot for the cluster's tier. It goes 5 min after its opening, or after 24 h
+  unopened, and its slot draws again.
+- **The PvP circle** (`Pvp:Mode` `Official` only, not in a safe zone): 30 m around it (elite 40 m) every player is unrestricted
+  (the client's barrier and UnrestrictedPvpZoneUpdate): two players inside fight each other whatever their flags, unless in one
+  party (guild mates not under `Guilds:NoFriendlyFire`).
+
+`TreasureCoffers:Sizes` (`["coffer", "solo", "veteran", "elite"]`) limits which ones are placed. `TreasureCoffers:TestAlways` (false) is a
+dev aid: every open-world cluster gets treasures (a mob spawn point stands in for a missing spot) and every draw places one. GMs:
+`.coffer` lists the cluster's slots and spots, `.coffer spawn [coffer|solo|veteran|elite]` puts one in front of you, `.chest unlock` ends
+its countdown. Not done: the world-map marker of the veteran and elite chests, the faction chests and the Red Zone Event.
+
 ### World bosses
 
 StageH (`../analysis/work/stageH/bosses/SPEC.md` §4.1, §6.1; `content/bosses.json`; under `Preset official` without the file's
@@ -961,8 +985,8 @@ there, with knockdowns (`Pvp:Mode` `Consensual`, `Pvp:LethalDeath` false); a Blu
   `Guilds:NoFriendlyFire`) may fight whatever their flags. Under `Consensual` or `Off` there is none, whatever `UnrestrictedZones` says.
 - Not done: the power-crystal wisps and the crystal spiders (no client objects for them), the resource mists' global resource budget, the
   shrines' own objects (the blessing comes with the cleared room), the roads entrance's party binding, the favour's UpdateCurrency (85), and
-  of the official-only PvP the camps' UnrestrictedPvpZoneUpdate/Status (308/309: the 544 circle goes out inactive) and the treasures'
-  `pvpzoneradius` 30.
+  of the official-only PvP the camps' UnrestrictedPvpZoneUpdate/Status (308/309: the 544 circle goes out inactive). The zone's treasure
+  chests have their `pvpzoneradius` circle (30 m) under `Pvp:Mode` `Official`, as the open world's (see Open-world treasures).
 
 `.mists` tells you your zone (mode, rarity, tier, the time left, your way back), `.mists standing` your Brecilien standing. GMs: `.mists portal
 <mode> [rarity]` (a portal of `MISTS_SOLO_YELLOW`, `MISTS_SOLO_BLACK` or `MISTS_DUO_BLACK` on the random dungeon spot nearest you, rarity

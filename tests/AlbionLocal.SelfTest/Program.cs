@@ -82,6 +82,7 @@ tests.AddRange(FishingTest.All);
 tests.AddRange(RandomDungeonTest.All);
 tests.AddRange(JournalTest.All);
 tests.AddRange(WorldChestTest.All);
+tests.AddRange(TreasureCofferTest.All);
 tests.AddRange(BossTest.All);
 tests.AddRange(EventTest.All);
 tests.AddRange(InvasionTest.All);

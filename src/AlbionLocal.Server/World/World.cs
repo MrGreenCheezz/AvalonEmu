@@ -50,6 +50,7 @@ public sealed class World : IDisposable
         Trades = new Systems.Trades(this);
         Dungeons = new Systems.RandomDungeons(this);
         WorldChests = new Systems.WorldChests(this);
+        TreasureCoffers = new Systems.TreasureCoffers(this);
         StaticDungeons = new Systems.StaticDungeons(this);
         Bosses = new Systems.WorldBosses(this);
         Events = new Systems.WorldEvents(this);
@@ -197,6 +198,9 @@ public sealed class World : IDisposable
 
     /// <summary>The loot chests of the open world: POI chests, boss-point reward chests, camp chests and their local quests (stageH bosses SPEC §4.2-4.4).</summary>
     public Systems.WorldChests WorldChests { get; }
+
+    /// <summary>Public issue #19: the open world's contested treasures (coffers and treasure chests) and their PvP circles.</summary>
+    public Systems.TreasureCoffers TreasureCoffers { get; }
 
     /// <summary>The static dungeons: their events and value on the world map and in 499 (stageN static-dungeons SPEC).</summary>
     public Systems.StaticDungeons StaticDungeons { get; }
@@ -551,6 +555,7 @@ public sealed class World : IDisposable
         Profile.Mark("player systems");
         foreach (var map in Maps.Maps) SpawnManager.Update(map, this, now);
         foreach (var map in Maps.Maps) WorldChests.Update(map); // stageH: chests gone and due again, the camp quest circles
+        foreach (var map in Maps.Maps) TreasureCoffers.Update(map); // issue #19: treasures gone and due again, their PvP circles
         foreach (var map in Maps.Maps) SpellZones.Update(map); // the speed emblems of the Roads and the cities
         Bosses.Update(); // stageH: world bosses due, despawned ones
         Territories.Update(); // stageP P5: the castle fights, capture zones, chests and castle season points

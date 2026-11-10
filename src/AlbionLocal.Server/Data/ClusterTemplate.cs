@@ -190,6 +190,12 @@ public sealed class ClusterTemplate
     public IReadOnlyList<MistsSpot> MistsSpots { get; init; } = [];
 
     /// <summary>
+    /// Public issue #19: the resource prefab of a treasure chest spot (treasurespawnpoint subtype CHEST): the resource placement puts it on
+    /// open-world resource nodes (resourceprefabmappings.xml, weight 6 among the treasures), no template places one outside hell dungeons.
+    /// </summary>
+    public const string TreasureChestPrefab = "TreasureSpawnpointLootchest";
+
+    /// <summary>
     /// The &lt;spawnbuff&gt; buffs of the cluster's worldsettings.xml cluster type with their conditions (<see cref="WorldArchetypes.SpawnBuffsOf"/>;
     /// stageL hellgates phase B: HELL_2V2_ENTER, SPAWN_INVULNERABILITY_HELL, applied under Hellgates:SpawnBuffs); empty without.
     /// </summary>
@@ -842,6 +848,17 @@ public sealed class ClusterTemplate
                     foreach (var c in ChestPoints.Where(c => c.Behaviour is null)) Problem($"loot chest spawnpoint {c.SpawnBehaviour} not in lootchests.xml");
                 }
                 catch (Exception e) when (e is InvalidDataException or IOException) { Problem($"lootchests.xml not read, no loot chests: {e.Message}"); }
+            }
+            // Public issue #19 (coffers SPEC §2): the treasure spots (the coffer tiles, the chest prefabs of the resource placement) read
+            // lootchests.xml and treasuredistribution.xml now, so the world thread never waits for them.
+            if (MistsSpots.Any(s => s.Kind is "treasure:COFFER" or "treasure:CHEST") || resources?.Placements.Any(p => p.Name == TreasureChestPrefab) == true)
+            {
+                try
+                {
+                    _ = store.LootChests;
+                    _ = store.Treasures;
+                }
+                catch (Exception e) when (e is InvalidDataException or IOException) { Problem($"lootchests.xml or treasuredistribution.xml not read, no treasures: {e.Message}"); }
             }
             // StageH bosses: the quest areas bound to localquests.xml, read now when the cluster has any; and the POI chest cap.
             if (QuestAreas.Count > 0)

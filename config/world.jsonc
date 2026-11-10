@@ -13,6 +13,7 @@
     // "MapIdleUnloadMinutes": 5, // a cluster without players is unloaded after this (0 = never); the next Join builds it anew
     // (MobRespawnScale moved: Rates:Respawn below is its speed, 1 / the old factor; the old key is still read that way)
     // "OpenWorldChests": true, // POI chests, boss reward chests and camp chests with their local quests (README "Open-world chests and camps")
+    // "TreasureCoffers": true, // the contested coffers and treasure chests with their countdown and PvP circle (README "Open-world treasures"; TreasureCoffers below)
     // "RareResources": true, // enchanted (rare) resource node states; false = every node plain
     // "MobAi": true,         // mobs aggro, chase, hit back, leash home and roam (stage 5d); false = they stand and only take damage (.mob ai on|off)
   },
@@ -103,6 +104,9 @@
   // "Economy": { "SilverPickupFactor": 1, "SilverPickupTax": 0 }, // a taken silver pile pays amount × cluster factor × this, less this share (the captured official pickups: 1.5 premium, 0.15 guild tax)
   //   "GoldPriceIndex": 5000, // the gold price the client's "Global discount" weighs against 5000: below it NPC services cost index / 5000 (2500 = 50 % off); official 5000, none
   // "Chests": { "PoiLimit": -1 }, // POI chests at once per cluster: -1 = the data's (1), 0 = every spot (pve: 0), n = at most n
+  // "TreasureCoffers": { "RespawnMinutes": 0, "Sizes": ["coffer", "solo", "veteran", "elite"], "TestAlways": false }, // the open world's coffers and treasure chests
+  //   (World:TreasureCoffers true, both presets; README "Open-world treasures"): RespawnMinutes 0 = a free slot draws again after treasuredistribution's
+  //   220-660 s (÷ Rates:ChestRespawn), n = after n minutes (a server choice); Sizes = which ones are placed; TestAlways = every open-world cluster, every draw (dev aid)
   // "Bank": { "Shared": false }, // false = one bank vault per city (both presets); true = one for every city, the other vaults' items move in when a bank opens
   // "Bm": { "BuyFactor": 0, "DailyLimit": 1000000 }, // the Black Market's NPC buy orders in Caerleon: T4-T8 equipment at item value × BuyFactor (0 = none, as officially: its orders come from players; pve: 5), at most DailyLimit silver per character per day (from 10:00 UTC; 0 = no limit)
   // "Loot": { "BlackMarketChance": 0.1, "BlackMarketSoftCap": 0, "TierCap": false }, // chance that a rolled useblackmarket item (the loot lists' equipment) drops (pve: 0.15; the official server takes them from its Black Market, 1 = every roll);
