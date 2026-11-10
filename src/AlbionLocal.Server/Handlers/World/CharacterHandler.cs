@@ -186,6 +186,8 @@ public sealed partial class WorldSession
             // The cluster history (SPEC stage 3 §2.5, as official; cx2.ai7 stores 66 → ctp+0x380, 101 → +0x528, 103 → +0x530,
             // no reader traced): the cluster before ("" until a change), when the character left it (the change, else the
             // last logout), the login's start and this Join's number in it, the last PLAYERCITY_* cluster.
+            // The city portal binding's last removal (cx2 stores 63 → ctp+0x368; PortalInfoModule.Update 0x1810f57a0 counts the removal cooldown from it).
+            a91 = c.PortalBinding?.RemovedAt ?? 0, // [63] GameTimeStamp; left out when never removed
             a94 = c.PreviousCluster,  // [66]
             ba3 = c.LastLeftAt,       // [101] GameTimeStamp
             ba4 = loginAt,            // [102] GameTimeStamp, the same for every Join of a login

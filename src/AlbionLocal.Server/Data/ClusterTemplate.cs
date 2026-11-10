@@ -68,6 +68,12 @@ public sealed class ClusterTemplate
     /// <summary>Members with a factionwarfareportal component, the city's war wagon (fasttravelpoint_02 in Thetford; NewFactionWarfarePortal 662).</summary>
     public IReadOnlyList<FactionWarfarePortalSpawn> FactionWarfarePortals { get; init; } = [];
 
+    /// <summary>The portalentrance member of a Conquerors' Hall, the city's Realmgate into the Outlands (NewPortalEntrance 322).</summary>
+    public IReadOnlyList<PortalEntranceSpawn> PortalEntrances { get; init; } = [];
+
+    /// <summary>The portalexit member of an Outlands portal town, back to its city's hall (NewPortalExit 323).</summary>
+    public IReadOnlyList<PortalExitSpawn> PortalExits { get; init; } = [];
+
     public IReadOnlyList<IslandAccessPointSpawn> IslandAccessPoints { get; init; } = [];
 
     public IReadOnlyList<ExpeditionAgentSpawn> ExpeditionAgents { get; init; } = [];
@@ -230,7 +236,7 @@ public sealed class ClusterTemplate
     /// <summary>The typed objects of every list.</summary>
     public IEnumerable<ClusterObject> Objects =>
         Enumerable.Empty<ClusterObject>().Concat(Buildings).Concat(Exits).Concat(Travelpoints).Concat(Outposts).Concat(FactionWarfarePortals)
-            .Concat(IslandAccessPoints).Concat(ExpeditionAgents).Concat(LocationMarkers).Concat(Harvestables).Concat(MobSpawnPoints)
+            .Concat(PortalEntrances).Concat(PortalExits).Concat(IslandAccessPoints).Concat(ExpeditionAgents).Concat(LocationMarkers).Concat(Harvestables).Concat(MobSpawnPoints)
             .Concat(ResourceNodes).Concat(RealEstates).Concat(FishingZones).Concat(RespawnPoints);
 
     /// <summary>"5 buildings, 9 exits, …" (the non-empty lists).</summary>
@@ -239,7 +245,8 @@ public sealed class ClusterTemplate
         var parts = new (int Count, string What)[]
         {
             (Buildings.Count, "building"), (Exits.Count, "exit"), (Travelpoints.Count, "travel point"), (Outposts.Count, "outpost"),
-            (FactionWarfarePortals.Count, "faction warfare portal"), (IslandAccessPoints.Count, "island access point"),
+            (FactionWarfarePortals.Count, "faction warfare portal"), (PortalEntrances.Count, "portal entrance"), (PortalExits.Count, "portal exit"),
+            (IslandAccessPoints.Count, "island access point"),
             (ExpeditionAgents.Count, "expedition agent"), (LocationMarkers.Count, "location marker"), (Harvestables.Count, "harvestable"),
             (MobSpawnPoints.Count, "mob spawn point"), (ResourceNodes.Count, "resource node tile"), (RealEstates.Count, "real estate"),
             (FishingZones.Count, "fishing zone"), (RespawnPoints.Count, "respawn point"), (LootChests.Count, "loot chest point"),
@@ -429,6 +436,8 @@ public sealed class ClusterTemplate
         public readonly List<OutpostSpawn> Outposts = [];
         public readonly List<SpellZoneSpot> SpellZones = [];
         public readonly List<FactionWarfarePortalSpawn> Portals = [];
+        public readonly List<PortalEntranceSpawn> PortalEntrances = [];
+        public readonly List<PortalExitSpawn> PortalExits = [];
         public readonly List<IslandAccessPointSpawn> Islands = [];
         public readonly List<ExpeditionAgentSpawn> Agents = [];
         public readonly List<LocationMarkerSpawn> Markers = [];
@@ -542,6 +551,20 @@ public sealed class ClusterTemplate
                         break;
                     case "fasttravelpoint" or "factionwarfareportal" when Of("factionwarfareportal") is { } portal:
                         Portals.Add(new FactionWarfarePortalSpawn { Key = key, Tile = m.Tile, Position = pos, Height = (float)y, Direction = dir, Component = portal, Guid = guid, SpawnPosition = Spawn(portal) });
+                        break;
+                    case "portalentrance" when Of("portalentrance") is { } gate:
+                        PortalEntrances.Add(new PortalEntranceSpawn
+                        {
+                            Key = key, Tile = m.Tile, Position = pos, Height = (float)y, Direction = dir, Component = gate, Guid = guid,
+                            World = info.PortalEntrances.FirstOrDefault(p => p.Id == guid), SpawnPosition = Spawn(gate),
+                        });
+                        break;
+                    case "portalexit" when Of("portalexit") is { } gate:
+                        PortalExits.Add(new PortalExitSpawn
+                        {
+                            Key = key, Tile = m.Tile, Position = pos, Height = (float)y, Direction = dir, Component = gate, Guid = guid,
+                            World = info.PortalExits.FirstOrDefault(p => p.Id == guid), SpawnPosition = Spawn(gate),
+                        });
                         break;
                     case "fasttravelpoint" when Of("fasttravelpoint") is { } travel:
                         Travelpoints.Add(new TravelpointSpawn
@@ -890,6 +913,7 @@ public sealed class ClusterTemplate
             {
                 Info = info, Name = name, Origin = origin, Size = size, Instances = instances, CriticalObjects = criticalObjects, Critical = Critical,
                 Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, Outposts = Outposts, SpellZones = SpellZones, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
+                PortalEntrances = PortalEntrances, PortalExits = PortalExits,
                 ExpeditionAgents = Agents, LocationMarkers = Markers, TutorialBlockers = TutorialBlockers, Harvestables = Harvestables, MobSpawnPoints = Mobs, ResourceNodes = Nodes,
                 RealEstates = Estates, FishingZones = Fishing, RespawnPoints = Respawns, Resources = resources, DungeonMarkers = DungeonMarkers, LootChests = ChestPoints,
                 LocalQuestAreas = QuestAreas, PoiChestLimit = poiLimit, ExpeditionObjects = ExpeditionObjects, Colliders = Colliders, Roads = Roads, IslandManagements = IslandManagements, HideoutManagements = HideoutManagements, BuildCells = BuildCells,
@@ -1248,6 +1272,29 @@ public sealed record OutpostSpawn : ClusterObject
 public sealed record FactionWarfarePortalSpawn : ClusterObject
 {
     public required Guid Guid { get; init; }
+    public Vector2? SpawnPosition { get; init; }
+}
+
+/// <summary>
+/// NewPortalEntrance 322: key 2 <see cref="Guid"/> = world.xml portalentrance id; <see cref="World"/> = that entry (its pos = the tile's, its city).
+/// <see cref="SpawnPosition"/>: the component's spawnpos turned with the tile, where a player coming back from the Outlands arrives.
+/// </summary>
+public sealed record PortalEntranceSpawn : ClusterObject
+{
+    public required Guid Guid { get; init; }
+    public WorldPortalEntrance? World { get; init; }
+    public Vector2? SpawnPosition { get; init; }
+}
+
+/// <summary>
+/// NewPortalExit 323: key 2 <see cref="Guid"/> = world.xml portalexit id; <see cref="World"/> = that entry (its pos = the tile's, its city, the
+/// entrance it leads back to). <see cref="SpawnPosition"/>: the component's spawnpos turned with the tile, where a player using the city's
+/// Realmgate arrives; the component's size is the square a player walks into to go back.
+/// </summary>
+public sealed record PortalExitSpawn : ClusterObject
+{
+    public required Guid Guid { get; init; }
+    public WorldPortalExit? World { get; init; }
     public Vector2? SpawnPosition { get; init; }
 }
 

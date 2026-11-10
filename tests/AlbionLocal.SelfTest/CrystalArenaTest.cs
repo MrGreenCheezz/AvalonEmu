@@ -131,7 +131,7 @@ public static class CrystalArenaTest
             {
                 c.Open();
                 using var cmd = c.CreateCommand();
-                cmd.CommandText = "ALTER TABLE progression DROP COLUMN tracked; DROP TABLE arena_ranks; PRAGMA user_version=41;";
+                cmd.CommandText = "ALTER TABLE characters DROP COLUMN portal_binding; ALTER TABLE progression DROP COLUMN tracked; DROP TABLE arena_ranks; PRAGMA user_version=41;";
                 cmd.ExecuteNonQuery();
             }
             using (var migrated = new SqliteCharacterRepository(path))
@@ -145,7 +145,7 @@ public static class CrystalArenaTest
                 c.Open();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "PRAGMA user_version";
-                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 43, "schema version 43 (including arena ranks and tracking)");
+                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 44, "schema version 44 (including arena ranks and tracking)");
             }
         }
         finally { Directory.Delete(dir, true); }

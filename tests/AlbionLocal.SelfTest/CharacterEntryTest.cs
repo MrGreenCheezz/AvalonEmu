@@ -227,7 +227,7 @@ public static class CharacterEntryTest
             {
                 connection.Open();
                 using var command = connection.CreateCommand();
-                command.CommandText = "ALTER TABLE progression DROP COLUMN tracked; PRAGMA user_version=42;";
+                command.CommandText = "ALTER TABLE characters DROP COLUMN portal_binding; ALTER TABLE progression DROP COLUMN tracked; PRAGMA user_version=42;";
                 command.ExecuteNonQuery();
             }
             using (var migrated = new SqliteCharacterRepository(path))
@@ -263,7 +263,7 @@ public static class CharacterEntryTest
             {
                 connection.Open();
                 using var command = connection.CreateCommand();
-                command.CommandText = "ALTER TABLE progression DROP COLUMN tracked; ALTER TABLE characters DROP COLUMN tutorial_opening; ALTER TABLE characters DROP COLUMN played_ms; PRAGMA user_version=35;";
+                command.CommandText = "ALTER TABLE characters DROP COLUMN portal_binding; ALTER TABLE progression DROP COLUMN tracked; ALTER TABLE characters DROP COLUMN tutorial_opening; ALTER TABLE characters DROP COLUMN played_ms; PRAGMA user_version=35;";
                 command.ExecuteNonQuery();
             }
             using var migrated = new SqliteCharacterRepository(path);

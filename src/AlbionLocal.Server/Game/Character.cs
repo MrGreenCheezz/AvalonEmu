@@ -233,6 +233,12 @@ public sealed class Character
     /// </summary>
     public VanityLog? Vanity { get; set; }
 
+    /// <summary>
+    /// The city portal binding (analysis/work/portals/SPEC.md §3): the city whose Realmgate the character last used or came back to, and
+    /// when the binding was last removed (the removal cooldown, Join key 63); null = never bound; schema v44.
+    /// </summary>
+    public PortalBinding? PortalBinding { get; set; }
+
     /// <summary>A deep copy: what the repository hands out and what a save snapshot holds share nothing with the original.</summary>
     public Character Clone() => new()
     {
@@ -259,6 +265,7 @@ public sealed class Character
         Loadouts = [.. Loadouts],
         FactionStanding = [.. FactionStanding], FactionPoints = [.. FactionPoints], FactionChangedAt = FactionChangedAt,
         Vanity = Vanity?.Clone(),
+        PortalBinding = PortalBinding,
     };
 
 }
@@ -309,6 +316,12 @@ public sealed record SavedCooldown(byte Slot, long Start, long End, long Base);
 /// Immutable, so a character's copies may share it.
 /// </summary>
 public sealed record PendingTransfer(string From, string To, float X, float Y, float Direction, long At, string Via);
+
+/// <summary>
+/// <see cref="Character.PortalBinding"/>: the city the character is bound to (null = not bound) and the GameTimeStamp of the last
+/// removal (0 = never), from which gamedata.xml PortalSettings bindingresetdays count.
+/// </summary>
+public sealed record PortalBinding(Data.PortalKind? City, long RemovedAt);
 
 /// <summary>
 /// A character's expedition record (stageH expeditions SPEC §5.1, §8): when each daily bonus was last taken (UTC ticks, by expedition

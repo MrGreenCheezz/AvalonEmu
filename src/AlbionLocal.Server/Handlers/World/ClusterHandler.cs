@@ -94,6 +94,8 @@ public sealed partial class WorldSession
         if (HellgateEscape(player, req, out var hellgate)) return hellgate;
         // StageL mists: a zone's border exit, Brecilien entrance or open-world exit, and a mists world cluster's city entrance (Handlers/World/MistsHandler).
         if (MistsChange(player, req, out var mists)) return mists;
+        // The portal of an Outlands portal town, back into its city's hall (Handlers/World/PortalHandler).
+        if (PortalChange(player, req, out var portal)) return portal;
         return Change(player, req.ee, null, RequestId, RequestEncrypted);
     }
 

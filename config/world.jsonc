@@ -36,6 +36,7 @@
   // differs, is in the note ("pve: ...").
   // "Visibility": { "CellSize": 10, "EnterCells": 4, "LeaveCells": 6 }, // world objects: 10 m cells on the cluster origin, sent within 4 cells, left from 6 (5 = no hysteresis)
   // "Transfer": { "PositionTolerance": 2, "CheckExitCooldown": true }, // exits: metres allowed outside the exit square; refuse an exit used within 1 s (city) / 10 s of the Join
+  // "Transfer": { "PortalBinding": true, "PortalBindingResetDays": 7 }, // city portals into the Outlands: using one binds the character to that city (false = every city's portal is open); days between two binding removals (unset = the game data's 7)
   // "Progression": { "NewCharacters": "FairStart" }, // new characters: FairStart = an empty destiny board that fame fills, with content/starter-fair.json, as officially; UnlockAll = everything unlocked (pve: UnlockAll)
   // "Crafting": { "Returns": true },  // a craft at a station gives back part of the resources by the city's bonus (craftingmodifiers.xml); false = none
   // "Combat": { "EquipCooldownSeconds": 0, "GearArmor": true }, // seconds of the potion/food slot cooldown after an item goes into it (gamedata onequipmentchange is 10; whether it applies is open); 0 = none.

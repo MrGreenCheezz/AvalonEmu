@@ -570,6 +570,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         """
         ALTER TABLE progression ADD COLUMN tracked INTEGER;
         """,
+        // v44 (analysis/work/portals/SPEC.md §3): the city portal binding (the bound city, the last removal), one JSON column.
+        """
+        ALTER TABLE characters ADD COLUMN portal_binding TEXT;                       -- JSON PortalBinding; NULL = never bound
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";
@@ -579,7 +583,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         + "direction, previous_cluster, last_left_at, last_city, pending_transfer, fame, silver, gold, effects, cooldowns, focus, mounted_since, mount_cooldown, "
         + "flag, faction, reputation, reputation_at, dungeon_return, journal_tracked, expeditions, goals, black_market, "
         + "focus_stamp, learning_points, lp_stamp, use_flags, autolearn, infamy, mist_standing, mist_favor, loadouts, "
-        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening";
+        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening, portal_binding";
 
     private readonly object _sync = new();
     private readonly SqliteConnection _db;
@@ -738,7 +742,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                             $direction, $previous, $left, $city, $transfer, $fame, $silver, $gold, $effects, $cooldowns, $focus, $mounted, $mountcd,
                             $flag, $faction, $reputation, $reputationat, $dungeon, $journal, $expeditions, $goals, $bm,
                             $focusstamp, $lp, $lpstamp, $useflags, $autolearn, $infamy, $miststanding, $mistfavor, $loadouts,
-                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial)
+                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial, $portal)
                         """, tx, [("$account", c.Account.ToString()), .. CharacterValues(c)]))
                     insert.ExecuteNonQuery();
                 WriteContents(c, tx);
@@ -786,7 +790,8 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     focus_stamp = $focusstamp, learning_points = $lp, lp_stamp = $lpstamp, use_flags = $useflags, autolearn = $autolearn,
                     infamy = $infamy, mist_standing = $miststanding, mist_favor = $mistfavor, loadouts = $loadouts,
                     faction_standing = $fstanding, faction_points = $fpoints, faction_changed_at = $fchanged,
-                    vanity = $vanity, played_ms = $played, tutorial_opening = $tutorial
+                    vanity = $vanity, played_ms = $played, tutorial_opening = $tutorial,
+                    portal_binding = $portal
                 WHERE id = $id
                 """, tx, CharacterValues(c)))
             if (update.ExecuteNonQuery() == 0) return false;
@@ -857,6 +862,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         ("$vanity", c.Vanity is { } v ? JsonSerializer.Serialize(v) : null),
         ("$played", c.PlayedMilliseconds),
         ("$tutorial", c.Tutorial is null ? null : JsonSerializer.Serialize(c.Tutorial)),
+        ("$portal", c.PortalBinding is { } portal ? JsonSerializer.Serialize(portal) : null),
     ];
 
     /// <summary>Inserts the items and the destiny board state of <paramref name="c"/> (the old rows are gone).</summary>
@@ -1022,7 +1028,8 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     Vanity = r.IsDBNull(46) ? null : JsonSerializer.Deserialize<VanityLog>(r.GetString(46)),
                     PlayedMilliseconds = r.GetInt64(47),
                     Tutorial = r.IsDBNull(48) ? null : JsonSerializer.Deserialize<OpeningTutorialProgress>(r.GetString(48)),
-                    Account = Guid.Parse(r.GetString(49)),
+                    PortalBinding = r.IsDBNull(49) ? null : JsonSerializer.Deserialize<PortalBinding>(r.GetString(49)),
+                    Account = Guid.Parse(r.GetString(50)),
 
                 });
             }

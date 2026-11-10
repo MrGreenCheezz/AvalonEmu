@@ -451,7 +451,7 @@ reload these files. See [configuration](CONFIGURATION.md) for ownership and migr
 |---|---|
 | Network | порты 5055/5056 |
 | World | TickMs 50, AnnounceAll (шаг 12: отладка, по умолчанию нет), MapIdleUnloadMinutes 5 (шаг 13; 0 = никогда), KeepaliveSeconds 1, EventLayers (шаг 11: включённые сезонные флаги activelayer, по умолчанию нет) |
-| Transfer | PositionTolerance 2 (м за краем квадрата выхода), CheckExitCooldown = true (шаг 13, SPEC этапа 3 §4.1) |
+| Transfer | PositionTolerance 2 (м за краем квадрата выхода), CheckExitCooldown = true (шаг 13, SPEC этапа 3 §4.1); PortalBinding = true и PortalBindingResetDays (по умолчанию 7 из gamedata) — привязка к городскому порталу в Запределье (analysis/work/portals/SPEC.md) |
 | Visibility | CellSize 10, EnterCells 4, LeaveCells 6 (шаг 12, SPEC этапа 2 §5; 6 — клетка гистерезиса) |
 | Rates | Fame, CombatFame, GatheringFame, CraftingFame, Harvest, Silver, Loot, Respawn, Regrowth, CraftingReturn, ChampionWeight, ChestRespawn. Permanent values belong in world.jsonc; GM changes are temporary and global until restart. Legacy rates.json is ignored; save is rejected. |
 | (корень) | Preset = pve (шаг 15.22, PVE-DESIGN.md §1): умолчания ключей Pvp:Mode/LethalDeath/FullLoot/KnockdownWear/RedLockMinutes, Loot:BlackMarketChance и Rates; official — умолчания записи `ServerConfig` (официальные); явный ключ всегда сильнее пресета |
