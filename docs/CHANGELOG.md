@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-10 (evening) — Host names in Network:PublicAddress; optional internal website API
+
+- **`Network:PublicAddress`** (PR #12) takes a DNS host name as well as an IPv4 address, so a server can be advertised by name. The listeners still bind to `Network:BindAddress`. IPv6 is refused: the protocol carries `host:port` as text. Not checked in the client with a host name yet.
+- **Internal website API** (PR #13, docs/INTERNAL_API.md): an optional JSON API for a website process on the same PC: status, players online, account login and registration, password change and reset, ending sessions, guilds, faction rankings. Off in both presets (`Web:ApiEnabled`); it listens on loopback only (`Web:ApiBindAddress`, `Web:ApiPort` 5059) and every request needs `Web:ApiToken` (32 characters or more). Registration through it is privileged and does not look at `Accounts:Registration`.
+
+Thanks to JumpingY for both.
+
 ## 2026-11-10 (later) — City portals into the Outlands
 
 - **Realmgates** (issue #14): the portal in a royal city's Conquerors' Hall and the portal of its Outlands portal town stood there but could not be clicked: the server sent neither object and answered none of the portal window's requests. Both are sent now (NewPortalEntrance 322, NewPortalExit 323). The Realmgate leads into the city's portal town (Thetford Portal and so on), the town's portal back into the hall.
