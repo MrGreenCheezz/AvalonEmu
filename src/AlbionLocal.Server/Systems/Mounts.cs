@@ -195,6 +195,7 @@ public static class Mounts
         if (half is not null && !halfOn) p.SendAround(CastSpell(p, half, at, t));
         SyncRegeneration(p, t);
         p.SendAround(Mounted(p, t, item, quick: pending.Remount, full: !pending.Remount, facing: -1));
+        if (MountSkinEvent(p, item.Template) is { } skin) p.SendAround(skin);
         RemoveObject(p, dropHalf: false);
         SpellCasts.EndToggles(p, SpellCasts.ToggleEnd.Mount, send: false); // its toggles end with the mount (the list below)
         SpellEffects.Remove(world, p, s => s.Spell.Category == "movementbuff");
@@ -516,6 +517,7 @@ public static class Mounts
             yield return Network.WorldSession.ItemObject(item, inUse: true);
             var now = p.World.GameNow;
             yield return Mounted(p, now, item, quick: false, full: true, facing: 0, catchUp: true);
+            if (MountSkinEvent(p, item.Template) is { } skin) yield return skin;
         }
         yield return CooldownUpdate(p);
     }
@@ -523,6 +525,10 @@ public static class Mounts
     /// <summary>The catch-up of a mounted player for a client that just got its NewCharacter and list: Mounted {7, 9, 11} (SPEC §4.8, Q6); null when not mounted.</summary>
     public static MountedEvent? ForNewObserver(Player p) =>
         p.IsMounted && ItemOf(p) is { } item ? Mounted(p, p.World.GameNow, item, quick: false, full: true, facing: 0, catchUp: true) : null;
+
+    /// <summary>The selected skin for a client that has just received the mounted player's Mounted catch-up; null when none.</summary>
+    public static ChangeMountSkinEvent? MountSkinForNewObserver(Player p) =>
+        p.IsMounted && ItemOf(p) is { } item ? MountSkinEvent(p, item.Template) : null;
 
     /// <summary>MountCooldownUpdate (313, asy): {0 me, 1 "can mount again at" (a past stamp when none), 2 <see cref="Never"/> (Q4)}.</summary>
     public static MountCooldownUpdateEvent CooldownUpdate(Player p) =>
@@ -616,6 +622,15 @@ public static class Mounts
         };
         if (item is not null && p.World.Vanity.MountSkinFor(p.Character, item.Template) is var skin and >= 0) e.Extra = new() { [3] = skin };
         return e;
+    }
+
+    /// <summary>The selected mount skin as ChangeMountSkin {0 player, 1 category, 2 skin}; null when none is selected.</summary>
+    private static ChangeMountSkinEvent? MountSkinEvent(Player p, ItemTemplate? item)
+    {
+        if (item?.Mount is null) return null;
+        var category = p.World.Vanity.Catalog.MountCategory(item.Attrs.GetValueOrDefault("mountcategory"));
+        var skin = p.World.Vanity.MountSkinFor(p.Character, item);
+        return category >= 0 && skin >= 0 ? new ChangeMountSkinEvent { ddn = p.Id, bws = category, bwt = skin } : null;
     }
 
     /// <summary>CastSpell (19) of a mount buff on the player: {0 me, 1 me, 2 its position, 3 the spell, 4 t, 5 t}.</summary>
