@@ -285,6 +285,7 @@ public sealed class VisibilityTracker(Player player)
         if (Harvesting.ForNewObserver(about, viewer) is { } harvest) viewer.Session.Send(harvest); // stage I: a harvest under way, its original start
         if (Bots.BotManager.EmoteFor(about) is { } emote) viewer.Session.Send(emote); // stage I: a bot's looping emote with its start
         if (Systems.Emotes.ForNewObserver(about) is { } own) viewer.Session.Send(own); // stageN qol: a player's looping emote
+        if (Systems.Mounts.MountSkinForNewObserver(about) is { } mountSkin) viewer.Session.Send(mountSkin);
     }
 
     private void Pass(Vector2 position)

@@ -33,6 +33,7 @@ public static class MountsTest
         ("mounts: the mount object despawns beyond halfmountrange 18 m (Leave to owner and observer, then the list without 1253, max load back), the next mount is full; within 18 m it stays and the remount is quick", ObjectDespawn),
         ("mounts: allowmounts false (an expedition's cluster type, not a royal city's): a character saved mounted joins there on foot (no Mounted), Mount refused there", NoMountClusters),
         ("mounts: the speed emblems' zone spells: on Caerleon's SPELLZONE_CITY_SPEEDBUFF emblem a player gets its effect each second, 10 m away not", SpeedEmblems),
+        ("mounts: a selected skin is sent as ChangeMountSkin after the first Mounted, on a mounted rejoin, and to a new observer", MountSkinRestored),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -221,6 +222,55 @@ public static class MountsTest
         arena.Run(2.5);
         Check(Of(peer, mark).FirstOrDefault(e => e.Code == EventCodes.Mounted) is (EventCodes.Mounted, var full) && full.ContainsKey(9) && !full.ContainsKey(8),
               "key 3 at 5 m: a full mount, Mounted {9} at 3 s");
+    }
+
+    private static void MountSkinRestored()
+    {
+        using var arena = new Arena();
+        var world = arena.World;
+        var vanity = world.Vanity;
+        var (session, peer, me) = Join(arena, "SkinRider");
+        var (_, watcher, _) = Join(arena, "SkinWatcher", ox: false);
+        var skin = vanity.Pool.First(u => u.Type == AlbionLocal.Server.Data.VanityCatalog.UnlockType.Mount
+            && vanity.Catalog.MountCategories[u.Slot] == "OXEN");
+        string? applied;
+        lock (world.Sync)
+        {
+            vanity.Grant(me, skin, "test");
+            applied = vanity.SetMountSkin(me, skin.Slot, skin.Number);
+        }
+        Check(applied is null, $"a T5 ox skin {skin} is selected");
+
+        var (mark, wmark) = (peer.Events.Count, watcher.Events.Count);
+        Ride(session, me);
+        arena.Run(3.1);
+        var mine = Since(peer, mark);
+        var seen = Since(watcher, wmark);
+        var mounted = mine.FindIndex(e => e.Code == EventCodes.Mounted);
+        var changed = mine.FindIndex(e => e.Code == EventCodes.ChangeMountSkin
+            && L(e.P, 0) == me.Id && L(e.P, 1) == skin.Slot && L(e.P, 2) == skin.Number);
+        var observed = seen.FindIndex(e => e.Code == EventCodes.ChangeMountSkin
+            && L(e.P, 0) == me.Id && L(e.P, 1) == skin.Slot && L(e.P, 2) == skin.Number);
+        Check(mounted >= 0 && changed > mounted && observed >= 0,
+            $"first mount: Mounted, then ChangeMountSkin to the rider and observer (got {Show(mine)} / {Show(seen)})");
+
+        var id = me.Character.Id;
+        peer.Disconnect();
+        wmark = watcher.Events.Count;
+        (session, peer, me) = Rejoin(arena, id);
+        var rejoin = Since(peer, 0);
+        mounted = rejoin.FindIndex(e => e.Code == EventCodes.Mounted);
+        changed = rejoin.FindIndex(e => e.Code == EventCodes.ChangeMountSkin
+            && L(e.P, 0) == me.Id && L(e.P, 1) == skin.Slot && L(e.P, 2) == skin.Number);
+        var cooldown = rejoin.FindIndex(e => e.Code == EventCodes.MountCooldownUpdate);
+        var spawn = Since(watcher, wmark);
+        var newCharacter = spawn.FindIndex(e => e.Code == EventCodes.NewCharacter && L(e.P, 0) == me.Id);
+        var newMounted = spawn.FindIndex(e => e.Code == EventCodes.Mounted && L(e.P, 0) == me.Id);
+        var newChanged = spawn.FindIndex(e => e.Code == EventCodes.ChangeMountSkin
+            && L(e.P, 0) == me.Id && L(e.P, 1) == skin.Slot && L(e.P, 2) == skin.Number);
+        Check(me.IsMounted && mounted >= 0 && changed > mounted && cooldown > changed
+            && newCharacter >= 0 && newMounted > newCharacter && newChanged > newMounted,
+            $"mounted rejoin: Mounted, ChangeMountSkin, MountCooldownUpdate; the observer's NewCharacter, Mounted, ChangeMountSkin (got {Show(rejoin)} / {Show(spawn)})");
     }
 
     private static void CancelsAndRefusals()
