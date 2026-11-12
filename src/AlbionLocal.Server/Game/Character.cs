@@ -29,6 +29,12 @@ public sealed class Character
     /// Transient bots use this field for their body template and supply their avatar through BotInfo.</summary>
     public int Template { get; set; }
 
+    /// <summary>
+    /// The avatar ring: the index into avatars.xml &lt;avatarrings&gt; (bbg +0x38, looked up by ChangeAvatar / Join key 4 / NewCharacter key 3 /
+    /// Login key 15; 0 = RING1, the default); public issue #22, schema v46.
+    /// </summary>
+    public int AvatarRing { get; set; }
+
     /// <summary>Body template id (CreateCharacter ri.h9), not an avatar ring or skin colour.</summary>
     public byte Appearance { get; set; }
 
@@ -242,7 +248,7 @@ public sealed class Character
     /// <summary>A deep copy: what the repository hands out and what a save snapshot holds share nothing with the original.</summary>
     public Character Clone() => new()
     {
-        Id = Id, Name = Name, Account = Account, Template = Template, Appearance = Appearance, Tutorial = Tutorial,
+        Id = Id, Name = Name, Account = Account, Template = Template, AvatarRing = AvatarRing, Appearance = Appearance, Tutorial = Tutorial,
         Customization = [.. Customization], Clothes = [.. Clothes],
         Cluster = Cluster, PositionX = PositionX, PositionY = PositionY, Direction = Direction,
         PreviousCluster = PreviousCluster, LastLeftAt = LastLeftAt, LastCity = LastCity, PendingTransfer = PendingTransfer, DungeonReturn = DungeonReturn, Created = Created,

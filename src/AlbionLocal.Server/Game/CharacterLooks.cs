@@ -19,6 +19,9 @@ public sealed record CustomizationItem(string Name, int[] FreeMeshes, int Colors
 {
     /// <summary>All mesh resource ids in client order, including paid and empty meshes.</summary>
     public string?[] Meshes { get; init; } = [];
+
+    /// <summary>The item's colorset (SKIN, HAIR, UNDERWEAR); "" for one without colours (FACE, BEARD).</summary>
+    public string ColorSet { get; init; } = "";
 }
 
 /// <summary>
@@ -64,6 +67,9 @@ public sealed class CharacterLooks
     /// <summary>The template id of a characters.xml character type (HUMAN_MALE 0, HUMAN_FEMALE 1); -1 for another.</summary>
     private static int TemplateOf(string? type) => type switch { "HUMAN_MALE" => 0, "HUMAN_FEMALE" => 1, _ => -1 };
 
+    /// <summary>The characters.xml character type of a template id (the inverse of <see cref="TemplateOf"/>); "" for another.</summary>
+    public static string TypeName(int template) => template switch { 0 => "HUMAN_MALE", 1 => "HUMAN_FEMALE", _ => "" };
+
     /// <summary>
     /// characters.xml's Customizations (Customization uniquename = template, its Items with Meshes, the ColorSets) and its
     /// AvatarToCustomizationPresets (Preset avatar charactertype, CustomizationItem item mesh color): a preset's mesh is the index of the
@@ -87,8 +93,9 @@ public sealed class CharacterLooks
                 var all = item.Elements("Mesh").ToList();
                 meshes[(template, name)] = [.. all.Select(m => (string?)m.Attribute("mesh"))];
                 var free = all.Select((m, i) => (m, i)).Where(x => (string?)x.m.Attribute("state") != "Buyable").Select(x => x.i).ToArray();
-                list.Add(new CustomizationItem(name, free, colorSets.GetValueOrDefault((string?)item.Attribute("colorset") ?? ""))
-                    { Meshes = [.. meshes[(template, name)]] });
+                var colorSet = (string?)item.Attribute("colorset") ?? "";
+                list.Add(new CustomizationItem(name, free, colorSets.GetValueOrDefault(colorSet))
+                    { Meshes = [.. meshes[(template, name)]], ColorSet = colorSet });
             }
             items[template] = list;
         }

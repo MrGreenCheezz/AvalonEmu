@@ -308,6 +308,92 @@ public sealed class Vanity(World world)
         return category >= 0 && log.MountSkins.TryGetValue(category, out var skin) ? skin : -1;
     }
 
+    // ---- the portrait avatar and the body customization (public issue #22) ----
+
+    /// <summary>
+    /// ChangeAvatar's refusals (HeroStatsGui.OnChangeAvatarError shows a message box for each): 5920 @CHANGE_AVATAR_ERROR_INVALID_AVATAR,
+    /// 5921 …_INVALID_AVATAR_RING, 5922 …_AVATAR_NOT_UNLOCKED, 5923 …_AVATAR_RING_NOT_UNLOCKED.
+    /// </summary>
+    public const short InvalidAvatar = 0x1720, InvalidAvatarRing = 0x1721, AvatarLocked = 0x1722, AvatarRingLocked = 0x1723;
+
+    /// <summary>
+    /// Whether <paramref name="c"/> may show <paramref name="e"/> (the client's ctp.af_68 for avatars, its twin for rings): one the account owns
+    /// through its accountwidevanityunlockneeded vanity unlock, else one that is not locked. The client also accepts a locked one in the
+    /// unlocked list of UpdateUnlockedAvatars 222 / UpdateUnlockedAvatarRings 223 (journal, gameplay and season rewards) or by founder
+    /// level; nothing on this server grants those, so they stay refused (and the client does not offer them).
+    /// </summary>
+    private bool MayUse(Character c, VanityCatalog.AvatarEntry e, UnlockType type) =>
+        e.AccountUnlock.Length > 0
+            ? Catalog.All.FirstOrDefault(u => u.Type == type && u.Name == e.AccountUnlock) is { } u && Has(c, u)
+            : !e.Locked;
+
+    /// <summary>
+    /// ChangeAvatar (op 148 p8 {0 avatar, 1 ring}; cwd.u sends it after applying the choice locally): each value must be an index of avatars.xml
+    /// &lt;avatars&gt; / &lt;avatarrings&gt; the character may use; one equal to the current value is not checked again (as cwd.u). Accepted:
+    /// saved and ChangeAvatar 160 {0 id, 1 avatar, 2 ring} to the player and its observers (cwd.aft / crn.aft apply it). Returns the RC (0 or a
+    /// refusal above); the response carries the values in force either way, because cwd.ai7 applies the response's keys 0/1 (so a refusal
+    /// undoes the client's local change).
+    /// </summary>
+    public short ChangeAvatar(Player p, int avatar, int ring)
+    {
+        var c = p.Character;
+        short rc = 0;
+        if (avatar != c.Template)
+            rc = Catalog.Avatars.ElementAtOrDefault(avatar) is not { } a || avatar < 0 ? InvalidAvatar : MayUse(c, a, UnlockType.Avatar) ? (short)0 : AvatarLocked;
+        if (rc == 0 && ring != c.AvatarRing)
+            rc = Catalog.Rings.ElementAtOrDefault(ring) is not { } r || ring < 0 ? InvalidAvatarRing : MayUse(c, r, UnlockType.AvatarRing) ? (short)0 : AvatarRingLocked;
+        if (rc != 0)
+        {
+            Log.Info("vanity", $"'{c.Name}' avatar {avatar} / ring {ring} refused (RC {rc}); keeps {c.Template} / {c.AvatarRing}");
+            return rc;
+        }
+        (c.Template, c.AvatarRing) = (avatar, ring);
+        world.Saves.MarkChanged(c);
+        var e = new ChangeAvatarEvent { ddn = p.Id, bwp = avatar, bwq = ring };
+        p.Session.Send(e);
+        p.SendToObservers(e);
+        Log.Info("vanity", $"'{c.Name}' avatar {Catalog.Avatars.ElementAtOrDefault(avatar)?.Name ?? avatar.ToString(CultureInfo.InvariantCulture)}, ring {Catalog.Rings.ElementAtOrDefault(ring)?.Name ?? ring.ToString(CultureInfo.InvariantCulture)}");
+        return 0;
+    }
+
+    /// <summary>
+    /// ChangeCustomization (op 388 qc {0 character type, 1 mesh index per item, 2 colour index per item, 3 bool}; no response class, the client's
+    /// callback cwf.u ignores the answer): sent by the character window's vanity customization (VanityCharacterCustomizationView → cpr.c, whose
+    /// b3d.g_9 fills both arrays in the order of the type's characters.xml &lt;Item&gt;s, the layout of Join keys 6/7 and NewCharacter keys 5/6).
+    /// Key 3 is always true from that one caller; its meaning is unknown and it is ignored. The client sends no price: a change is free; a
+    /// mesh or colour of state Buyable needs the account's vanity unlock (the store sells none here), the others are free. All checked before
+    /// anything changes; then the look is saved and CustomizationChanged 410 {0 id, 1 type, 2 meshes, 3 colours} goes to the player and its
+    /// observers: the client applies the change only from that event (cpx.x8: a new type rebuilds the body, then b3d.g_6 takes both arrays).
+    /// Null, or why it was refused (nothing changed).
+    /// </summary>
+    public string? ChangeCustomization(Player p, int template, int[]? meshes, int[]? colors)
+    {
+        var c = p.Character;
+        if (world.GameData?.Looks.Items.GetValueOrDefault(template) is not { } items) return $"no character type {template}";
+        if (meshes is null || colors is null || meshes.Length != items.Count || colors.Length != items.Count)
+            return $"{meshes?.Length ?? 0} meshes / {colors?.Length ?? 0} colours for the {items.Count} items of type {template}";
+        var type = CharacterLooks.TypeName(template);
+        HashSet<short>? owned = null;
+        bool Allowed(Unlock? u) => u is null || u.Free || (owned ??= Owned(c)).Contains(u.Id);
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            int mesh = meshes[i], color = colors[i];
+            if (mesh < 0 || mesh >= Math.Max(1, item.Meshes.Length)) return $"{item.Name}: no mesh {mesh}";
+            if (item.Meshes.Length > 0 && !item.FreeMeshes.Contains(mesh) && !Allowed(Catalog.CustomizationMesh(type, item.Name, mesh)))
+                return $"{item.Name}: mesh {mesh} is not unlocked";
+            if (color < 0 || color >= Math.Max(1, item.Colors)) return $"{item.Name}: no colour {color}";
+            if (item.Colors > 0 && !Allowed(Catalog.CustomizationColor(item.ColorSet, color))) return $"{item.Name}: colour {color} is not unlocked";
+        }
+        (c.Appearance, c.Customization, c.Clothes) = ((byte)template, [.. meshes], [.. colors]);
+        world.Saves.MarkChanged(c);
+        var e = new CustomizationChangedEvent { ddn = p.Id, b1m = template, b1n = [.. meshes], b1o = [.. colors] };
+        p.Session.Send(e);
+        p.SendToObservers(e);
+        Log.Info("vanity", $"'{c.Name}' customization: type {template}, meshes [{string.Join(", ", meshes)}], colours [{string.Join(", ", colors)}]");
+        return null;
+    }
+
     /// <summary>.vanity list: the owned unlocks of <paramref name="c"/>'s account, or the catalogue entries whose name has <paramref name="filter"/>.</summary>
     public IEnumerable<string> Describe(Character c, string? filter)
     {

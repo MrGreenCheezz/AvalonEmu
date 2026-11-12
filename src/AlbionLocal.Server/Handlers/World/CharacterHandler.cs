@@ -158,7 +158,8 @@ public sealed partial class WorldSession
             a8b = c.Id,       // [1] Guid  character id
             a8c = c.Name,     // [2] string name
             a8d = c.Template, // [3] avatar id (bbg.abo); historical storage name is Template
-            a8f = c.Appearance, // [5] body template id (creation key 2); [4] avatar ring stays default 0
+            a8e = c.AvatarRing, // [4] avatar ring (cx2.ai7 reads ahi +0x44 through bbg's ring list); 0 = RING1, left out
+            a8f = c.Appearance, // [5] body template id (creation key 2)
             a8i = Systems.OpeningTutorial.ClientCluster(c, world), // [8] must equal SelectCharacter's client instance id
             a8j = new Vector2(c.PositionX, c.PositionY), // [9] spawn position (cx2.ai7 → player vfunc +0x278, same setter as MoveResponse)
             a8k = facing,     // [10] facing in degrees (cx2.ai7, with key 9): the arrival's after a cluster change (SPEC stage 3 §3), else 0
