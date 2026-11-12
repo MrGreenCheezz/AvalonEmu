@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-12 — Mount skins stay on after mounting and joining
+
+- **Mount skins** (PR #21): a selected mount skin showed only right after it was chosen in the vanity window. After mounting, logging in or changing cluster the mount had its plain look again, and so it had for a player who came into view of the rider. The server now sends ChangeMountSkin (161) after Mounted in each of these cases, for every mount category.
+
+Thanks to JumpingY.
+
 ## 2026-11-11 (later) — City plots: claims, auctions and owners
 
 - **City plots** (issue #18, `RealEstate:*`, on in both presets, docs/REFERENCE.md "City plots"): the plot signs in the cities are real-estate objects now (NewRealEstate), each with its owner. Clicking one opens the client's real-estate window. Royal cities have 80 plots each, Caerleon 120.
