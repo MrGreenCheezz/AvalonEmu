@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-12 (later) — Guild account, avatar and look changes, treasures on the maps
+
+- **Guild account** (issue #20, docs/REFERENCE.md "Guilds"): the guild window's Deposit button was answered with success while no silver moved. A deposit now takes the silver from the member and adds it to the guild account; both are saved at once, the member sees the new silver and every online member the new balance. The Withdraw button of the same window was not handled at all: it works now for the roles that have the right in the client (guild master, The Right Hand, Master of Coin). The account log stays empty, and there is no guild gold account.
+- **Avatar and look** (issue #22, docs/REFERENCE.md "Portrait avatar and body"): changing the portrait avatar or its ring, and changing sex, face, hair, beard or colours in the vanity tab, was neither applied nor saved. Both are checked against the client's data, saved, shown to nearby players at once and sent again at login, in the character list and to players met later. Free avatars and rings can be chosen, and account-wide ones with their vanity unlock; the journal, gameplay and season ones stay locked because nothing unlocks them yet. A customization change costs nothing. Hair and beards marked Buyable need their vanity unlock.
+- **Treasures on the maps** (issue #23, docs/REFERENCE.md "Open-world treasures"): coffers and treasure chests appeared on the minimap only from about 40 m. The server now sends the cluster's treasure list (LocalTreasuresUpdate 284) at every join and whenever it changes, so they show from anywhere in the cluster; an opened or removed one disappears. Veteran and elite chests are also sent for the world map, to players in clusters within their `worldmaprange` (1 exit, elite 2).
+- Database schema v46 (`characters.avatar_ring`); the migration runs at start.
+- The deposit follows a captured official exchange; the rest is built from the client's code and data. None of it is checked in the client yet. Open points: whether coffers get a minimap icon at all (their definition has none), the world-map markers' time and rarity fields, and the avatar ring numbering (file order of `avatars.xml`).
+
+Thanks to JumpingY and Gostavo2003 for the reports and the research in them.
+
 ## 2026-11-12 — Mount skins stay on after mounting and joining
 
 - **Mount skins** (PR #21): a selected mount skin showed only right after it was chosen in the vanity window. After mounting, logging in or changing cluster the mount had its plain look again, and so it had for a player who came into view of the rider. The server now sends ChangeMountSkin (161) after Mounted in each of these cases, for every mount category.
