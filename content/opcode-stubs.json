@@ -17,6 +17,7 @@
 // that has a handler, fields or "silent" without a response class, or "ack" / "ignore" with one stops the start.
 // Each entry was checked against the client's response handler (345319, analysis/NOTES-protocol.md "Opcode stubs") or,
 // for silent, ack and ignore, against the official answers in the captures (103829, 114814, 002835).
+// DepositToGuildAccount was an "ack" here until public issue #20: GuildHandler moves the silver and answers as official.
 // Answered in code since the ops audit (stageH ops-audit SPEC): SubscribeToCluster, TravelIslandShowroom,
 // GetPersonalSeasonPastRewardData, GetFactionWarfareCampaignData, TrackAlbionJournalAchievements, QuickSellAuctionQueryAction; since the
 // goals (PVE-DESIGN step 11): GetPersonalSeasonTrackerData, GetCharacterSteamAchievements, ClaimAlbionJournalReward; since the
@@ -69,7 +70,6 @@
   "GetCharacterStats": "ack",                              // rc 0 with the request id, then a stats event (not sent here)
   "PartyFinderRegisterApplicants": "ack",                  // 2 x rc 0 with the request id
   "PartyFinderUnregisterApplicants": "ack-no-request-id",  // rc 0 without key 255, although the request had one
-  "DepositToGuildAccount": "ack",                          // rc 0; request and answer without a request id (guilds only)
 
   // ---- no response class and never answered officially (0 responses in all captures; ops-audit SPEC §1, §6): the
   // unhandled default's silence without its warning

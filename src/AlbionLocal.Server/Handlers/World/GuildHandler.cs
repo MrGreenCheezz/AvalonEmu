@@ -97,6 +97,36 @@ public sealed partial class WorldSession
         return null;
     }
 
+    /// <summary>
+    /// DepositToGuildAccount (op 134, ry {0 gold, 1 amount a7m}; no request id, no response class): as the official 002835 deposit,
+    /// UpdateMoney, then the bare rc 0 without a request id, then GuildUpdate kind 2 to the members; refused: the bare
+    /// <see cref="Systems.Guilds.AccountRefused"/> and nothing else (public issue #20).
+    /// </summary>
+    [Handles(OperationCodes.DepositToGuildAccount, Status = SessionStatus.InWorld)]
+    private AlbionResponse? DepositToGuildAccount(DepositToGuildAccountRequest req) =>
+        Player is { } player ? AccountTransfer(OperationCodes.DepositToGuildAccount, world.Guilds.DepositToAccount(player, req.jr, req.jq, out var g), g) : null;
+
+    /// <summary>
+    /// WithdrawalFromAccount (op 135, act {0 gold, 1 amount a7m}; no request id, no response class): answered as a deposit (no
+    /// official capture of it): UpdateMoney, the bare rc, GuildUpdate kind 2.
+    /// </summary>
+    [Handles(OperationCodes.WithdrawalFromAccount, Status = SessionStatus.InWorld)]
+    private AlbionResponse? WithdrawalFromAccount(WithdrawalFromAccountRequest req) =>
+        Player is { } player ? AccountTransfer(OperationCodes.WithdrawalFromAccount, world.Guilds.WithdrawFromAccount(player, req.ai6, req.ai5, out var g), g) : null;
+
+    /// <summary>The answer of a guild account transfer (its UpdateMoney is out already): the bare rc, after a success the account update.</summary>
+    private AlbionResponse? AccountTransfer(OperationCodes code, short rc, Guild? guild)
+    {
+        if (rc != 0 || guild is null)
+        {
+            Log.Info(Name, $"'{Player!.Character.Name}' {code} refused: {rc}");
+            return new GenericResponse { ReturnCode = rc };
+        }
+        SendResponse(code, new GenericResponse(), RequestId, RequestEncrypted);
+        world.Guilds.SendToMembers(guild, world.Guilds.AccountUpdate(guild));
+        return null;
+    }
+
     /// <summary>GetGuildEnergyDrainInfo (op 414, request id): rc 0 {0 the guild's Guid}, empty outside a guild (SPEC §1).</summary>
     [Handles(OperationCodes.GetGuildEnergyDrainInfo, Status = SessionStatus.InWorld)]
     private AlbionResponse? GetGuildEnergyDrainInfo(GetGuildEnergyDrainInfoRequest req) =>
