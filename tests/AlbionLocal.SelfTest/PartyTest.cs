@@ -26,6 +26,7 @@ public static class PartyTest
         ("party: leave, disband, kick, make leader, disconnect, reconnect without 232, 231 on arrival after a change", LeaveKick),
         ("party: party Say to a member on another map with key 7, not to observers", Chat),
         ("party: fame shared within 50 m (GroupBonus, max(n, mindivisor)), NewLoot key 11, a member opens the bag, an outsider not", FameAndLoot),
+        ("party role: PartyJoined key 15 is -1 (none) not 0, op 234 stores and relays 243, a role below -1 is ignored, the role survives a re-send", Roles),
     ];
 
     private sealed record Member(WorldSession Session, FakePeer Peer, Player Player)
@@ -335,5 +336,53 @@ public static class PartyTest
         (_, _, bag) = Kill(60);
         var solo = Wire(pa.Events.Last(e => (EventCodes)CombatTest.Code(e) == EventCodes.NewLoot));
         Check(bag is not null && !solo.ContainsKey(11), "without a party: NewLoot has no key 11");
+    }
+
+    /// <summary>
+    /// The party role (op 234) and its wire value: the client paints a member's minimap dot with the colour of
+    /// <c>itemroles.xml</c> at the index it gets, so the default must be -1 (none) and not 0 — index 0 is expedition TANK,
+    /// which has no <c>mapmarkercolor</c> and renders a fully transparent dot (MapLabel.GetMapMarkerColorForPlayer).
+    /// </summary>
+    private static void Roles()
+    {
+        using var town = new Town();
+        var (a, b) = (town.Join("Anna", 5), town.Join("Boris", 10));
+        var parties = town.World.Parties;
+
+        // 1. A fresh party: key 15 (diu, Int16[]) is [-1, -1] for both, never [0, 0].
+        var (am, bm) = (a.Peer.Events.Count, b.Peer.Events.Count);
+        Into(a, b);
+        var ja = Of(a, EventCodes.PartyJoined, am).Single();
+        var jb = Of(b, EventCodes.PartyJoined, bm).Single();
+        Check(ja[15] is short[] { Length: 2 } ra && ra.SequenceEqual(new short[] { -1, -1 })
+              && jb[15] is short[] { Length: 2 } rb && rb.SequenceEqual(new short[] { -1, -1 }),
+              $"PartyJoined key 15 = [-1, -1] (no role) (got [{string.Join(",", ja[15] as short[] ?? [])}] / [{string.Join(",", jb[15] as short[] ?? [])}])");
+
+        // 2. B takes PARTY_HEAL (index 8 in itemroles.xml): 243 {0 8, 1 B} to both, no response, the member stores it.
+        (am, bm) = (a.Peer.Events.Count, b.Peer.Events.Count);
+        Send(b.Session, new PartySetRoleRequest { x1 = 8 });
+        Check(Of(a, EventCodes.PartySetRoleFlag, am) is [var fa] && Convert.ToInt32(fa[0]) == 8 && G(fa[1]) == b.Id
+              && Of(b, EventCodes.PartySetRoleFlag, bm) is [var fb] && Convert.ToInt32(fb[0]) == 8 && G(fb[1]) == b.Id,
+              "op 234 (role 8): PartySetRoleFlag {0 8, 1 B} to both members");
+        Check(parties.Of(b.Id)!.Find(b.Id)!.Role == 8, "the member stores role 8");
+
+        // 3. The role is re-sent with the next PartyJoined (a relog or a cluster change), in B's slot.
+        var bm2 = b.Peer.Events.Count;
+        parties.Joined(b.Player, clusterChange: false);
+        var resent = Of(b, EventCodes.PartyJoined, bm2).Single()[15] as short[];
+        Check(resent is { Length: 2 } && resent.SequenceEqual(new short[] { -1, 8 }),
+              $"PartyJoined after the role: [-1, 8] (got [{string.Join(",", resent ?? [])}])");
+
+        // 4. A value below -1 is not an index: ignored, nothing relayed, the stored role unchanged.
+        var (am2, bm3) = (a.Peer.Events.Count, b.Peer.Events.Count);
+        Send(b.Session, new PartySetRoleRequest { x1 = -2 });
+        Check(a.Peer.Events.Count == am2 && b.Peer.Events.Count == bm3 && parties.Of(b.Id)!.Find(b.Id)!.Role == 8,
+              "role -2: no PartySetRoleFlag, the role stays 8");
+
+        // 5. The other member takes a role too: 243 to both, including the one that set it.
+        var am3 = a.Peer.Events.Count;
+        Send(a.Session, new PartySetRoleRequest { x1 = 6 });
+        Check(parties.Of(a.Id)!.Find(a.Id)!.Role == 6 && Of(a, EventCodes.PartySetRoleFlag, am3) is [var own] && Convert.ToInt32(own[0]) == 6,
+              "role 6 from A: stored and relayed to A itself as well");
     }
 }
