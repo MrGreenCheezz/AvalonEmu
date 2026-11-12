@@ -401,8 +401,8 @@ public struct ResourceBar                        // как Join 11–15: cur, ma
 114814 и 002835): `"silent"` — ответа нет вовсе, для операции с классом ответа, на которую официальный сервер
 никогда не отвечает (CastStart, RegisterToObject, QueryAllianceGuildStats, ActionOnBuildingStart, ChangeUseFlag,
 PlaceableObjectPlace; иначе ушёл бы пустой ответ по умолчанию); `"ack"` — голый успех {253, 255} с rc 0, для операции без
-класса ответа, на которую официальный сервер так отвечает (GetCharacterStats, PartyFinderRegisterApplicants,
-DepositToGuildAccount; иначе не ушло бы ничего), `"ack-no-request-id"` — то же без ключа 255 (PartyFinderUnregisterApplicants).
+класса ответа, на которую официальный сервер так отвечает (GetCharacterStats, PartyFinderRegisterApplicants;
+иначе не ушло бы ничего; DepositToGuildAccount с issue #20 — обработчик в `GuildHandler`), `"ack-no-request-id"` — то же без ключа 255 (PartyFinderUnregisterApplicants).
 Оба пишутся в лог на уровне Debug и считаются вместе с заглушками. В отличие от прочего контента ошибка здесь
 останавливает старт: неизвестная операция (с ближайшим именем) или вид, операция с обработчиком в коде, поля или
 `"silent"` у операции без класса ответа, `"ack"` у операции с классом, неизвестный ключ или поле, значение не того типа.

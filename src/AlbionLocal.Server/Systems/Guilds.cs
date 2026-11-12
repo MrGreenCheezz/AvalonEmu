@@ -101,17 +101,27 @@ public sealed partial class Guilds
     public bool SpendAccount(Guild g, long a7m, string why)
     {
         if (a7m < 0 || g.SilverA7m < a7m) return false;
-        g.SilverA7m -= a7m;
+        if (!MoveAccount(g, -a7m, why)) return false;
+        _accountChanged.Add(g);
+        Log.Info("guild", $"guild '{g.Name}' pays {a7m / 10000} silver from its account: {why} ({g.SilverA7m / 10000} left)");
+        return true;
+    }
+
+    /// <summary>
+    /// Adds <paramref name="delta"/> (a7m; the caller checked the bounds) to the account of <paramref name="g"/> and saves it at once,
+    /// with the progress, which so leaves the delayed save. False = the save failed and the account is back as it was.
+    /// </summary>
+    private bool MoveAccount(Guild g, long delta, string why)
+    {
+        g.SilverA7m += delta;
         try { store?.SaveGuildProgress(g); }
         catch (Exception ex)
         {
-            g.SilverA7m += a7m;
+            g.SilverA7m -= delta;
             Log.Warn("guild", $"account of guild '{g.Name}' not saved ({why}): {ex.Message}");
             return false;
         }
         _progressChanged.Remove(g);
-        _accountChanged.Add(g);
-        Log.Info("guild", $"guild '{g.Name}' pays {a7m / 10000} silver from its account: {why} ({g.SilverA7m / 10000} left)");
         return true;
     }
 

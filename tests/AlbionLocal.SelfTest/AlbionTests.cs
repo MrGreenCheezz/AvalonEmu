@@ -48,7 +48,7 @@ public static class AlbionTests
         OpcodeTable.Build(typeof(LoginSession), typeof(WorldSession), typeof(ChatSession));
         var login = OpcodeTable.For(typeof(LoginSession));
         var game = OpcodeTable.For(typeof(WorldSession));
-        Check(login.Handlers.Count == 8 && game.Handlers.Count == 237 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+        Check(login.Handlers.Count == 8 && game.Handlers.Count == 239 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.QuestGiverRequest) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.SetNextTutorialState) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.UseFunction) is { Status: SessionStatus.InWorld }
@@ -60,7 +60,8 @@ public static class AlbionTests
               && game.Find(OperationCodes.InventoryMoveGivenItems) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.DeathRecap) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.TakeSilver) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.LoadoutReadHeaders) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.Mount) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.MountCancel) is { Status: SessionStatus.InWorld }
-              && game.Find(OperationCodes.PartyInvitePlayer) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.PartySetRole) is { Status: SessionStatus.InWorld },
+              && game.Find(OperationCodes.PartyInvitePlayer) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.PartySetRole) is { Status: SessionStatus.InWorld }
+              && game.Find(OperationCodes.DepositToGuildAccount) is { Status: SessionStatus.InWorld } && game.Find(OperationCodes.WithdrawalFromAccount) is { Status: SessionStatus.InWorld },
               "every handler takes its operation's request class, no operation twice; GetGameServerByCluster on the login connection; HarvestStart/HarvestCancel, "
               + "AttackStart (quiet), CastStart, CastCancel, RegisterToObject, InventoryMoveGivenItems, DeathRecap and TakeSilver in the world");
         try { OpcodeTable.For(typeof(MisboundSession)); Check(false, "a handler on the wrong request class was accepted"); }

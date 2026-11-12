@@ -29,6 +29,7 @@ public static class GuildTest
         ("guild: login (Join 56/58/71, 104/103/349), offline 104, restart keeps guild and roles", LoginAndRestart),
         ("guild pve: presets, levels and perks (fame, silver, gathering, repair), xp from fame, no friendly fire", Perks),
         ("guild pve: a shared kill without a party, the silver tax into the account (103 kind 2), payout, contracts, saved", SharedHunt),
+        ("guild account: deposit (UpdateMoney, bare rc 0, 103 kind 2, saved), too little silver / gold / no guild refused, withdrawal by right (issue #20)", Account),
     ];
 
     private sealed record Member(WorldSession Session, FakePeer Peer, Player Player)
@@ -418,5 +419,47 @@ public static class GuildTest
                   && world.Guilds.Of(a.Character.Id) is null && a.Character.Silver == purse + left,
                   "the last member's leave pays it the account");
         }
+    }
+
+    /// <summary>
+    /// The guild window's account (public issue #20): DepositToGuildAccount moves a7m from the player into the account as the official
+    /// 002835 deposit (UpdateMoney, the bare rc 0 without 255, GuildUpdate kind 2 to every member), both saved; refusals change nothing;
+    /// WithdrawalFromAccount needs WITHDRAWAL_FROM_SILVER_ACCOUNT (a RECRUIT has none, the guild master has it).
+    /// </summary>
+    private static void Account()
+    {
+        using var town = new Town();
+        var (a, b, c) = (town.Join("Anna", 5, silver: 5000), town.Join("Boris", 10, silver: 100), town.Join("Clara", 15, silver: 100));
+        var g = Found(town, a, "Iron Wolves");
+        Into(a, b);
+        long Purse(Member m) => m.Player.Character.Silver;
+
+        var (am, bm, seq) = (a.Peer.Events.Count, b.Peer.Events.Count, b.Peer.Sequence.Count);
+        var r = Send(b, new DepositToGuildAccountRequest { jr = 30 * 10000 });
+        var order = b.Peer.Sequence.Skip(seq).Select(o => o is EventData e ? ((EventCodes)Code(e)).ToString() : "response").ToList();
+        Check(r is { ReturnCode: 0 } && !r.Parameters.ContainsKey(255) && order.SequenceEqual(["UpdateMoney", "response", "GuildUpdate"]),
+              $"deposit: UpdateMoney, the bare rc 0 without 255, GuildUpdate (got {string.Join(", ", order)})");
+        Check(Purse(b) == 70 * 10000 && g.SilverA7m == 30 * 10000 && Of(b, EventCodes.UpdateMoney, bm) is [var money] && L(money, 1) == 70 * 10000
+              && Of(a, EventCodes.GuildUpdate, am) is [var u] && Convert.ToInt32(u[10]) == 2 && L(u, 11) == 30 * 10000,
+              "B pays 30 silver, the account has them, A gets 103 kind 2 with key 11 = the account");
+        Check(town.Characters.LoadGuilds().Single().SilverA7m == 30 * 10000 && town.Characters.Find(b.Id)!.Silver == 70 * 10000,
+              "saved at once: the guild row and B's silver");
+
+        (bm, seq) = (b.Peer.Events.Count, b.Peer.Sequence.Count);
+        var refused = new[]
+        {
+            Send(b, new DepositToGuildAccountRequest { jr = 71 * 10000 }), Send(b, new DepositToGuildAccountRequest { jr = 0 }),
+            Send(b, new DepositToGuildAccountRequest { jr = 10000, jq = true }), Send(c, new DepositToGuildAccountRequest { jr = 10000 }),
+        };
+        Check(refused.All(x => x is { ReturnCode: Guilds.AccountRefused }) && b.Peer.Events.Count == bm && Purse(b) == 70 * 10000 && Purse(c) == 100 * 10000
+              && g.SilverA7m == 30 * 10000, "refused (more than B has, 0, gold, C in no guild): rc 1, no event, nothing moved");
+
+        Check(Send(b, new WithdrawalFromAccountRequest { ai6 = 10000 }) is { ReturnCode: Guilds.AccountRefused } && g.SilverA7m == 30 * 10000,
+              "a RECRUIT's withdrawal refused (no WITHDRAWAL_FROM_SILVER_ACCOUNT)");
+        var before = Purse(a);
+        Check(Send(a, new WithdrawalFromAccountRequest { ai6 = 31 * 10000 }) is { ReturnCode: Guilds.AccountRefused }
+              && Send(a, new WithdrawalFromAccountRequest { ai6 = 10 * 10000 }) is { ReturnCode: 0 } && Purse(a) == before + 10 * 10000
+              && g.SilverA7m == 20 * 10000 && town.Characters.LoadGuilds().Single().SilverA7m == 20 * 10000,
+              "the guild master: more than the account refused, 10 silver withdrawn and saved");
     }
 }

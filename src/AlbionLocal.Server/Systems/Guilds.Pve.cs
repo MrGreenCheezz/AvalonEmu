@@ -129,15 +129,7 @@ public sealed partial class Guilds
         if (silver <= 0) return "give an amount of silver";
         if (silver > g.SilverA7m / 10000) return $"the guild account has {g.SilverA7m / 10000} silver";
         var a7m = silver * 10000;
-        g.SilverA7m -= a7m;
-        try { store?.SaveGuildProgress(g); }
-        catch (Exception ex)
-        {
-            g.SilverA7m += a7m; // nothing paid: the account keeps its silver
-            Log.Warn("guild", $"payout of guild '{g.Name}' not saved: {ex.Message}");
-            return "the guild account could not be saved, nothing paid";
-        }
-        _progressChanged.Remove(g);
+        if (!MoveAccount(g, -a7m, "payout")) return "the guild account could not be saved, nothing paid";
         _accountChanged.Add(g);
         Wallet.Credit(to, a7m, $"guild payout by '{by.Character.Name}'");
         world.GuildGoals.PaidOut(g, m.Id, a7m); // stage I: the Member Logs' SILVERBALANCE
@@ -146,6 +138,48 @@ public sealed partial class Guilds
         Mailer.GuildNotice(world, g, "Guild account payout", $"{by.Character.Name} paid {silver} silver of the guild account to {m.Name}.");
         Log.Info("guild", $"'{by.Character.Name}' pays {silver} silver of guild '{g.Name}' to '{m.Name}' ({g.SilverA7m / 10000} left)");
         return null;
+    }
+
+    /// <summary>
+    /// The return code of a refused DepositToGuildAccount / WithdrawalFromAccount. The client sends both without a response callback
+    /// (c32.i 0x180A731F0, GuildAccountView.OnWithdrawalConfirmed 0x181098A80), so it only tells the log; nothing changes.
+    /// </summary>
+    public const short AccountRefused = 1;
+
+    /// <summary>
+    /// DepositToGuildAccount: <paramref name="p"/> moves <paramref name="a7m"/> of its silver into its guild's account, both saved at once
+    /// (the guild row, then the character). The guild window sends it for silver only (GuildAccountView.OnDepositConfirmed 0x181098030
+    /// calls c32.i with gold false); the server keeps no guild gold, so <paramref name="gold"/> is refused. Any positive amount the
+    /// player has (the official 002835 deposit was 1 silver). The caller sends the answer and then <see cref="AccountUpdate"/>.
+    /// </summary>
+    public short DepositToAccount(Player p, long a7m, bool gold, out Guild? guild)
+    {
+        guild = Of(p.Character.Id);
+        if (guild is not { } g || gold || a7m <= 0 || p.Character.Silver < a7m || g.SilverA7m > long.MaxValue - a7m) return AccountRefused;
+        if (!MoveAccount(g, a7m, $"deposit by '{p.Character.Name}'")) return AccountRefused;
+        Wallet.TrySpend(p, a7m, $"deposit into the account of guild '{g.Name}'"); // checked above: cannot fail
+        world.Saves.SaveNow(p.Character);
+        world.GuildGoals.Deposited(g, p.Character.Id, a7m);
+        Log.Info("guild", string.Create(CultureInfo.InvariantCulture, $"'{p.Character.Name}' deposits {a7m / 10000.0:0.####} silver into guild '{g.Name}' ({g.SilverA7m / 10000} in the account)"));
+        return 0;
+    }
+
+    /// <summary>
+    /// WithdrawalFromAccount (the guild window's withdraw button, GuildAccountView.OnWithdrawalConfirmed 0x181098A80: act {0 gold,
+    /// 1 amount a7m}): <paramref name="p"/> takes <paramref name="a7m"/> of its guild's account, which needs WITHDRAWAL_FROM_SILVER_ACCOUNT
+    /// (<see cref="GuildRoles.WithdrawSilver"/>, the client's own button check); saved at once on both sides. Gold is refused (no guild gold).
+    /// </summary>
+    public short WithdrawFromAccount(Player p, long a7m, bool gold, out Guild? guild)
+    {
+        guild = Of(p.Character.Id);
+        if (guild is not { } g || gold || a7m <= 0 || g.SilverA7m < a7m || p.Character.Silver > long.MaxValue - a7m) return AccountRefused;
+        if ((GuildRoles.Permissions(g.Find(p.Character.Id)!.Role) & GuildRoles.WithdrawSilver) == 0) return AccountRefused;
+        if (!MoveAccount(g, -a7m, $"withdrawal by '{p.Character.Name}'")) return AccountRefused;
+        Wallet.Credit(p, a7m, $"withdrawal from the account of guild '{g.Name}'");
+        world.Saves.SaveNow(p.Character);
+        world.GuildGoals.PaidOut(g, p.Character.Id, a7m);
+        Log.Info("guild", string.Create(CultureInfo.InvariantCulture, $"'{p.Character.Name}' withdraws {a7m / 10000.0:0.####} silver from guild '{g.Name}' ({g.SilverA7m / 10000} left)"));
+        return 0;
     }
 
     /// <summary>

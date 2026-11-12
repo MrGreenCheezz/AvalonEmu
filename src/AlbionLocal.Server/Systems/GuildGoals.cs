@@ -431,7 +431,13 @@ public sealed class GuildGoals(World world)
         AddStat(g, p.Character.Id, GuildMemberLog.SilverBalance, a7m);
     }
 
-    /// <summary>A .guild payout of <paramref name="a7m"/> to member <paramref name="member"/>: its SILVERBALANCE goes down.</summary>
+    /// <summary>A deposit of <paramref name="a7m"/> by <paramref name="member"/> into the guild account (DepositToGuildAccount): its SILVERBALANCE goes up.</summary>
+    public void Deposited(Guild g, Guid member, long a7m)
+    {
+        if (Enabled && a7m > 0) AddStat(g, member, GuildMemberLog.SilverBalance, a7m);
+    }
+
+    /// <summary>A .guild payout or a withdrawal of <paramref name="a7m"/> to member <paramref name="member"/>: its SILVERBALANCE goes down.</summary>
     public void PaidOut(Guild g, Guid member, long a7m)
     {
         if (Enabled && a7m > 0) AddStat(g, member, GuildMemberLog.SilverBalance, -a7m);

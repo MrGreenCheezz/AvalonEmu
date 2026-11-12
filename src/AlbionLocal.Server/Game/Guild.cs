@@ -34,7 +34,7 @@ public sealed class GuildMember(Guid id, string name, GuildRole role, DateTime j
 
 /// <summary>
 /// A guild (stageH guilds SPEC §4): its id, unique name (NOCASE), crest and banner, the account fields the GuildUpdate carries
-/// (the guild account's silver, a7m: Guilds:SilverTax and the contracts fill it, .guild payout empties it; tax a7m, unused), the guild
+/// (the guild account's silver, a7m: the window's deposits, Guilds:SilverTax and the contracts fill it, withdrawals and .guild payout empty it; tax a7m, unused), the guild
 /// experience and contracts of §10, the guild goals' state (stage I) and the ids of its eight role tags (<see cref="GuildRoles"/>; per
 /// guild [choice]). Members in join order. Saved at once by the guild store; the account, the experience, the contracts and the guild
 /// goals, which change with every kill, every 30 s.
@@ -129,6 +129,12 @@ public static class GuildRoles
 {
     /// <summary>GuildPermission KICK_FROM_GUILD and INVITE (SPEC §0).</summary>
     public const long Kick = 4, Invite = 8;
+
+    /// <summary>
+    /// GuildPermission WITHDRAWAL_FROM_SILVER_ACCOUNT: the guild window's withdraw buttons (GuildAccountView.OnGuildDataChanged
+    /// 0x181098140 enables them with c2p.k(256)); in <see cref="Masks"/> the guild master, The Right Hand and the Master of Coin.
+    /// </summary>
+    public const long WithdrawSilver = 256;
 
     /// <summary>GuildPermission ACCESS_GUILD_MAIL (SPEC §0; stageJ mail SPEC §1.5): the guild's mailbox and mail to its members (the guild master and The Right Hand).</summary>
     public const long AccessGuildMail = 65536;

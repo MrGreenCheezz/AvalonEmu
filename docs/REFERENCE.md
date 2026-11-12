@@ -2408,7 +2408,12 @@ The PvE guild (SPEC §10, PVE-DESIGN step 13 part 2; every part behind its own k
   account instead of `Economy:SilverPickupTax` (the client shows it as the guild tax of the pickup and as 5 % in the guild
   window, whose silver is the account). `.guild payout <name> <silver>` (with `Guilds:SeasonRewards Content`, a `SilverTax` or
   `Contracts`) pays a member in game from it (Master of Coin,
-  The Right Hand or the guild master). A guild that is deleted (its last member leaves, or `.guild disband`) pays its
+  The Right Hand or the guild master). In every preset the guild window's account works as
+  official (public issue #20): **Deposit** moves silver from the member to the account and **Withdraw** (Master of Coin,
+  The Right Hand or the guild master: the client's WITHDRAWAL_FROM_SILVER_ACCOUNT right) moves it back; both are saved
+  at once, the player gets its new silver and every member the new account balance. A deposit counts in the member logs'
+  silver balance (a withdrawal or payout counts against it). The guild has no gold account (gold is refused), and the
+  account log (`GetGuildAccountLogs`) stays empty. A guild that is deleted (its last member leaves, or `.guild disband`) pays its
   account to that last member or to its guild master (at once, or at the next login when offline).
 - **Contracts** (`Guilds:Contracts`, pve true): every `Guilds:ContractPeriod` (`Weekly` from Monday 10:00 UTC, or
   `Daily`) a guild gets `Guilds:ContractCount` (3, at most 4) goals out of: kill 500 mobs, clear 5 dungeons, gather
