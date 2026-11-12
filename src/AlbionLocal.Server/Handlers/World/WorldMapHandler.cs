@@ -29,6 +29,7 @@ public sealed partial class WorldSession
         foreach (var id in ids.Distinct(StringComparer.Ordinal))
             if (ClusterInfo(info, id, world.StaticDungeons, world.Territories, world.Outposts) is { } ev)
             {
+                world.TreasureCoffers.FillWorldMap(ev, id, Player?.Map?.Cluster); // issue #23: keys 51-56, the veteran and elite chests in range
                 SendEvent(ev);
                 sent++;
             }

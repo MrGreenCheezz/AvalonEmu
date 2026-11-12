@@ -29,8 +29,9 @@ namespace AlbionLocal.Server.Systems;
 /// client that knows it (0 when it leaves), and two such players outside one party are Hostile (<see cref="Unrestricted"/>, Pvp.Of). The Mists'
 /// treasure chests get the same circle (<see cref="Contest"/>).</item>
 /// </list>
-/// Not done (SPEC §5): the world-map marker of the veteran and elite chests (worldmaptreasure), the faction chests and the Red Zone Event, the
-/// activityquotient. The state lives with the map: an unloaded map takes it along, the next one draws afresh. Touched only under <see cref="World.Sync"/>.
+/// <item>The map markers (public issue #23): the standing treasures in LocalTreasuresUpdate 284 at every Join and to the map's players at every
+/// change (<see cref="LocalTreasures"/>), the veteran and elite chests also in the world map's ClusterInfoUpdate (<see cref="FillWorldMap"/>).</item>
+/// Not done (SPEC §5): the faction chests and the Red Zone Event, the activityquotient. The state lives with the map: an unloaded map takes it along, the next one draws afresh. Touched only under <see cref="World.Sync"/>.
 /// </summary>
 public sealed class TreasureCoffers(World world)
 {
@@ -80,7 +81,16 @@ public sealed class TreasureCoffers(World world)
 
         /// <summary>The map's template (the map has it only after its fill: the treasures of the fill need its biome and PvP rules).</summary>
         public ClusterTemplate? Template;
+
+        /// <summary>Issue #23: the treasures of the cluster's LocalTreasuresUpdate (284), in the order they came.</summary>
+        public readonly Dictionary<LootChest, Listing> Listed = [];
+
+        /// <summary>Whether <see cref="Listed"/> changed since the last 284 to the map's players.</summary>
+        public bool ListChanged;
     }
+
+    /// <summary>A listed treasure: its Guid (284 key 1, NewLootChest key 20), its index in the client's list (key 2), its subtype (key 8) and definition.</summary>
+    public sealed record Listing(Guid Guid, int Index, string Subtype, TreasureLootchest Def);
 
     private readonly ConditionalWeakTable<Map, MapTreasures> _maps = new();
 
@@ -198,7 +208,7 @@ public sealed class TreasureCoffers(World world)
         var free = m.Spots.Where(s => s.Subtype == slot.Subtype && s.Chest is null && s.FreeAt <= world.Now).ToList();
         if (free.Count == 0) return null;
         var spot = free[rng.Next(free.Count)];
-        if (Make(map, m, spot.Position, spot.Direction, behaviour, kind) is not { } chest) return null;
+        if (Make(map, m, spot.Position, spot.Direction, behaviour, kind, slot.Subtype) is not { } chest) return null;
         (spot.Chest, slot.Chest) = (chest, chest);
         return chest;
     }
@@ -206,9 +216,11 @@ public sealed class TreasureCoffers(World world)
     /// <summary>
     /// A treasure of <paramref name="behaviour"/> at <paramref name="at"/>: its chest and rare state by weight, the tile of the cluster's biome
     /// and sub-biome, LockedByTimer for its protectiontimeseconds (Unlocked without), its PvP circle (<see cref="Contest"/>) and its maxlifetime.
-    /// Null without a tile.
+    /// Null without a tile. Listed (issue #23, <see cref="List"/>) as <paramref name="def"/> of <paramref name="subtype"/>; <paramref name="kind"/>
+    /// also gives its maxlifetime.
     /// </summary>
-    private LootChest? Make(Map map, MapTreasures m, Vector2 at, float direction, ChestSpawnBehaviour behaviour, TreasureLootchest? kind)
+    private LootChest? Make(Map map, MapTreasures m, Vector2 at, float direction, ChestSpawnBehaviour behaviour, TreasureLootchest? kind, string subtype,
+        TreasureLootchest? def = null)
     {
         var data = world.Clusters!.LootChestsIfLoaded!;
         var choices = behaviour.Chests.Where(c => c.Weight > 0 && data.Chests.ContainsKey(c.Chest)).ToList();
@@ -248,17 +260,115 @@ public sealed class TreasureCoffers(World world)
             {
                 if (chest.Map == map && !chest.Rolled) Combat.RemoveBag(chest, "its maxlifetime is up unopened");
             });
-        Contest(map, chest, m);
+        ContestIn(map, chest, m);
+        List(m, chest, def ?? kind, subtype);
         return chest;
+    }
+
+    /// <summary>
+    /// Issue #23: <paramref name="chest"/> into the cluster's LocalTreasuresUpdate as <paramref name="def"/> (a &lt;TreasureLootchest&gt;) of
+    /// <paramref name="subtype"/>, before it is announced (NewLootChest key 20). Not listed (logged once) without a definition or with one the
+    /// client's list lacks: cjm.a(g7s, short) 0x180AB73C0 would drop it with "TreasureSpawns: invalid treasure".
+    /// </summary>
+    private void List(MapTreasures m, LootChest chest, TreasureLootchest? def, string subtype)
+    {
+        var index = def is null ? 0 : world.Clusters?.TreasuresIfLoaded?.ClientIndex("TreasureLootchest", def.Name) ?? 0;
+        if (def is null || index <= 1)
+        {
+            Combat.LogOnce("treasure-list:" + (def?.Name ?? chest.SpawnpointName), $"treasure {def?.Name ?? chest.SpawnpointName}: no treasure definition in the client's list, not on the map");
+            return;
+        }
+        var guid = Guid.NewGuid();
+        chest.TreasureGuid = guid;
+        m.Listed[chest] = new Listing(guid, index, subtype, def);
+        m.ListChanged = true;
+    }
+
+    /// <summary>
+    /// LocalTreasuresUpdate (284, aru) of <paramref name="map"/> (issue #23): the cluster's standing, unopened treasures, parallel arrays. The client
+    /// (cjm.a(g7s, short) 0x180AB73C0) replaces its whole list with each one (new dictionaries by key 4 and key 1, then its bk event: fwf.d
+    /// 0x181BEA7A0 adds a minimap label per Guid of the current cluster and removes the labels of the Guids gone), so every 284 is the full
+    /// list. Key 0 is not read and not sent (captures 002835, 103829, 113433, 114814: keys 1-8 only, empty arrays without a treasure, at every
+    /// Join); a null array would throw, so the empty ones go too. Key 1 Guid, 2 the index in the client's treasure list (<see
+    /// cref="TreasureDistributionData.ClientIndex"/>), 3 enchantment 0, 4 the id (cjl.b; the chest object's [assume]), 5 position, 6 a stamp
+    /// (cjl.f; the label's timer only with showminimaptimer, which no TreasureLootchest has): GameNow of this list, 7 (cjl.g) 0, 8 the
+    /// subtype; keys 6 and 7 as the issue #23 report gives them [report].
+    /// </summary>
+    public LocalTreasuresUpdateEvent LocalTreasures(Map? map)
+    {
+        var listed = map is not null && _maps.TryGetValue(map, out var m) ? m.Listed.Where(kv => Standing(map, kv.Key)).ToList() : [];
+        var now = world.GameNow;
+        return new LocalTreasuresUpdateEvent
+        {
+            cnq = [.. listed.Select(kv => kv.Value.Guid)],
+            cnr = [.. listed.Select(kv => kv.Value.Index)],
+            cns = new int[listed.Count],
+            cnt = [.. listed.Select(kv => kv.Key.Id)],
+            cnu = [.. listed.Select(kv => kv.Key.Position)],
+            cnv = [.. listed.Select(_ => now)],
+            cnw = new long[listed.Count],
+            cnx = [.. listed.Select(kv => kv.Value.Subtype)],
+        };
+    }
+
+    /// <summary>A listed treasure still in the list: on its map and not opened (an opened one waits for its despawn, no longer a treasure [assume]).</summary>
+    private static bool Standing(Map map, LootChest chest) => chest.Map == map && map.Objects.ContainsKey(chest.Id) && !chest.Rolled;
+
+    /// <summary>
+    /// ClusterInfoUpdate (139) keys 51-56 of <paramref name="cluster"/> for a viewer in <paramref name="from"/> (issue #23): the world-map
+    /// markers. WorldmapCluster.UpdateTreasureSpawns 0x181BE3940 reads them parallel: 51 Guid, 52 the index in the client's treasure list (a
+    /// TreasureLootchest), 53 position (cluster coordinates ÷ 100 on the map), 54 protected until and 55 a mob's lifetime
+    /// (WorldmapTreasureSpawn.InitMarker), 56 rarity; the marker is WorldmapResources.GetTreasureSpawnMarker of the definition's
+    /// worldmaptreasure (none: an error line, so only those that have one: the veteran and elite chests). Shown to a viewer at most
+    /// worldmaprange cluster exits away (veteran 1, elite 2) [assume: the client does not read worldmaprange].
+    /// </summary>
+    public void FillWorldMap(ClusterInfoUpdateEvent e, string cluster, string? from)
+    {
+        if (from is null || world.Maps.Find(cluster) is not { } map || !_maps.TryGetValue(map, out var m) || m.Listed.Count == 0
+            || world.Clusters?.WorldIfLoaded is not { } info) return;
+        var shown = m.Listed.Where(kv => kv.Value.Def is { WorldMapTreasure.Length: > 0, WorldMapRange: >= 0 } && Standing(map, kv.Key)
+            && Hops(info, cluster, from, kv.Value.Def.WorldMapRange)).ToList();
+        if (shown.Count == 0) return;
+        e.bzo = [.. shown.Select(kv => kv.Value.Guid)];
+        e.bzp = [.. shown.Select(kv => kv.Value.Index)];
+        e.bzq = [.. shown.Select(kv => kv.Key.Position)];
+        e.bzr = [.. shown.Select(kv => kv.Key.LockState == LockedByTimer
+            ? kv.Key.StateTicks + TimeSpan.FromSeconds(kv.Key.Template.ProtectionSeconds).Ticks : kv.Key.StateTicks)];
+        e.bzs = new long[shown.Count];
+        e.bzt = [.. shown.Select(kv => Math.Max(0, kv.Key.RarityFor(kv.Key.LockState)))];
+    }
+
+    /// <summary>Whether <paramref name="to"/> is at most <paramref name="range"/> cluster exits (world.xml) from <paramref name="start"/>.</summary>
+    private static bool Hops(WorldInfo info, string start, string to, int range)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal) { start };
+        var ring = new List<string> { start };
+        for (var i = 0; ; i++)
+        {
+            if (ring.Contains(to, StringComparer.Ordinal)) return true;
+            if (i >= range || ring.Count == 0) return false;
+            ring = [.. ring.SelectMany(c => info.Find(c)?.Exits.Select(x => x.TargetCluster) ?? []).Where(c => c.Length > 0 && seen.Add(c))];
+        }
     }
 
     /// <summary>
     /// <paramref name="chest"/>'s PvP circle up (SPEC §3): with Pvp:Mode Official and a pvpzoneradius, NewLootChest key 27 true and the players
     /// inside unrestricted while it stands. Called before the chest is announced (its create carries the key). The Mists' treasures too.
     /// </summary>
-    public void Contest(Map map, LootChest chest) => Contest(map, chest, null);
+    public void Contest(Map map, LootChest chest) => ContestIn(map, chest, null);
 
-    private void Contest(Map map, LootChest chest, MapTreasures? m)
+    /// <summary>
+    /// The same for a Mists treasure of <paramref name="subtype"/> (CHEST, COFFER), which is also listed (issue #23): as the first
+    /// &lt;TreasureLootchest&gt; of treasuredistribution.xml that spawns its spawnpoint (MISTS_TREASURE_SOLO → MISTS_CHEST_SOLO, …).
+    /// </summary>
+    public void Contest(Map map, LootChest chest, string subtype)
+    {
+        ContestIn(map, chest, null);
+        var m = _maps.GetValue(map, _ => new MapTreasures { Tier = map.Template?.Name.Tier ?? 4 });
+        List(m, chest, world.Clusters?.TreasuresIfLoaded?.Lootchests.Values.FirstOrDefault(d => d.Spawnpoint == chest.SpawnpointName), subtype);
+    }
+
+    private void ContestIn(Map map, LootChest chest, MapTreasures? m)
     {
         // a PvpDisabled cluster (the Outlands' rest areas also draw chests: their Distribute has no clustertype) keeps its peace [assume, SPEC §3.4]
         m ??= _maps.GetValue(map, _ => new MapTreasures { Tier = map.Template?.Name.Tier ?? 4 });
@@ -286,7 +396,11 @@ public sealed class TreasureCoffers(World world)
         var data = store.LootChests;
         if (!data.Spawnpoints.TryGetValue(spawnpoint, out var behaviour)) throw new InvalidOperationException($"{spawnpoint} is no LootChestSpawnpoint of lootchests.xml");
         var m = _maps.GetValue(map, _ => new MapTreasures { Tier = map.Template?.Name.Tier ?? 4 });
-        var chest = Make(map, m, at, direction, behaviour, null) ?? throw new InvalidOperationException($"{spawnpoint} draws no chest with a tile here");
+        // listed as the open world's definition of the size (issue #23); the file is read here if no cluster has needed it yet (a GM command)
+        TreasureLootchest? def = null;
+        try { def = store.Treasures.Lootchests.GetValueOrDefault(size.ToLowerInvariant() is "coffer" ? "COFFER_SOLO" : "DEFAULT_CHEST_" + size.ToUpperInvariant()); }
+        catch (Exception e) when (e is InvalidDataException or IOException) { Combat.LogOnce("treasures-data", $"treasures: {e.Message}"); }
+        var chest = Make(map, m, at, direction, behaviour, null, size.ToLowerInvariant() is "coffer" ? "COFFER" : "CHEST", def) ?? throw new InvalidOperationException($"{spawnpoint} draws no chest with a tile here");
         map.AddObject(chest);
         return chest;
     }
@@ -319,6 +433,18 @@ public sealed class TreasureCoffers(World world)
         }
         m.Contested.RemoveAll(c => c.Map != map || !map.Objects.ContainsKey(c.Id));
         m.Made.RemoveWhere(c => c.Map != map || !map.Objects.ContainsKey(c.Id));
+        // issue #23: a treasure gone or opened leaves the list; a changed list goes to every client on the map (bots have none)
+        foreach (var c in m.Listed.Keys.Where(c => !Standing(map, c)).ToList())
+        {
+            m.Listed.Remove(c);
+            m.ListChanged = true;
+        }
+        if (m.ListChanged)
+        {
+            m.ListChanged = false;
+            var list = LocalTreasures(map);
+            foreach (var p in map.Players.Values.Where(p => !p.IsBot)) p.Session.Send(list);
+        }
         if (m.Contested.Count == 0 && m.Inside.Count == 0) return;
         var utc = DateTime.UtcNow;
         foreach (var p in m.Inside.Keys.Where(p => p.Map != map).ToList()) m.Inside.Remove(p); // gone from the map: its new map's client starts afresh

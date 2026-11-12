@@ -236,6 +236,8 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         // OnEnterGame reads the active quest to decide whether the tracker opens. Install it before
         // JoinFinished switches the client into the world; later progress events update that model.
         if (Player is { } tutorialPlayer) Systems.OpeningTutorial.Joined(tutorialPlayer);
+        // issue #23: the cluster's treasures (284, empty without one) right before JoinFinished, as in captures 002835 and 103829 (284, 369, 2)
+        if (Player is { } treasurePlayer) SendEvent(world.TreasureCoffers.LocalTreasures(treasurePlayer.Map));
         SendEvent(new JoinFinishedEvent { ddn = jr.a8a });
         if (Player is not { } player) return;
         Systems.OpeningTutorial.Entered(player);

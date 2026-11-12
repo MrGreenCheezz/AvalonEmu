@@ -21,7 +21,93 @@ public static class TreasureCofferTest
     public static IEnumerable<(string, Action)> All =>
     [
         ("treasure coffers: treasuredistribution draws, lootchests protection/circle/size; a yellow-zone coffer's countdown, PvP circle (308, Hostile), opening, despawn and next draw", Run),
+        ("treasure map markers: the client's treasure list index, LocalTreasuresUpdate 284 at Join and on a spawn/despawn, the world map's ClusterInfoUpdate 51-56 (issue #23)", Markers),
     ];
+
+    /// <summary>The 284 entries of <paramref name="e"/>: (Guid, index, id, subtype).</summary>
+    private static List<(Guid Guid, int Index, long Id, string Subtype)> Entries(EventData e)
+    {
+        var guids = Guids(e.Parameters[1]);
+        var index = (int[])e.Parameters[2];
+        var ids = (long[])e.Parameters[4];
+        var kinds = (string[])e.Parameters[8];
+        return [.. guids.Select((g, i) => (g, index[i], ids[i], kinds[i]))];
+    }
+
+    /// <summary>A Guid[] as sent (AlbionSerializer: 16 bytes each, concatenated).</summary>
+    private static Guid[] Guids(object? o) => o is byte[] b ? [.. b.Chunk(16).Select(c => new Guid(c))] : [];
+
+    private static void Markers()
+    {
+        var store = Day15.Value;
+        var data = store.Treasures;
+        int Ix(string name) => data.ClientIndex("TreasureLootchest", name);
+        // bfz.jo of client 345319: NONE, HUNTSPOTGENERIC, then names in document order (106-108 and 152 in this data)
+        Check(Ix("DEFAULT_CHEST_SOLO") > 1 && Ix("DEFAULT_CHEST_VETERAN") == Ix("DEFAULT_CHEST_SOLO") + 1 && Ix("DEFAULT_CHEST_ELITE") == Ix("DEFAULT_CHEST_SOLO") + 2
+              && Ix("COFFER_SOLO") > 1 && Ix("NO_SUCH_TREASURE") == 0,
+              $"client treasure list: DEFAULT_CHEST_SOLO/VETERAN/ELITE {Ix("DEFAULT_CHEST_SOLO")}/{Ix("DEFAULT_CHEST_VETERAN")}/{Ix("DEFAULT_CHEST_ELITE")}, COFFER_SOLO {Ix("COFFER_SOLO")}, unknown 0");
+
+        var found = store.World.Clusters.Where(c => c.Type == "OPENPVP_YELLOW" && ClusterNameInfo.Parse(c.File) is { Type: 0, Continent: 1, Tier: 5 })
+            .OrderBy(c => c.Id, StringComparer.Ordinal).Select(c => c.Id).First();
+        var spot = store.Get(found).MobSpawnPoints[0].Position;
+        var dir = NewDir();
+        var characters = Repository(dir);
+        var clock = new ManualClock();
+        var anchor = DateTime.UtcNow.Ticks;
+        var world = new World(new ServerConfig { JoinByCharacterId = true, TreasureRespawnMinutes = 600 }, characters, Client.Items, Client.GameData, Client.Spells)
+        {
+            Sync = new object(), Clock = clock, Clusters = store, MapSeed = 23, GameTicks = () => anchor + clock.Now.Ticks,
+        };
+        world.MobAi = false;
+        void Tick(double seconds)
+        {
+            clock.Advance(TimeSpan.FromSeconds(seconds));
+            lock (world.Sync) world.Update();
+        }
+        var hero = EventTest.NewHero(characters, spot);
+        hero.Cluster = found;
+        characters.Save(hero);
+        var (a, peerA) = EventTest.Join(world, hero.Id);
+        var map = world.Maps.Find(found)!;
+        Tick(0.1);
+
+        // A GM veteran chest 300 m away: the player in the cluster gets the new list at once (no NewLootChest that far).
+        var mark = peerA.Events.Count;
+        LootChest chest;
+        lock (world.Sync) chest = world.TreasureCoffers.SpawnAt(map, "veteran", spot + new Vector2(300, 0), 0);
+        Tick(0.1);
+        var spawned = peerA.Events.Skip(mark).LastOrDefault(e => Code(e) == (int)EventCodes.LocalTreasuresUpdate);
+        var entry = spawned is null ? default : Entries(spawned).FirstOrDefault(x => x.Id == chest.Id);
+        Check(entry.Index == Ix("DEFAULT_CHEST_VETERAN") && entry.Index > 1 && entry.Subtype == "CHEST" && chest.TreasureGuid == entry.Guid,
+              $"a spawn: 284 to the player 300 m off with {{2 DEFAULT_CHEST_VETERAN's index, 8 CHEST, 1 the chest's Guid}} (got {entry})");
+
+        // A second player joining far off: 284 at Join, before JoinFinished, with the entry.
+        var rival = EventTest.NewHero(characters, spot);
+        rival.Cluster = found;
+        characters.Save(rival);
+        var (b, peerB) = EventTest.Join(world, rival.Id);
+        var codes = peerB.Events.Select(Code).ToList();
+        var at = codes.LastIndexOf((int)EventCodes.LocalTreasuresUpdate);
+        Check(at >= 0 && at < codes.IndexOf((int)EventCodes.JoinFinished) && Entries(peerB.Events[at]).Any(x => x.Id == chest.Id && x.Index > 1),
+              "Join: 284 before JoinFinished with the veteran chest");
+
+        // The world map: ClusterInfoUpdate keys 51-56 carry it (worldmaptreasure, range 1) for a viewer in the cluster.
+        mark = peerB.Events.Count;
+        lock (world.Sync) b.OnRequest(Request(new SubscribeToClusterRequest { agl = [found] }, 80), encrypted: false);
+        var info = peerB.Events.Skip(mark).FirstOrDefault(e => Code(e) == (int)EventCodes.ClusterInfoUpdate)?.Parameters;
+        Check(info is not null && Guids(info.GetValueOrDefault((byte)51)).SequenceEqual([chest.TreasureGuid!.Value]) && info[52] is int[] wi && wi.SequenceEqual([Ix("DEFAULT_CHEST_VETERAN")]),
+              "world map: ClusterInfoUpdate {51 the Guid, 52 the index}");
+
+        // Gone (despawned): the next list is empty.
+        mark = peerA.Events.Count;
+        lock (world.Sync) Combat.RemoveBag(chest, "test");
+        Tick(0.1);
+        var gone = peerA.Events.Skip(mark).LastOrDefault(e => Code(e) == (int)EventCodes.LocalTreasuresUpdate);
+        Check(gone is not null && Entries(gone).Count == 0, "a despawn: 284 with an empty list");
+        world.Dispose();
+        characters.Dispose();
+        try { Directory.Delete(dir, true); } catch (IOException) { }
+    }
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
 

@@ -721,7 +721,7 @@ public sealed partial class Mists(World world)
             };
             if (world.Dungeons.MakeChest(map, point, chests, state: 6, lootTier: zone.Tier) is { } chest)
             {
-                world.TreasureCoffers.Contest(map, chest); // issue #19: its pvpzoneradius circle (Pvp:Mode Official)
+                world.TreasureCoffers.Contest(map, chest, t.Subtype); // issue #19: its pvpzoneradius circle (Pvp:Mode Official); #23: listed
                 map.AddObject(chest);
                 Log.Info("world", $"{zone}: {t.Subtype} {chest}");
             }

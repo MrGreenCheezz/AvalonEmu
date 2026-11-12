@@ -504,11 +504,16 @@ open world, as the client data distributes them (treasuredistribution.xml):
 - **The PvP circle** (`Pvp:Mode` `Official` only, not in a safe zone): 30 m around it (elite 40 m) every player is unrestricted
   (the client's barrier and UnrestrictedPvpZoneUpdate): two players inside fight each other whatever their flags, unless in one
   party (guild mates not under `Guilds:NoFriendlyFire`).
+- **On the maps** (public issue #23): every standing, unopened treasure (also the Mists' chests and coffers and a GM's) is on the
+  minimap from anywhere in the cluster: LocalTreasuresUpdate at every Join (empty without one, as official) and to the cluster's
+  players whenever the list changes (a spawn, an opening, a despawn). Its definition index is that of the client's own treasure
+  list, worked out from treasuredistribution.xml at load. The veteran and elite chests also show on the world map (ClusterInfoUpdate)
+  to players at most their `worldmaprange` cluster exits away (1, elite 2).
 
 `TreasureCoffers:Sizes` (`["coffer", "solo", "veteran", "elite"]`) limits which ones are placed. `TreasureCoffers:TestAlways` (false) is a
 dev aid: every open-world cluster gets treasures (a mob spawn point stands in for a missing spot) and every draw places one. GMs:
 `.coffer` lists the cluster's slots and spots, `.coffer spawn [coffer|solo|veteran|elite]` puts one in front of you, `.chest unlock` ends
-its countdown. Not done: the world-map marker of the veteran and elite chests, the faction chests and the Red Zone Event.
+its countdown. Not done: the faction chests and the Red Zone Event.
 
 ### World bosses
 

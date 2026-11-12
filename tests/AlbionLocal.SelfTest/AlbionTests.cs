@@ -262,7 +262,7 @@ public static class AlbionTests
         int Code(EventData e) => Convert.ToInt32(e.Parameters.GetValueOrDefault(ReservedKeys.EventCode));
         Check(jr.a8b == hero.Id && first.Events.Select(Code).ToArray() is
                   [(int)EventCodes.NewEquipmentItem, (int)EventCodes.NewSimpleItem, (int)EventCodes.UpdateChatSettings, (int)EventCodes.MountCooldownUpdate,
-                   (int)EventCodes.JoinFinished, (int)EventCodes.NewUnreadMails, (int)EventCodes.MailOperationPossible, (int)EventCodes.MutePlayerUpdate,
+                   (int)EventCodes.LocalTreasuresUpdate, (int)EventCodes.JoinFinished, (int)EventCodes.NewUnreadMails, (int)EventCodes.MailOperationPossible, (int)EventCodes.MutePlayerUpdate,
                    (int)EventCodes.FriendRequestInfos, (int)EventCodes.FriendRequestInfos, (int)EventCodes.FriendInfos]
               && jr.a9q?[0] == Convert.ToInt64(first.Events[0].Parameters[0]) && jr.a9t?[0] == Convert.ToInt64(first.Events[1].Parameters[0]),
               "join returns the character, its items are created and listed in the containers; after JoinFinished the mailbox's 201/202 and the login's mute and friends lists (stageJ)");
@@ -697,11 +697,11 @@ public static class AlbionTests
         var fai = events.FindIndex(p => Code(p) == (int)EventCodes.FullAchievementInfo);
         // Unlock-all has no fame inside a level, so no 153: 150, empty tracking (154), minimal auto-learn (155).
         // Then MountCooldownUpdate, sent at every Join (stageD mounts SPEC §4.8).
-        Check(fai >= 0 && fai == events.Count - 5 && Code(events[^4]) == (int)EventCodes.FullTrackedAchievementInfo
-              && events[^4].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^3]) == (int)EventCodes.FullAutoLearnAchievementInfo
-              && events[^3].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^2]) == (int)EventCodes.MountCooldownUpdate
-              && Code(events[^1]) == (int)EventCodes.JoinFinished,
-              "FullAchievementInfo, empty tracking and auto-learn lists, then MountCooldownUpdate before JoinFinished");
+        Check(fai >= 0 && fai == events.Count - 6 && Code(events[^5]) == (int)EventCodes.FullTrackedAchievementInfo
+              && events[^5].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^4]) == (int)EventCodes.FullAutoLearnAchievementInfo
+              && events[^4].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^3]) == (int)EventCodes.MountCooldownUpdate
+              && Code(events[^2]) == (int)EventCodes.LocalTreasuresUpdate && Code(events[^1]) == (int)EventCodes.JoinFinished,
+              "FullAchievementInfo, empty tracking and auto-learn lists, then MountCooldownUpdate and LocalTreasuresUpdate (issue #23) before JoinFinished");
         var ach = new FullAchievementInfoEvent();
         AlbionSerializer.FillFields(ach, events[fai]);
         Check(ach.ddn == jr.a8a && ach.ccy?.Length == 30 && ach.ccz?.Length == 674 && ach.cc0 is { Length: 674 } lv && lv.All(l => l == 100)
@@ -998,16 +998,16 @@ public static class AlbionTests
         Check(!join.Parameters.ContainsKey(112) && !join.Parameters.ContainsKey(116), "join leaves out arrays the official server never sends");
         // Items go out before the Join response (as on the official server), then the chat tabs and JoinFinished.
         var events = new List<Dictionary<byte, object?>>();
-        while (events.Count < 5 && gameClient.Events.TryTake(out var ie, 5000)) events.Add(ie.Parameters);
+        while (events.Count < 6 && gameClient.Events.TryTake(out var ie, 5000)) events.Add(ie.Parameters);
         SkipLoginLists(gameClient);
         int Code(int i) => Convert.ToInt32(events[i].GetValueOrDefault(ReservedKeys.EventCode));
-        Check(events.Count == 5
+        Check(events.Count == 6
               && Code(0) == (int)EventCodes.NewEquipmentItem && Convert.ToInt32(events[0][1]) == 8610
               && Convert.ToInt64(events[0][8]) == 135_000_000 && events[0].GetValueOrDefault((byte)9) is short[] && events[0].GetValueOrDefault((byte)10) is short[]
               && Code(1) == (int)EventCodes.NewSimpleItem && Convert.ToInt32(events[1][2]) == 10
               && Code(2) == (int)EventCodes.UpdateChatSettings && events[2][0] is string[] { Length: 7 } && events[2][1] is int[][] { Length: 7 }
-              && Code(3) == (int)EventCodes.MountCooldownUpdate && Code(4) == (int)EventCodes.JoinFinished,
-              "items are created, then the chat tabs (without them the client shows no chat line), MountCooldownUpdate (every Join) and JoinFinished follow the join response");
+              && Code(3) == (int)EventCodes.MountCooldownUpdate && Code(4) == (int)EventCodes.LocalTreasuresUpdate && Code(5) == (int)EventCodes.JoinFinished,
+              "items are created, then the chat tabs (without them the client shows no chat line), MountCooldownUpdate (every Join), LocalTreasuresUpdate (issue #23) and JoinFinished follow the join response");
         Check(jr.a9p == second.EquipmentContainer && jr.a9s == second.InventoryContainer
               && jr.a9q?.Length == 10 && jr.a9q[0] == Convert.ToInt64(events[0][0])
               && jr.a9t?.Length == 48 && jr.a9t[0] == Convert.ToInt64(events[1][0]),
