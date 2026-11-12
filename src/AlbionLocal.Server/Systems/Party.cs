@@ -18,8 +18,13 @@ public sealed class PartyMember(Guid id, string name, byte frame)
 
     public byte Frame { get; } = frame;
 
-    /// <summary>The role of op 234 (an itemroles index; -1 special), PartyJoined key 15 / PartyPlayerJoined key 9.</summary>
-    public int Role { get; set; }
+    /// <summary>
+    /// The role of op 234 (an itemroles index; -1 = none), PartyJoined key 15 / PartyPlayerJoined key 9. <b>-1 by default</b>:
+    /// index 0 is a real role (expedition TANK) that has no <c>mapmarkercolor</c> in itemroles.xml, and the client paints a
+    /// party member's minimap dot from the role's colour (MapLabel.GetMapMarkerColorForPlayer), so 0 renders a fully
+    /// transparent dot. -1 is what the client itself sends for "none" (f8k.aq(-1)) and falls back to the default colour.
+    /// </summary>
+    public int Role { get; set; } = -1;
 
     /// <summary>When the member was first seen without a joined player (<see cref="Parties.Update"/>); null while it plays.</summary>
     public TimeSpan? OfflineSince { get; set; }
@@ -428,12 +433,22 @@ public sealed class Parties(World world)
         return 0;
     }
 
-    /// <summary>Flow 7, PartySetRole (234, no response): the role is stored, then PartySetRoleFlag (243) {0 role, 1 Guid} to all. Nothing outside a party.</summary>
+    /// <summary>
+    /// Flow 7, PartySetRole (234, no response): the role is stored, then PartySetRoleFlag (243) {0 role, 1 Guid} to all. Nothing
+    /// outside a party. -1 (no role) is stored as it is; a value below it is not an itemroles index and is ignored (the index is
+    /// build-locked, so nothing above the table is clamped either: the client falls back to its default colour for it).
+    /// </summary>
     public void SetRole(Player p, int role)
     {
         if (Of(p.Character.Id) is not { } party) return;
+        if (role < -1)
+        {
+            Combat.LogOnce("party-role:" + role, $"'{p.Character.Name}' sends party role {role}, not an itemroles index: ignored");
+            return;
+        }
         party.Find(p.Character.Id)!.Role = role;
         SendTo(party, new PartySetRoleFlagEvent { dk1 = role, dk2 = p.Character.Id });
+        Log.Debug("party", $"'{p.Character.Name}' takes party role {role} (party {party.Id})");
     }
 
     /// <summary>
