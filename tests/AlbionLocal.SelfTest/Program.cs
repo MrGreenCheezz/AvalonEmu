@@ -75,6 +75,7 @@ tests.AddRange(OpenPvpTest.All);
 tests.AddRange(FlagToggleTest.All);
 tests.AddRange(QolTest.All);
 tests.AddRange(VanityTest.All);
+tests.AddRange(AvatarTest.All);
 tests.AddRange(PvpDeathTest.All);
 tests.AddRange(PveTest.All);
 tests.AddRange(OpsAuditTest.All);

@@ -287,7 +287,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
     /// (cp0.x8_1 0x180bdab90 throws on null); 55 seven -1 (cosmetic slots, null-safe). StageE (pvp SPEC §0, §3.4, §5): 37 the
     /// reputation points (left out at 0), 38 now, 39 their level (NEUTRAL 4 at 0 points), 53 the flag and 56 the enlisted faction
     /// (both left out at 0). StageH guilds (SPEC §2.7): 8 the guild name, 9 its Guid, 44-50 the crest and 51 "" for a member
-    /// (<see cref="Systems.Guilds.Apply(NewCharacterEvent, Guid)"/>); left out without a guild. Avatar keys are left out (read null-safe), but a bot's avatar (key 2, stage I).
+    /// (<see cref="Systems.Guilds.Apply(NewCharacterEvent, Guid)"/>); left out without a guild. 2 the avatar and 3 the ring (public issue #22; a bot's avatar from its BotInfo, stage I).
     /// </summary>
     public NewCharacterEvent BuildCreate(DateTime now)
     {
@@ -300,6 +300,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
         var e = new NewCharacterEvent
         {
             cvx = Id, cvy = c.Name ?? "", cvz = IsBot ? 0 : c.Template,
+            cv0 = IsBot ? 0 : c.AvatarRing,                                                                  // [3] the avatar ring (csc.v reads atd +0x24)
             cv1 = IsBot ? c.Template : c.Appearance,
             cv2 = look ? c.Customization : null, cv3 = look ? c.Clothes : null, cv4 = c.Id,
             cwb = position, cwc = target, cwf = stamp, cwg = direction, cwh = speed,                        // [14] [15] [18] [19] [20]
@@ -312,7 +313,7 @@ public sealed class Player(WorldSession session, World world, long id, Character
             cxe = Flag, cxh = Faction,                                                                       // [53] [56]
         };
         World.Guilds.Apply(e, c.Id); // 8, 9, 44-51: the guild over the nameplate (stageH guilds SPEC §2.7)
-        if (Bot is { Avatar: > 0 } bot) e.cvz = bot.Avatar; // [2] stage I: a bot's avatar (index into avatars.xml; a human's is not kept yet)
+        if (Bot is { Avatar: > 0 } bot) e.cvz = bot.Avatar; // [2] stage I: a bot's avatar (index into avatars.xml)
         if (Inventory.Equipment[MountSlot] is not null)
         {
             e.cwt = mount.Value; e.cwu = mount.Max; e.cwv = mount.RegenCap; e.cww = mount.RegenPerSecond; e.cwx = mount.Stamp; // [32-36]

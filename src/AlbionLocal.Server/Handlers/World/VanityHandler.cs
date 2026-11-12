@@ -53,4 +53,29 @@ public sealed partial class WorldSession
         world.Vanity.SetWardrobe(p, req.agb);
         return new GenericResponse();
     }
+
+    /// <summary>
+    /// ChangeAvatar (op 148, p8 {0 avatar, 1 ring}; aeb {0 avatar, 1 ring}): the rules in <see cref="Vanity.ChangeAvatar"/>; the response always
+    /// carries the avatar and ring in force (cwd.ai7 applies them), with RC 0 or the refusal HeroStatsGui.OnChangeAvatarError shows.
+    /// </summary>
+    [Handles(OperationCodes.ChangeAvatar, Status = SessionStatus.InWorld)]
+    private AlbionResponse? ChangeAvatar(ChangeAvatarRequest req)
+    {
+        if (Player is not { } p) return new GenericResponse { ReturnCode = Vanity.Refused };
+        var rc = world.Vanity.ChangeAvatar(p, req.d7, req.d8);
+        return new ChangeAvatarResponse { ReturnCode = rc, ans = p.Character.Template, ant = p.Character.AvatarRing };
+    }
+
+    /// <summary>ChangeCustomization (op 388, qc {0 type, 1 int[] meshes, 2 int[] colours, 3 bool}; no response class): RC 0 or <see cref="Vanity.Refused"/>.</summary>
+    [Handles(OperationCodes.ChangeCustomization, Status = SessionStatus.InWorld)]
+    private AlbionResponse? ChangeCustomization(ChangeCustomizationRequest req)
+    {
+        if (Player is not { } p) return new GenericResponse { ReturnCode = Vanity.Refused };
+        if (world.Vanity.ChangeCustomization(p, req.ek, req.el, req.em) is { } why)
+        {
+            Log.Info(Name, $"'{p.Character.Name}' customization refused: {why}");
+            return new GenericResponse { ReturnCode = Vanity.Refused };
+        }
+        return new GenericResponse();
+    }
 }

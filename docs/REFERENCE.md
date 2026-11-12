@@ -1906,6 +1906,16 @@ Saved with the character (`albionlocal.db` schema v35). Avatars, avatar rings an
 GM: `.vanity list [text]` (yours, or the catalogue entries with the text and their ids), `.vanity grant <id|name>`,
 `.vanity revoke <id|name>`, `.vanity drop [theme]` (a drop now, e.g. `.vanity drop UNDEAD`).
 
+**Portrait avatar and body** (public issue #22). The character window's avatar tab (ChangeAvatar) sets the portrait and its ring:
+any avatar or ring that avatars.xml does not lock (AVATAR_01-11, RING1), plus the account-wide ones whose vanity unlock the account
+owns (`.vanity grant AVATARRING_TELLAFRIEND` ...). Journal, gameplay and season avatars/rings stay locked: nothing on this server
+unlocks them yet (the client does not offer them either); a refused choice shows the client's message and keeps the old one. The
+vanity tab's customization (ChangeCustomization) changes sex, face, hair, beard, underwear and the skin, hair and underwear
+colours, free of charge (the client sends no price, so none is taken); hair and beards marked Buyable in characters.xml need their
+vanity unlock. Others see both changes at once; they are saved (the ring in schema v46, `avatar_ring`) and shown again in the
+character list, after a login and to players who meet you later. Running a server of this version converts `albionlocal.db` to
+schema v46 (one column; an older server build refuses the converted file).
+
 ## Player bots
 
 Under the pve preset the towns are not empty (stage I, `../analysis/work/stageI/bots/SPEC.md`, phase 1): **city bots** stand at

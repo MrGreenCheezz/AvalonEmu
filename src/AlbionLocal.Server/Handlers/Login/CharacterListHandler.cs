@@ -37,7 +37,7 @@ public sealed partial class LoginSession
         r.bdh = Each(c => world?.Islands.WorldOf(c.Cluster) ?? world?.Hideouts.WorldOf(c.Cluster) ?? world?.Expeditions.WorldOf(c.Cluster)
             ?? world?.Corrupted.Find(c.Cluster)?.World ?? world?.Hellgates.WorldOf(c.Cluster) ?? c.Cluster); // [13] base world map
         r.bdi = Each(c => c.Template);        // [14] avatar lookup (creation key 1)
-        r.bdj = Ints();                       // [15] c.g  appearance lookup
+        r.bdj = Each(c => c.AvatarRing);      // [15] c.g  avatar ring (LoginInProcessDialog.Close looks it up in bbg's ring list)
         r.bdk = new byte[n];                  // [16] c.h  FlaggingStatus
         r.bdl = Each(c => c.Appearance);      // [17] body template (creation key 2)
         r.bdm = Each(c => world?.GameData?.Looks.SelectionJson(c) ?? ""); // [18] cpr customization JSON for selection preview

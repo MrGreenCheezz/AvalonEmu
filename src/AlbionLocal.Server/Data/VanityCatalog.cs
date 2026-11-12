@@ -33,6 +33,33 @@ public sealed class VanityCatalog
 
     public IReadOnlyList<Unlock> All { get; }
 
+    /// <summary>
+    /// One portrait avatar or avatar ring of avatars.xml (public issue #22): its number is its index in &lt;avatars&gt; / &lt;avatarrings&gt;
+    /// (bbg.abo / its ring twin index bbg +0x28 / +0x38, the lists ChangeAvatar, Join keys 3/4 and NewCharacter keys 2/3 are looked up in).
+    /// The client offers one (ctp.af_68 for an avatar, its twin for a ring) when it is not locked, when the account owns the vanity unlock
+    /// <see cref="AccountUnlock"/> (accountwidevanityunlockneeded), or when it is in the unlocked list of UpdateUnlockedAvatars 222 /
+    /// UpdateUnlockedAvatarRings 223 (or the founder/starter level suffices).
+    /// </summary>
+    public sealed record AvatarEntry(int Number, string Name, bool Locked, string AccountUnlock);
+
+    /// <summary>avatars.xml &lt;avatars&gt; in file order (AVATAR_01 = 0, the default).</summary>
+    public IReadOnlyList<AvatarEntry> Avatars { get; private init; } = [];
+
+    /// <summary>avatars.xml &lt;avatarrings&gt; in file order (RING1 = 0, the default).</summary>
+    public IReadOnlyList<AvatarEntry> Rings { get; private init; } = [];
+
+    /// <summary>The Customization unlock of each characters.xml &lt;Mesh&gt; by (character type, item, mesh index), as registered by bbl.db.</summary>
+    private readonly Dictionary<(string, string, int), Unlock> _meshes = new();
+
+    /// <summary>The Customization unlock of each &lt;Color&gt; by (colour set, colour index).</summary>
+    private readonly Dictionary<(string, int), Unlock> _colors = new();
+
+    /// <summary>The unlock of mesh <paramref name="mesh"/> of customization item <paramref name="item"/> of <paramref name="type"/> (HUMAN_MALE …); null = none.</summary>
+    public Unlock? CustomizationMesh(string type, string item, int mesh) => _meshes.GetValueOrDefault((type, item, mesh));
+
+    /// <summary>The unlock of colour <paramref name="index"/> of colour set <paramref name="set"/>; null = none.</summary>
+    public Unlock? CustomizationColor(string set, int index) => _colors.GetValueOrDefault((set, index));
+
     /// <summary>mountskins.xml's &lt;mountcategory&gt; names by their index.</summary>
     public IReadOnlyList<string> MountCategories { get; }
 
@@ -91,13 +118,29 @@ public sealed class VanityCatalog
             all.Add(new Unlock((short)all.Count, type, name, state, (string?)e.Attribute("availablevia") ?? (gold > 0 ? "Gold" : "None"), number, slot));
         }
         // characters.xml: the meshes of every customization's items, then the colours of every colour set (b3f, then b3e).
+        var meshes = new Dictionary<(string, string, int), Unlock>();
+        var colors = new Dictionary<(string, int), Unlock>();
         if (characters.Element("Customizations") is { } cz)
         {
             foreach (var c in cz.Elements("Customization"))
                 foreach (var it in c.Elements("Item"))
-                    foreach (var m in it.Elements("Mesh")) Add(UnlockType.Customization, (string?)m.Attribute("uniquename") ?? "", m);
+                {
+                    var index = 0;
+                    foreach (var m in it.Elements("Mesh"))
+                    {
+                        Add(UnlockType.Customization, (string?)m.Attribute("uniquename") ?? "", m);
+                        meshes[((string?)c.Attribute("uniquename") ?? "", (string?)it.Attribute("uniquename") ?? "", index++)] = all[^1];
+                    }
+                }
             foreach (var cs in cz.Elements("ColorSet"))
-                foreach (var col in cs.Elements("Color")) Add(UnlockType.Customization, (string?)col.Attribute("uniquename") ?? "", col);
+            {
+                var index = 0;
+                foreach (var col in cs.Elements("Color"))
+                {
+                    Add(UnlockType.Customization, (string?)col.Attribute("uniquename") ?? "", col);
+                    colors[((string?)cs.Attribute("uniquename") ?? "", index++)] = all[^1];
+                }
+            }
         }
         // mountskins.xml: every mountskin counts for the skin number; registered when its reference is a mountskin item (bed.b.a1 → bdq).
         var categories = new List<string>();
@@ -138,6 +181,15 @@ public sealed class VanityCatalog
             Add(UnlockType.Avatar, (string?)a.Attribute("name") ?? "", a);
         foreach (var a in avatars.Element("peraccountavatarrings")?.Elements("avatarring") ?? [])
             Add(UnlockType.AvatarRing, (string?)a.Attribute("name") ?? "", a);
-        return new VanityCatalog(all, categories);
+        static List<AvatarEntry> Entries(IEnumerable<XElement> list) => [.. list.Select((a, i) => new AvatarEntry(i, (string?)a.Attribute("name") ?? "",
+            (bool?)a.Attribute("locked") ?? false, (string?)a.Attribute("accountwidevanityunlockneeded") ?? ""))];
+        var catalog = new VanityCatalog(all, categories)
+        {
+            Avatars = Entries(avatars.Element("avatars")?.Elements("avatar") ?? []),
+            Rings = Entries(avatars.Element("avatarrings")?.Elements("avatarring") ?? []),
+        };
+        foreach (var (k, u) in meshes) catalog._meshes[k] = u;
+        foreach (var (k, u) in colors) catalog._colors[k] = u;
+        return catalog;
     }
 }

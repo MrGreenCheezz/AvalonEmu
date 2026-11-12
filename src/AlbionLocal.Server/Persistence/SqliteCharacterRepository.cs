@@ -606,6 +606,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
             built       INTEGER NOT NULL                     -- GameTimeStamp
         );
         """,
+        // v46 (public issue #22): the avatar ring (avatars.xml <avatarrings> index; Join key 4, NewCharacter key 3, Login key 15).
+        """
+        ALTER TABLE characters ADD COLUMN avatar_ring INTEGER NOT NULL DEFAULT 0;    -- 0 = RING1, the default ring
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";
@@ -615,7 +619,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         + "direction, previous_cluster, last_left_at, last_city, pending_transfer, fame, silver, gold, effects, cooldowns, focus, mounted_since, mount_cooldown, "
         + "flag, faction, reputation, reputation_at, dungeon_return, journal_tracked, expeditions, goals, black_market, "
         + "focus_stamp, learning_points, lp_stamp, use_flags, autolearn, infamy, mist_standing, mist_favor, loadouts, "
-        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening, portal_binding";
+        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening, portal_binding, avatar_ring";
 
     private readonly object _sync = new();
     private readonly SqliteConnection _db;
@@ -774,7 +778,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                             $direction, $previous, $left, $city, $transfer, $fame, $silver, $gold, $effects, $cooldowns, $focus, $mounted, $mountcd,
                             $flag, $faction, $reputation, $reputationat, $dungeon, $journal, $expeditions, $goals, $bm,
                             $focusstamp, $lp, $lpstamp, $useflags, $autolearn, $infamy, $miststanding, $mistfavor, $loadouts,
-                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial, $portal)
+                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial, $portal, $ring)
                         """, tx, [("$account", c.Account.ToString()), .. CharacterValues(c)]))
                     insert.ExecuteNonQuery();
                 WriteContents(c, tx);
@@ -823,7 +827,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     infamy = $infamy, mist_standing = $miststanding, mist_favor = $mistfavor, loadouts = $loadouts,
                     faction_standing = $fstanding, faction_points = $fpoints, faction_changed_at = $fchanged,
                     vanity = $vanity, played_ms = $played, tutorial_opening = $tutorial,
-                    portal_binding = $portal
+                    portal_binding = $portal, avatar_ring = $ring
                 WHERE id = $id
                 """, tx, CharacterValues(c)))
             if (update.ExecuteNonQuery() == 0) return false;
@@ -895,6 +899,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         ("$played", c.PlayedMilliseconds),
         ("$tutorial", c.Tutorial is null ? null : JsonSerializer.Serialize(c.Tutorial)),
         ("$portal", c.PortalBinding is { } portal ? JsonSerializer.Serialize(portal) : null),
+        ("$ring", c.AvatarRing),
     ];
 
     /// <summary>Inserts the items and the destiny board state of <paramref name="c"/> (the old rows are gone).</summary>
@@ -1061,7 +1066,8 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     PlayedMilliseconds = r.GetInt64(47),
                     Tutorial = r.IsDBNull(48) ? null : JsonSerializer.Deserialize<OpeningTutorialProgress>(r.GetString(48)),
                     PortalBinding = r.IsDBNull(49) ? null : JsonSerializer.Deserialize<PortalBinding>(r.GetString(49)),
-                    Account = Guid.Parse(r.GetString(50)),
+                    AvatarRing = r.GetInt32(50),
+                    Account = Guid.Parse(r.GetString(51)),
 
                 });
             }
