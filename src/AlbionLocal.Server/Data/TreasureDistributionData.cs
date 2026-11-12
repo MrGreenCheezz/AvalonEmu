@@ -23,6 +23,26 @@ public sealed class TreasureDistributionData
     public IReadOnlyList<TreasureDistribute> Distributes { get; private init; } = [];
 
     /// <summary>
+    /// The treasure kinds of the client's list (bfz.jo; the element names its entry parser bfz.abo(XmlElement, bfv) and the definition
+    /// sections create one per name of).
+    /// </summary>
+    public static readonly IReadOnlyList<string> ClientKinds =
+    [
+        "TreasureMob", "TreasurePile", "TreasureDragon", "TreasureShrine", "TreasureHuntTrack", "TreasureLootchest", "TreasureCagedObject",
+        "TreasureDestination", "TreasureHarvestable", "TreasureDragonAreaEntrance",
+    ];
+
+    private IReadOnlyDictionary<(string Kind, string Name), int> _clientIndex = new Dictionary<(string, string), int>();
+
+    /// <summary>
+    /// Public issue #23: the index of a treasure definition in the client's list bfz.jo, which LocalTreasuresUpdate key 2 and ClusterInfoUpdate
+    /// key 52 carry (bfz.abo(int) 0x18066D750, a plain list index). bfz.c8 0x1806763F0 adds bf1.NONE (0) and HUNTSPOTGENERIC (1), then reads the
+    /// sections in file order, GameobjectDistribution first; every entry or definition of a kind adds its name the first time it comes
+    /// (per kind, bfz.abo(bf1) 0x18066E000): document order. 0 (NONE) for a name the file lacks, which the client drops.
+    /// </summary>
+    public int ClientIndex(string kind, string name) => _clientIndex.GetValueOrDefault((kind, name));
+
+    /// <summary>
     /// The draw of <paramref name="subtype"/> for a cluster of <paramref name="continent"/> (Royal, Outlands, Avalon), world.xml cluster type
     /// <paramref name="clusterType"/> and <paramref name="tier"/>: the first &lt;Distribute&gt; of that continent and subtype whose clustertype is
     /// the cluster's (one without a clustertype takes every type) and that has the tier; null = none (no treasure of that subtype there).
@@ -63,13 +83,17 @@ public sealed class TreasureDistributionData
             distributes.Add(new TreasureDistribute((string?)d.Attribute("continent") ?? "", subtype, (string?)d.Attribute("clustertype"), tiers));
         }
         if (chests.Count == 0) throw new InvalidDataException("treasuredistribution.bin: no <TreasureLootchest>");
-        return new TreasureDistributionData { Lootchests = chests, Distributes = distributes };
+        var index = new Dictionary<(string, string), int>();
+        foreach (var e in root.Descendants().Where(e => ClientKinds.Contains(e.Name.LocalName)))
+            if (((string?)e.Attribute("uniquename") ?? (string?)e.Attribute("name")) is { Length: > 0 } name)
+                index.TryAdd((e.Name.LocalName, name), index.Count + 2); // after NONE and HUNTSPOTGENERIC
+        return new TreasureDistributionData { Lootchests = chests, Distributes = distributes, _clientIndex = index };
     }
 }
 
 /// <summary>
 /// A &lt;TreasureLootchest&gt;: its name, the LootChestSpawnpoint of lootchests.xml it spawns, its category (Coffer, Chest) and maxlifetime (seconds an
-/// unopened one stands, 86 400); the veteran and elite chests also name a world-map treasure (worldmaptreasure, worldmaprange; not sent yet, SPEC §5).
+/// unopened one stands, 86 400); the veteran and elite chests also name a world-map treasure (worldmaptreasure, worldmaprange: issue #23, TreasureCoffers.FillWorldMap).
 /// </summary>
 public sealed record TreasureLootchest(string Name, string Spawnpoint, string Category, double MaxLifetimeSeconds)
 {
