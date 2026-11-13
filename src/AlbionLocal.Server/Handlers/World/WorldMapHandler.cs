@@ -14,8 +14,16 @@ public sealed partial class WorldSession
     /// after a few minutes. Officially there is no response, one event ClusterInfoUpdate (139) per id within 0.14 s; here
     /// the same, every time it is asked, from <see cref="ClusterInfo"/>. An id left unanswered (not in world.xml, or a
     /// territory cluster) just stays pending on the client and is not asked again.
+    /// <para>
+    /// Public issue #28: the open map runs that cache every frame (Worldmap.Update 0x180e86f30 → UpdateVisibleClusters), and fw3.a
+    /// sends only the ids neither pending nor answered within its TTL (fw3() 0x181be7f30: c4.l(60), 60 s; fw3.a_2 0x181be81a0), so a
+    /// request a frame while the map is dragged or zoomed is normal: each carries just the clusters that came into view. An answer
+    /// cannot make it ask again: Worldmap.OnClusterUpdate 0x180e82480 hands it to fw3.a 0x181be8450 (cached, no longer pending) before
+    /// it reads any key. Hence Quiet (the per-frame Info line flooded the console and the log), and at most <see cref="MaxMapIds"/>
+    /// ids per request are looked at (a client asks for those in view; the rest of a longer list stays pending on the client).
+    /// </para>
     /// </summary>
-    [Handles(OperationCodes.SubscribeToCluster, Status = SessionStatus.InWorld)]
+    [Handles(OperationCodes.SubscribeToCluster, Status = SessionStatus.InWorld, Quiet = true)]
     private AlbionResponse? SubscribeToCluster(SubscribeToClusterRequest req)
     {
         if (req.agl is not { Length: > 0 } ids) return null;
@@ -26,16 +34,23 @@ public sealed partial class WorldSession
             return null;
         }
         var sent = 0;
-        foreach (var id in ids.Distinct(StringComparer.Ordinal))
+        var from = Player?.Map?.Cluster;
+        foreach (var id in ids.Take(MaxMapIds).Distinct(StringComparer.Ordinal))
             if (ClusterInfo(info, id, world.StaticDungeons, world.Territories, world.Outposts) is { } ev)
             {
-                world.TreasureCoffers.FillWorldMap(ev, id, Player?.Map?.Cluster); // issue #23: keys 51-56, the veteran and elite chests in range
+                world.TreasureCoffers.FillWorldMap(ev, id, from); // issue #23: keys 51-56, the veteran and elite chests in range
                 SendEvent(ev);
                 sent++;
             }
-        Log.Debug(Name, $"SubscribeToCluster: {sent} of {ids.Length} cluster(s) answered");
+        Log.Debug(Name, $"SubscribeToCluster: {sent} of {ids.Length} cluster(s) answered{(ids.Length > MaxMapIds ? $" (only the first {MaxMapIds} looked at)" : "")}");
         return null;
     }
+
+    /// <summary>
+    /// The most ids of one SubscribeToCluster looked at (issue #28): more than world.xml has clusters (the self-test checks), so even a
+    /// request for every cluster is answered in full, while a list of any length costs bounded work under the world lock [choice].
+    /// </summary>
+    public const int MaxMapIds = 4096;
 
     /// <summary>
     /// The phase-1 ClusterInfoUpdate (al5) of <paramref name="id"/>, built by hand in the official plain shape (SPEC §2) and

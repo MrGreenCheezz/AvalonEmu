@@ -22,7 +22,87 @@ public static class TreasureCofferTest
     [
         ("treasure coffers: treasuredistribution draws, lootchests protection/circle/size; a yellow-zone coffer's countdown, PvP circle (308, Hostile), opening, despawn and next draw", Run),
         ("treasure map markers: the client's treasure list index, LocalTreasuresUpdate 284 at Join and on a spawn/despawn, the world map's ClusterInfoUpdate 51-56 (issue #23)", Markers),
+        ("treasure map burst: 300 SubscribeToCluster requests with treasure markers answered quickly while the world ticks; whole-map and oversized lists; the watchdog's report (issue #28)", Burst),
     ];
+
+    /// <summary>
+    /// Public issue #28: a dragged world map asks once a frame. 300 requests of 20 ids (the treasure cluster among them, a veteran and an elite
+    /// chest standing) with a tick every 10, one for every world.xml cluster and one of 10 000 ids: all answered (one 139 per known id, the
+    /// markers in each), well within the time, the world ticked, nothing left holding the lock in <see cref="WorldActivity"/>; and what
+    /// <see cref="WorldWatchdog.Describe"/> reports for a stuck tick and a stuck log line.
+    /// </summary>
+    private static void Burst()
+    {
+        var store = Day15.Value;
+        var found = store.World.Clusters.Where(c => c.Type == "OPENPVP_YELLOW" && ClusterNameInfo.Parse(c.File) is { Type: 0, Continent: 1, Tier: 5 })
+            .OrderBy(c => c.Id, StringComparer.Ordinal).Select(c => c.Id).First();
+        var spot = store.Get(found).MobSpawnPoints[0].Position;
+        var dir = NewDir();
+        var characters = Repository(dir);
+        var clock = new ManualClock();
+        var anchor = DateTime.UtcNow.Ticks;
+        var world = new World(new ServerConfig { JoinByCharacterId = true, TreasureRespawnMinutes = 600 }, characters, Client.Items, Client.GameData, Client.Spells)
+        {
+            Sync = new object(), Clock = clock, Clusters = store, MapSeed = 28, GameTicks = () => anchor + clock.Now.Ticks,
+        };
+        world.MobAi = false;
+        var hero = EventTest.NewHero(characters, spot);
+        hero.Cluster = found;
+        characters.Save(hero);
+        var (s, peer) = EventTest.Join(world, hero.Id);
+        var map = world.Maps.Find(found)!;
+        LootChest veteran, elite;
+        lock (world.Sync)
+        {
+            veteran = world.TreasureCoffers.SpawnAt(map, "veteran", spot + new Vector2(300, 0), 0);
+            elite = world.TreasureCoffers.SpawnAt(map, "elite", spot + new Vector2(0, 300), 0);
+            world.Update();
+        }
+        string[] ids = [found, .. store.World.Clusters.Select(c => c.Id).Where(id => id != found).Take(19)];
+        var known = ids.Count(id => WorldSession.ClusterInfo(store.World, id, world.StaticDungeons, world.Territories, world.Outposts) is not null);
+        var ticks = world.Profile.Ticks;
+        var mark = peer.Events.Count;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 300; i++)
+        {
+            lock (world.Sync) s.OnRequest(Request(new SubscribeToClusterRequest { agl = ids }, 1000 + i), encrypted: false);
+            if (i % 10 == 9)
+            {
+                clock.Advance(TimeSpan.FromMilliseconds(50));
+                lock (world.Sync) world.Update();
+            }
+        }
+        var burst = watch.Elapsed;
+        var answers = peer.Events.Skip(mark).Where(e => Code(e) == (int)EventCodes.ClusterInfoUpdate).ToList();
+        var marked = answers.Where(e => e.Parameters[0] is string id && id == found).ToList();
+        Check(known >= 2 && answers.Count == 300 * known && marked.Count == 300
+              && marked.All(e => Guids(e.Parameters.GetValueOrDefault((byte)51)).ToHashSet().SetEquals([veteran.TreasureGuid!.Value, elite.TreasureGuid!.Value]))
+              && world.Profile.Ticks == ticks + 30 && burst < TimeSpan.FromSeconds(3) && WorldActivity.Current is null,
+              $"300 requests of 20 ids: {answers.Count} ClusterInfoUpdate (expected 300 x {known}), the treasure cluster's {marked.Count} with both markers, "
+              + $"{world.Profile.Ticks - ticks} ticks in between, {burst.TotalMilliseconds:0} ms (under 3 s), no lock holder left");
+
+        // The whole map at once and an oversized list: bounded (WorldSession.MaxMapIds) and quick.
+        string[] all = [.. store.World.Clusters.Select(c => c.Id)];
+        mark = peer.Events.Count;
+        watch.Restart();
+        lock (world.Sync) s.OnRequest(Request(new SubscribeToClusterRequest { agl = all }, 2000), encrypted: false);
+        lock (world.Sync) s.OnRequest(Request(new SubscribeToClusterRequest { agl = [.. Enumerable.Repeat(found, 10_000)] }, 2001), encrypted: false);
+        var whole = watch.Elapsed;
+        var answered = peer.Events.Skip(mark).Count(e => Code(e) == (int)EventCodes.ClusterInfoUpdate);
+        var expected = all.Count(id => WorldSession.ClusterInfo(store.World, id, world.StaticDungeons, world.Territories, world.Outposts) is not null) + 1;
+        Check(all.Length < WorldSession.MaxMapIds && answered == expected && whole < TimeSpan.FromSeconds(3),
+              $"every one of the {all.Length} world.xml clusters (under {WorldSession.MaxMapIds}) and 10 000 copies of one id: {answered} answers (expected {expected}), {whole.TotalMilliseconds:0} ms");
+
+        var stuck = WorldWatchdog.Describe(TimeSpan.FromSeconds(6), WorldLoop.TickActivity, TimeSpan.FromSeconds(6), "guilds", TimeSpan.Zero, 8, 3);
+        var logging = WorldWatchdog.Describe(TimeSpan.FromSeconds(7), "game#1: <- Move", TimeSpan.FromSeconds(7), null, TimeSpan.FromSeconds(7), 8, 0);
+        Check(WorldWatchdog.Describe(TimeSpan.FromMilliseconds(60), null, TimeSpan.Zero, null, TimeSpan.Zero, 8, 0) is null
+              && stuck is { } a && a.Contains("held by the world tick in the section after 'guilds' for 6.0 s") && a.Contains("the logger is free")
+              && logging is { } b && b.Contains("held by game#1: <- Move for 7.0 s") && b.Contains("one log line has been in writing for 7.0 s"),
+              $"watchdog: nothing to say for a healthy world; a stuck tick names its section, a stuck request its operation, a stuck log line its age ({stuck} | {logging})");
+        world.Dispose();
+        characters.Dispose();
+        try { Directory.Delete(dir, true); } catch (IOException) { }
+    }
 
     /// <summary>The 284 entries of <paramref name="e"/>: (Guid, index, id, subtype).</summary>
     private static List<(Guid Guid, int Index, long Id, string Subtype)> Entries(EventData e)
