@@ -203,6 +203,15 @@ public static class Flagging
         var world = p.World;
         var now = world.GameNow;
         var at = p.PositionAt(DateTime.UtcNow);
+        // CastFinished (18) {0 me, 1 me, 2 the spell, 3 slot 24, 4 0, 5 the cast end, 6 1.0} before the hit: it is what ends the
+        // client's own cast of slot 24. Without it the client stayed in the casting animation with its input blocked — the player
+        // was stuck until a relog (reported after a deflag: FLAG_MOUNTAIN → FLAG_BLUE, 15 s). Official batch, one instant:
+        // fortress-capture-kit/output/fortress_20261107_231749.transcript.txt 1794090356.9412 (events 8, 18, 19, 364 for spell 1044
+        // on slot 24, CastFinished key 3 = 24, key 6 = 1.0); the ordinary cast path sends the same pair in SpellCasts.Finish.
+        p.SendAround(new CastFinishedEvent
+        {
+            ddn = p.Id, bux = p.Id, buy = cast.SpellId, buz = Slot, bu0 = 0, bu1 = cast.End, bu2 = 1.0f,
+        });
         p.SendAround(new CastSpellEvent
         {
             ddn = p.Id, bvw = p.Id, bvx = at, bvy = cast.SpellId, bvz = now, bv0 = now, Extra = new() { [6] = (byte)0, [7] = (short)0 },
