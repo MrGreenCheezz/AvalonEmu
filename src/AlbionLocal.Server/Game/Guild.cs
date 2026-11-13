@@ -142,6 +142,12 @@ public static class GuildRoles
     /// <summary>GuildPermission ALLIANCE_MANAGEMENT (stageP hideouts SPEC §1.1): found, leave, invite to, kick from and disband the guild's alliance, answer invitations.</summary>
     public const long AllianceManagement = 131072;
 
+    /// <summary>
+    /// GuildPermission ISLAND_MANAGEMENT: the island merchant's buy / upgrade button on the guild tab (IslandMerchantGui.HasIslandManagementRights
+    /// 0x181048C20 enables it with c2p.u() &amp; 0x40000); in <see cref="Masks"/> the guild master and The Right Hand.
+    /// </summary>
+    public const long IslandManagement = 262144;
+
     /// <summary>All 36 permission flags (the GUILDMASTER tag).</summary>
     public const long All = 0xFFFFFFFFF;
 

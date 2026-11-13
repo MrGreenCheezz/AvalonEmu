@@ -53,6 +53,41 @@ public sealed partial class WorldSession
         return new GenericResponse { ReturnCode = IslandRefused };
     }
 
+    /// <summary>
+    /// BuyGuildIsland (op 220, px {0 the NewIslandAccessPoint, 1 "&lt;AP id&gt;@&lt;city&gt;"}, no price; the guild tab's confirm
+    /// IslandMerchantGui.c.c 0x18105C8C0 → c32.j_21 0x180A76B20): the guild island of the merchant's city for the player's guild, paid
+    /// from the guild account (<see cref="Systems.Islands.BuyGuild"/>). The response ad7 {0 the island, 1 the access point}: the client's
+    /// ckt.__c.a 0x180B2A9F0 adds it to its guild islands (level 0, bought now) and refreshes the merchant. Refused: RC 1. Before, the
+    /// operation had no handler: the server's empty answer (RC 0, an empty Guid) made the window believe in an island nobody stored.
+    /// </summary>
+    [Handles(OperationCodes.BuyGuildIsland, Status = SessionStatus.InWorld)]
+    private AlbionResponse? BuyGuildIsland(BuyGuildIslandRequest req)
+    {
+        if (Player is not { } p) return null;
+        var why = "";
+        if (p.Map?.Objects.GetValueOrDefault(req.db) is not IslandAccessPoint ap) why = $"object {req.db} is no island merchant";
+        else if (world.Islands.BuyGuild(p, ap, req.dc, out why) is { } island)
+            return new BuyGuildIslandResponse { and = island.Id, ane = island.AccessPoint };
+        Log.Info(Name, $"'{p.Character.Name}' guild island purchase refused: {why}");
+        return new GenericResponse { ReturnCode = IslandRefused };
+    }
+
+    /// <summary>
+    /// UpgradeGuildIsland (op 222, ab9 {0 the NewIslandAccessPoint, 1 "&lt;AP id&gt;@&lt;city&gt;", 2 the new level}, no price;
+    /// IslandMerchantGui.d.c 0x18105C910 → c32.i_81 0x180A751C0): the guild island to its next level, paid from the guild account
+    /// (<see cref="Systems.Islands.UpgradeGuild"/>); the bare RC 0 (no response class; ckt.c.b 0x180B2BCC0 raises the level itself). Refused: RC 1.
+    /// </summary>
+    [Handles(OperationCodes.UpgradeGuildIsland, Status = SessionStatus.InWorld)]
+    private AlbionResponse? UpgradeGuildIsland(UpgradeGuildIslandRequest req)
+    {
+        if (Player is not { } p) return null;
+        var why = "";
+        if (p.Map?.Objects.GetValueOrDefault(req.ahy) is not IslandAccessPoint ap) why = $"object {req.ahy} is no island merchant";
+        else if (world.Islands.UpgradeGuild(p, ap, req.ahz, req.ah0, out why)) return new GenericResponse();
+        Log.Info(Name, $"'{p.Character.Name}' guild island upgrade refused: {why}");
+        return new GenericResponse { ReturnCode = IslandRefused };
+    }
+
     /// <summary>ChangePlayerIslandData (op 389, qj {0 island, 1 favourite, 2 hidden}; SPEC §2.5): stored, RC 0 (GetIslandInfos keys 21/22); not the player's: RC 1.</summary>
     [Handles(OperationCodes.ChangePlayerIslandData, Status = SessionStatus.InWorld)]
     private AlbionResponse? ChangePlayerIslandData(ChangePlayerIslandDataRequest req) =>

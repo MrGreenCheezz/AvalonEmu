@@ -473,6 +473,7 @@ public sealed partial class Guilds
         world.Alliances.GuildDeleted(g); // stageP: out of its alliance (the founder role passes on), its invitations go
         world.Territories.GuildDeleted(g); // stageP P5: its castles are unowned
         world.Hideouts.GuildDeleted(g); // stageP: its hideouts go (players inside put out first)
+        world.Islands.GuildDeleted(g.Id); // issue #20 follow-up: its guild islands go (players on them sent home first)
         _byId.Remove(g.Id);
         foreach (var m in g.Members) _byMember.Remove(m.Id);
         foreach (var invite in _invites.Values.Where(i => i.Guild == g.Id).ToList()) _invites.Remove(invite.Invitee);

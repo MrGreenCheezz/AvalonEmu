@@ -2,7 +2,7 @@ using AlbionLocal.Server.Game;
 
 namespace AlbionLocal.Server.Persistence;
 
-/// <summary><see cref="IIslandStore"/> in the character database (schema v19: islands; v20: island_buildings, island_farmables; v28: the animals' nutrition and growth; v33: island_labourers).</summary>
+/// <summary><see cref="IIslandStore"/> in the character database (schema v19: islands; v20: island_buildings, island_farmables; v28: the animals' nutrition and growth; v33: island_labourers; v47: guild_islands).</summary>
 public sealed partial class SqliteCharacterRepository : IIslandStore
 {
     public IReadOnlyList<Island> LoadIslands()
@@ -20,6 +20,16 @@ public sealed partial class SqliteCharacterRepository : IIslandStore
                 {
                     Level = r.GetInt32(4), Bought = r.GetInt64(6), LevelChanged = r.GetInt64(7), Favorite = r.GetInt64(8) != 0, Hidden = r.GetInt64(9) != 0,
                 });
+            using var guilds = Command("""
+                SELECT i.id, i.guild, g.name, i.island_type, i.level, i.access_point, i.bought, i.level_changed
+                FROM guild_islands i JOIN guilds g ON g.id = i.guild ORDER BY i.bought, i.rowid
+                """, null);
+            using var gr = guilds.ExecuteReader();
+            while (gr.Read())
+                islands.Add(new Island(Guid.Parse(gr.GetString(0)), Guid.Parse(gr.GetString(1)), gr.GetString(2), gr.GetInt32(3), gr.GetString(5))
+                {
+                    Level = gr.GetInt32(4), Bought = gr.GetInt64(6), LevelChanged = gr.GetInt64(7), Guild = true,
+                });
             return islands;
         }
     }
@@ -28,6 +38,17 @@ public sealed partial class SqliteCharacterRepository : IIslandStore
     {
         lock (_sync)
         {
+            if (i.Guild)
+            {
+                using var guild = Command("""
+                    INSERT INTO guild_islands (id, guild, island_type, level, access_point, bought, level_changed)
+                    VALUES ($id, $guild, $type, $level, $ap, $bought, $changed)
+                    ON CONFLICT (id) DO UPDATE SET level = $level, level_changed = $changed
+                    """, null, ("$id", i.Id.ToString()), ("$guild", i.Owner.ToString()), ("$type", i.Type), ("$level", i.Level), ("$ap", i.AccessPoint),
+                    ("$bought", i.Bought), ("$changed", i.LevelChanged));
+                guild.ExecuteNonQuery();
+                return;
+            }
             using var upsert = Command("""
                 INSERT INTO islands (id, owner, island_type, level, access_point, bought, level_changed, favorite, hidden)
                 VALUES ($id, $owner, $type, $level, $ap, $bought, $changed, $favorite, $hidden)
@@ -44,6 +65,8 @@ public sealed partial class SqliteCharacterRepository : IIslandStore
         {
             using var delete = Command("DELETE FROM islands WHERE id = $id", null, ("$id", id.ToString()));
             delete.ExecuteNonQuery();
+            using var guild = Command("DELETE FROM guild_islands WHERE id = $id", null, ("$id", id.ToString()));
+            guild.ExecuteNonQuery();
         }
     }
 

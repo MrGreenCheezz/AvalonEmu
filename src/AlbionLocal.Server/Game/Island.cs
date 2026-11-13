@@ -37,6 +37,13 @@ public sealed class Island(Guid id, Guid owner, string ownerName, int type, stri
 
     public bool Hidden { get; set; }
 
+    /// <summary>
+    /// A guild island (a GUILD_ISLAND_* type, bought with BuyGuildIsland 220): <see cref="Owner"/> is then the guild's id and
+    /// <see cref="OwnerName"/> its name (GetIslandInfos keys 4 and 3 of a guild row, ctp.af_82 0x180995890 sorts it into the guild's
+    /// islands by key 4 = the player's guild); stored in guild_islands (schema v47), not islands.
+    /// </summary>
+    public bool Guild { get; init; }
+
     /// <summary>The instance id, "@ISLAND@&lt;guid&gt;" (cluster of the characters on it, Join key 8).</summary>
     public string Cluster => Data.IslandData.InstanceId(Id);
 

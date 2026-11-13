@@ -184,7 +184,7 @@ public sealed partial class WorldSession
 
     /// <summary>
     /// City → island (stageH islands SPEC §1.3, cap 103829): BuyJourney {0 the NewIslandAccessPoint, 1 "&lt;its travelpointid&gt;@&lt;city&gt;",
-    /// 2 0, 3 the island}. Checked: islands on, the merchant in view, a plain journey, the island the player's own (phase 1: owner only)
+    /// 2 0, 3 the island}. Checked: islands on, the merchant in view, a plain journey, the island the player's own or its guild's (<see cref="Systems.Islands.MayEnter"/>)
     /// and reached from this merchant, key 1 its travel point, not upgrading (8046); the target is the island's instance, its arrival the
     /// template's travel point (Guid.Empty), no route (the client prices a same-city trip 0).
     /// </summary>
@@ -195,7 +195,7 @@ public sealed partial class WorldSession
         if (!player.Visibility.Known.Contains(ap)) return (null, no, $"island merchant {req.df} is not in the player's view");
         if (req.dh != 0) return (null, no, $"journey kind {req.dh} to an island");
         if (world.Islands.Find(req.di) is not { } island) return (null, no, $"no island {req.di}");
-        if (island.Owner != player.Character.Id) return (null, no, $"{island} is not the player's");
+        if (!world.Islands.MayEnter(player, island)) return (null, no, $"{island} is neither the player's nor its guild's");
         if (island.AccessPointId != ap.Spawn.Guid || island.City != map.Cluster)
             return (null, no, $"{island} is not reached from the merchant {Short(ap.Spawn.Guid)}@{map.Cluster}");
         var text = req.dg ?? "";
