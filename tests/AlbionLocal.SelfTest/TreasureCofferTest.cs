@@ -81,6 +81,16 @@ public static class TreasureCofferTest
         Check(entry.Index == Ix("DEFAULT_CHEST_VETERAN") && entry.Index > 1 && entry.Subtype == "CHEST" && chest.TreasureGuid == entry.Guid,
               $"a spawn: 284 to the player 300 m off with {{2 DEFAULT_CHEST_VETERAN's index, 8 CHEST, 1 the chest's Guid}} (got {entry})");
 
+        // Keys 6 and 7 are the two stamps the minimap countdown reads (TreasureSpawnMapLabel.UpdateTime: key 6 for a lootchest, key 7 for
+        // the mob types), and MapLabelTimer hides the text as soon as now >= the stamp. They used to be GameNow and 0, i.e. expired.
+        var k6 = spawned!.Parameters[6] as long[];
+        var k7 = spawned.Parameters[7] as long[];
+        var openAt = chest.LockState == TreasureCoffers.LockedByTimer
+            ? chest.StateTicks + TimeSpan.FromSeconds(chest.Template.ProtectionSeconds).Ticks
+            : chest.StateTicks;
+        Check(k6 is { Length: 1 } && k6[0] == openAt && k6[0] != world.GameNow && k7 is { Length: 1 } && k7[0] >= 0,
+              $"284 keys 6/7: the openable-at stamp {openAt} and the despawn {k7?[0]}, not now {world.GameNow} / 0 (got {k6?[0]} / {k7?[0]})");
+
         // A second player joining far off: 284 at Join, before JoinFinished, with the entry.
         var rival = EventTest.NewHero(characters, spot);
         rival.Cluster = found;
@@ -97,6 +107,17 @@ public static class TreasureCofferTest
         var info = peerB.Events.Skip(mark).FirstOrDefault(e => Code(e) == (int)EventCodes.ClusterInfoUpdate)?.Parameters;
         Check(info is not null && Guids(info.GetValueOrDefault((byte)51)).SequenceEqual([chest.TreasureGuid!.Value]) && info[52] is int[] wi && wi.SequenceEqual([Ix("DEFAULT_CHEST_VETERAN")]),
               "world map: ClusterInfoUpdate {51 the Guid, 52 the index}");
+
+        // An unlock (a GM's .chest unlock, or the protecting mobs dying): a new 284 at once, key 6 now the moment it unlocked, so the
+        // client stops counting down to the protection end that no longer applies.
+        var beforeUnlock = openAt;
+        mark = peerA.Events.Count;
+        lock (world.Sync) world.WorldChests.Unlock(chest, a.Player!);
+        Tick(0.1);
+        var unlocked = peerA.Events.Skip(mark).LastOrDefault(e => Code(e) == (int)EventCodes.LocalTreasuresUpdate);
+        var u6 = unlocked?.Parameters[6] as long[];
+        Check(unlocked is not null && u6 is { Length: 1 } && u6[0] == chest.StateTicks && u6[0] != beforeUnlock,
+              $"an unlock: a new 284 with key 6 = the unlock moment {chest.StateTicks}, not the old protection end {beforeUnlock} (got {u6?[0]})");
 
         // Gone (despawned): the next list is empty.
         mark = peerA.Events.Count;
