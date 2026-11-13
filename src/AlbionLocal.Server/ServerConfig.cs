@@ -951,8 +951,10 @@ public sealed record ServerConfig
     public bool IslandsFreeIslands { get; init; }
 
     /// <summary>
-    /// Islands:GrowthSpeed (1; the pve preset 4): how many seconds of growth a crop makes per real second (SPEC §3.3, "PvE direction" 3: 4 makes
-    /// the 22 h crop cycle 5.5 h). The client's growth bar runs at 1 between the server's FarmableObjectInfo updates.
+    /// Islands:GrowthSpeed (1; the pve preset 4): how many seconds of growth a crop, and a fed animal (a baby's growth, a product's
+    /// production), makes per real second (SPEC §3.3, "PvE direction" 3: 4 makes the 22 h crop cycle 5.5 h). The client's growth bar runs at 1
+    /// between the server's FarmableObjectInfo updates; an animal's progress is sent so that its timer shows the real time left
+    /// (Islands.ShownTicks, public issue #24).
     /// </summary>
     public double IslandsGrowthSpeed { get; init; } = 1;
 

@@ -25,6 +25,7 @@ public static class IslandTest
         ("islands: starter island, GetIslandInfos rows (keys 0-8, 10-22, no 9), BuyJourney onto it (push {0, 1, 2}), Join 8/9/81/82 + NewIslandManagement and preset 3, back to 1000, login on it, gone island, store", Live),
         ("islands phase 2-3: Join 91, buy 20,000 / upgrade 500,000 (8046 for 130 s), flags, showroom and back; starter farm + herb garden, plant 665 (slot, keys, FOI), water, harvest at 79200 s not 79199, destroy, store, GrowthSpeed 4", Farming),
         ("islands: animals: a T3 horse baby in a pasture grows only while fed (10 wheat = 480 nutrition = 158400 s), collected as T3_FARM_HORSE_GROWN", Animals),
+        ("islands: animals: GrowthSpeed 30: a fed chicken baby's timer shows 5280 s (1/30 of 158400), grown then (public issue #24)", AnimalSpeed),
         ("islands phase 5: plots 1 (level 0) / 16 (level 5); a player builds a T1_PASTURE (op 68) for 100 silver + 30 wood/rock/planks/blocks, the plot then refused, gives it up (op 64)", Construction),
         ("islands phase 5: a placed animal is picked up again (op 71: the baby back, the object gone); a seed cannot be", Pickup),
         ("islands: labourers: a T2 house (op 68), a bed and a table in it (op 69), a wood labourer from its contract, a full T2 wood journal after settling in (op 257), its loot after 22 h (op 258)", Labourers),
@@ -395,14 +396,44 @@ public static class IslandTest
         world.Dispose();
     }
 
+    /// <summary>
+    /// Public issue #24: with Islands:GrowthSpeed 30 a fed T3 chicken baby (growtime 158400 s, 9 wheat = 864 nutrition) is sent with the
+    /// progress whose remaining time on the client's own 158400 s bar is 5280 s (1/30), and the server has it grown exactly then, not 1 s
+    /// earlier. (GrowthSpeed 1 sends the growth itself: the Animals test, FOI 4 = 79200 s at half.)
+    /// </summary>
+    private static void AnimalSpeed()
+    {
+        var (world, island, s, peer, call, tick) = OnIsland(new ServerConfig { JoinByCharacterId = true, IslandsGrowthSpeed = 30 },
+            ("T3_FARM_CHICKEN_BABY", 1), ("T3_WHEAT", 9));
+        var me = s.Player!;
+        var baby = Client.Items.Find("T3_FARM_CHICKEN_BABY")!;
+        world.Islands.Build(island, "T1_PASTURE", new Vector2(185, 110), 0, out _);
+        call(new PlaceableObjectPlaceRequest { x7 = me.Inventory.Bag.Items.Single(i => i.Template == baby).Id, x8 = world.Islands.ItemBuildingId(baby), x9 = new Vector2(185, 110) }, 3);
+        tick(TimeSpan.FromSeconds(1));
+        var animal = me.Map!.Objects.Values.OfType<FarmableObject>().Single();
+        var events = peer.Events.Count;
+        call(new FarmableFillRequest { ld = animal.Id, le = [me.Inventory.Bag.Items.Single(i => i.Template.Name == "T3_WHEAT").Id], lf = [9] }, 4);
+        var sent = peer.Events.Skip(events).Where(e => Code(e) == (int)EventCodes.FarmableObjectInfo).Select(e => Fill<FarmableObjectInfoEvent>(e.Parameters)).LastOrDefault();
+        var left = sent is null ? -1 : 158400 - sent.b9c / 10000 - (world.GameNow - sent.b9d) / TimeSpan.TicksPerSecond;
+        tick(TimeSpan.FromSeconds(5279));
+        var early = world.Islands.AnimalGrown(animal.Crop, baby.Animal!, world.GameNow);
+        tick(TimeSpan.FromSeconds(1));
+        Check(baby.Animal is { GrowTime: 158400 } && left == 5280 && !early && world.Islands.AnimalGrown(animal.Crop, baby.Animal, world.GameNow),
+              $"GrowthSpeed 30: a fed chicken baby shows {left} s left (5280 = 158400 / 30), grown at 5280 s, not 5279 (early {early})");
+        world.Dispose();
+    }
+
     /// <summary>A level-0 Lymhurst island (…0001a) and its owner standing on it with <paramref name="items"/> and 1000 silver, joined.</summary>
     private static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
-        OnIsland(params (string Item, int Count)[] items)
+        OnIsland(params (string Item, int Count)[] items) => OnIsland(new ServerConfig { JoinByCharacterId = true }, items);
+
+    private static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
+        OnIsland(ServerConfig config, params (string Item, int Count)[] items)
     {
         var characters = Repository(NewDir());
         var clock = new ManualClock();
         var anchor = DateTime.UtcNow.Ticks;
-        var world = new World(new ServerConfig { JoinByCharacterId = true }, characters, Client.Items, Client.GameData, Client.Spells)
+        var world = new World(config, characters, Client.Items, Client.GameData, Client.Spells)
         {
             Sync = new object(), Clusters = Store, MapSeed = 5, Clock = clock, GameTicks = () => anchor + clock.Now.Ticks,
         };

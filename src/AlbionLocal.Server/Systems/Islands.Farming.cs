@@ -378,15 +378,38 @@ public sealed partial class Islands
     public bool AnimalGrown(Farmable f, AnimalData a, long now) => CycleTicks(a) > 0 && AnimalAt(f, a, now).Growth >= CycleTicks(a);
 
     /// <summary>
-    /// The FarmableObjectInfo of an animal: keys 4/5 its growth or product progress (whole seconds × 10000 and their stamp, as a crop's),
-    /// keys 1/2 and 8/9 its nutrition now (a7m) [unverified which of the two bars the client shows as food; both are sent], key 3 false.
+    /// The progress (ticks) an animal's FarmableObjectInfo shows for <paramref name="grown"/> of a <paramref name="cycle"/>, so that the client's
+    /// bar ends when the server's growth does. The client takes the bar's length from its own items.xml (`co0.aqp` 0x180B8EEB0: `a5a.m`
+    /// with the &lt;grownitem growtime&gt; or the &lt;product productiontime&gt;, rate 1, key 12 does not touch it) and runs it at one
+    /// second per second from the sent progress and stamp (`co0.af_4` 0x180B8E130 → `a5a.n`); its timer is that length minus the progress.
+    /// While Islands:GrowthSpeed is not 1 the server grows the animal faster, so the progress is moved on to the length minus the real time
+    /// still needed ((cycle − grown) / GrowthSpeed, rounded up): the timer then shows the real remaining time, while the bar starts nearer
+    /// its end (public issue #24). At GrowthSpeed 1 it is the growth itself. Only the sent value moves: the stored growth stays in official
+    /// seconds, so a change of the key between runs needs nothing migrated.
+    /// </summary>
+    public long ShownTicks(long grown, long cycle)
+    {
+        var speed = world.Config.IslandsGrowthSpeed;
+        if (speed == 1 || grown >= cycle) return grown;
+        return Math.Max(0, cycle - (long)Math.Ceiling((cycle - grown) / speed));
+    }
+
+    /// <summary>
+    /// The FarmableObjectInfo of an animal: keys 4/5 its growth or product progress as <see cref="ShownTicks"/> (whole seconds × 10000 and
+    /// their stamp, as a crop's), for a grown animal also keys 10/11 per product (the client's product bars `co0+0x1d8`, read in `co0.af_4`;
+    /// it makes no growth bar without a &lt;grownitem&gt;, so keys 4/5 alone show no product timer [inference from the decompile, not
+    /// client-checked]), keys 1/2 and 8/9 its nutrition now (a7m) [unverified which of the two bars the client shows as food; both are
+    /// sent], key 3 false. The client drains the food at the official rate between two infos; while Islands:GrowthSpeed is not 1 the
+    /// <see cref="GrowthRefresh"/> brings it to the server's.
     /// </summary>
     private FarmableObjectInfoEvent AnimalInfo(FarmableObject o, AnimalData a, long now)
     {
-        var (grown, nutrition) = AnimalAt(o.Crop, a, now);
+        var (growth, nutrition) = AnimalAt(o.Crop, a, now);
+        var grown = ShownTicks(growth, CycleTicks(a));
         var whole = grown / TimeSpan.TicksPerSecond * TimeSpan.TicksPerSecond;
         var food = (long)Math.Round(nutrition * 10000);
         var eats = a.NutritionMax > 0;
+        var products = a.GrownItem is null ? a.Products.Count : 0;
         return new FarmableObjectInfoEvent
         {
             ddn = o.Id,
@@ -396,7 +419,8 @@ public sealed partial class Islands
             b9d = now - (grown - whole),    // [5]
             b9e = [], b9f = [],
             b9g = eats ? [food] : [], b9h = eats ? [now] : [], // [8], [9] the food entry: nutrition and stamp
-            b9i = [], b9j = [],
+            b9i = [.. Enumerable.Repeat(whole / 1000, products)],             // [10] product progress (a7m), one cycle for all
+            b9j = [.. Enumerable.Repeat(now - (grown - whole), products)],    // [11] its stamp
             b9k = 1f,
             b9l = o.Crop.BoostedAt,
             b9m = o.Crop.Boosts,

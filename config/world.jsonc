@@ -91,7 +91,7 @@
   //   "ControlSeconds": 560 }, // how long a faction must hold most of a zone's towers before it controls the zone (one capture: 557 s)
   // "Islands": { "Enabled": true, "StarterIsland": false, "StarterLevel": 0, "PremiumDays": 31, "BuyWithoutPremium": true, "FreeIslands": false, "GrowthSpeed": 1, "FocusSeedReturn": true, "WaterFocusFactor": 1, "StarterBuildings": false },
   //   personal islands (README Personal islands): StarterIsland = a free island at the first island merchant (at level 0-5), StarterBuildings = with a farm and a herb garden,
-  //   GrowthSpeed 4 = crops grow 4 x as fast, WaterFocusFactor 0 = watering takes no focus (pve: StarterIsland true, StarterBuildings true, GrowthSpeed 4, WaterFocusFactor 0).
+  //   GrowthSpeed 4 = crops, baby animals and animal products (eggs, milk) grow 4 x as fast (an animal's timer shows the real time left), WaterFocusFactor 0 = watering takes no focus (pve: StarterIsland true, StarterBuildings true, GrowthSpeed 4, WaterFocusFactor 0).
   //   PremiumDays = Join key 91 (the merchant sells and upgrades from 7; 0 = none), sent to premium characters, and with BuyWithoutPremium to everyone:
   //   BuyWithoutPremium true in both presets FOR NOW (no gold shop, no premium to buy yet); the strict official rule is false. FreeIslands = buying and upgrading for 0 silver
   // "RealEstate": { "Enabled": true, "AuctionCycleDays": "data", "AuctionLengthDays": "data", "OwnerExclusiveMinutes": "data", "OwnerBidMultiplier": "data", "OwnerLosingBonus": 0.5, "PriceFactor": 1 },
