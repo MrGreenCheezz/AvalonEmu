@@ -86,19 +86,40 @@ public sealed partial class WorldSession
     private DateTime _lastCorrection;
 
     /// <summary>
-    /// The position to correct <paramref name="player"/> back to when its Move to <paramref name="v6"/> enters a cell no tile allows
-    /// (water, rock, the far side of a wall, outside the cluster bounds), else null. Movement is predicted by the client, so the walk
-    /// grid is the only thing that can refuse it — and the only way to refuse it is a <see cref="Relocate"/> correction, because
-    /// dropping the Move alone leaves the client where it predicted. Only a Move that *enters* a blocked cell is corrected (the
-    /// position it came from must be open), so a player the grid disagrees with is never frozen in place; nothing happens at all
-    /// before the map's grid is built (<see cref="AI.MobNav.Grid"/> returns null then).
+    /// How deep in blocked ground a Move's position must lie before it is corrected (m): no open cell within this of it. The server's
+    /// grid is the tiles' 1 m cells turned into the world, so along a wall, a fence or a gate it can be a cell off the client's own
+    /// collision; a metre and a half is past any of that and still short of a walk on a river.
+    /// </summary>
+    private const float BlockedDepth = 1.5f;
+
+    /// <summary>How far from the refused position the last open one may be to be the place the client is put back to (m).</summary>
+    private const float CorrectionReach = 8f;
+
+    /// <summary>The last position of this connection's Moves that no tile blocks, with its map: where a correction puts the client back.</summary>
+    private (Map Map, Vector2 At)? _lastOpen;
+
+    /// <summary>
+    /// The position to correct <paramref name="player"/> back to when its Move to <paramref name="v6"/> lies deep in ground no tile
+    /// allows (the water, a rock mass, outside the cluster bounds: no open cell within <see cref="BlockedDepth"/>), else null
+    /// (World:MoveCheck, on). Movement is predicted by the client and its own collision keeps it out of such ground (0 of 4,231
+    /// captured own positions lie in a blocked cell, bots-world SPEC), so this is only reached by a client that got there some other
+    /// way; the forced movements themselves end on open ground (<see cref="SpellMovement.Stopped"/>). The only way to refuse a
+    /// position is the <see cref="Relocate"/> correction: dropping the Move alone leaves the client where it is. A position in a
+    /// blocked cell next to open ground is taken as it is, and so is one with no open position of this connection near it (a
+    /// character saved there, a GM's .go): a player the grid disagrees with is never held in place. Nothing happens before the map's
+    /// grid is built (<see cref="AI.MobNav.Grid"/> returns null then) [the official server's own answer is not captured: inference].
     /// </summary>
     private Vector2? BlockedMove(Player player, float[]? v6)
     {
-        if (v6 is not [var x, var y] || player.Map is not { } map || AI.MobNav.Grid(world, map) is not { } grid) return null;
-        if (grid.Open(new Vector2(x, y))) return null;
-        var last = player.PositionAt(DateTime.UtcNow);
-        return grid.Open(last) ? last : null;
+        if (!world.Config.MoveCheck || v6 is not [var x, var y] || player.Map is not { } map || AI.MobNav.Grid(world, map) is not { } grid) return null;
+        var at = new Vector2(x, y);
+        if (grid.Open(at))
+        {
+            _lastOpen = (map, at);
+            return null;
+        }
+        if (_lastOpen is not var (on, last) || on != map || Vector2.Distance(last, at) > CorrectionReach) return null;
+        return grid.NearestOpen(at, BlockedDepth) is null ? last : null;
     }
 
     /// <summary>
@@ -111,8 +132,8 @@ public sealed partial class WorldSession
         var now = DateTime.UtcNow;
         if (now - _lastCorrection < CorrectionInterval) return;
         _lastCorrection = now;
-        Log.Debug(Name, $"-> MoveResponse: ({v6![0]:0.##}, {v6[1]:0.##}) is a blocked cell, back to ({last.X:0.##}, {last.Y:0.##})");
-        Combat.LogOnce("move-blocked:" + player.Map?.Cluster, $"{player.Character.Name}: a Move into a cell no tile allows is corrected (a dash or a walk onto water, rock or outside the cluster)");
+        Log.Debug(Name, $"-> MoveResponse: ({v6![0]:0.##}, {v6[1]:0.##}) is deep in blocked ground, back to ({last.X:0.##}, {last.Y:0.##})");
+        Combat.LogOnce("move-blocked:" + player.Map?.Cluster, $"{player.Character.Name}: a Move deep into ground no tile allows is corrected (a walk onto water, into rock or outside the cluster; World:MoveCheck)");
         Relocate(last, player.Facing);
     }
 

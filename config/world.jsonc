@@ -16,6 +16,7 @@
     // "TreasureCoffers": true, // the contested coffers and treasure chests with their countdown and PvP circle (README "Open-world treasures"; TreasureCoffers below)
     // "RareResources": true, // enchanted (rare) resource node states; false = every node plain
     // "MobAi": true,         // mobs aggro, chase, hit back, leash home and roam (stage 5d); false = they stand and only take damage (.mob ai on|off)
+    // "MoveCheck": true,     // a position deep in blocked ground (on the water, in rock, outside the cluster) is corrected back to the last open one; false = every position the client sends is taken
   },
   // Rate modifiers multiply existing game rewards. .rates <name> <value> changes one temporarily
   // while running (Admin); restarting restores configuration values. No command saves changes.

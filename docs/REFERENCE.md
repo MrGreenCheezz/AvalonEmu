@@ -196,7 +196,7 @@ package cache (`%USERPROFILE%\.nuget\packages`) as a source, so the package must
 
 Settings: `config/*.jsonc` (ports, logout time, the client's GameData folder, save and content folders, log level and log file,
 the account levels; seasonal cluster layers `World:EventLayers`, `World:AnnounceAll`,
-`World:MapIdleUnloadMinutes`, `World:RareResources` (enchanted resource nodes, on), the `Visibility` window, the `Transfer` checks, `Crafting:Returns` and `ClientNumbering:BuildingIdOffset`, only
+`World:MapIdleUnloadMinutes`, `World:RareResources` (enchanted resource nodes, on), `World:MoveCheck` (on: a position deep in blocked ground is corrected back), the `Visibility` window, the `Transfer` checks, `Crafting:Returns` and `ClientNumbering:BuildingIdOffset`, only
 as comments there; comments allowed, every key optional). Any key can be overridden on the command line, e.g.
 `dotnet run --project src/AlbionLocal.Server -- --Log:Level=Debug --Network:GamePort=6000`; an unknown
 key stops the start, and so do two listeners on one port (`Network:LoginPort` 5055, `GamePort` 5056, `ChatPort` 5057).
@@ -418,7 +418,9 @@ EnergyUpdate, CastFinished and CastSpell at the end, the hit, channels and NewSp
 hit the players (damage, damage over time, debuffs, pulses, areas, auras) and heal or buff the mob. A reset or death
 cancels the cast and removes its areas. StageN spells-bosses (analysis/work/stageN/spells-bosses/SPEC.md): `<Movement>`
 repositions (walked on the walk grid, never into a wall), IdleBehaviour, the mobs' own dashes and their knockbacks, pulls
-and fears on players (ForcedMovement, stopped by walls), `<SpawnSpells>`, `<DeathSpells>` (death blasts, the elites' fame
+and fears on players (ForcedMovement, stopped by walls; a player's own dash is stopped the same way — at a wall, the water's
+edge or the cluster border, a character's radius before it — and a blink lands on open ground: behind a wall when aimed there,
+on the near shore when aimed into water or rock), `<SpawnSpells>`, `<DeathSpells>` (death blasts, the elites' fame
 buff) and `<KillRewardBuff>`; the bosses' enrage buffs already ran through their `<AI>`. A mob's telegraph now points at
 its target (CastStart key 2 only for ground spells, the mob turns before it casts). The spell engine reads every If*
 condition of spells.xml, `<valueoverride><IfCharge>` (the stacking damage of the axe

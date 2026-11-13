@@ -32,8 +32,9 @@ public sealed record ForcedMove(byte Kind, long Start, long End, Vector2 From, V
 /// spell an area applied)} to the unit and its observers in the batch of the cast or hit. While it moves a mob runs no AI walk
 /// or swing and sends no event 3 (the next walk of its AI after the end goes out from the end point); a player's Moves are
 /// ignored until its first Move with key 6 = key 2 (the client's echo, 8 of 8 captured) or 300 ms after the end. A dash's
-/// endeffect runs at its end at the end point, after CastSpell {0 me, 1 me, 2 end, 3 spell, 4 end, 5 end, 6 counter 0}. No
-/// navmesh: nothing cuts a path short. Touched only under <see cref="World.Sync"/>.
+/// endeffect runs at its end at the end point, after CastSpell {0 me, 1 me, 2 end, 3 spell, 4 end, 5 end, 6 counter 0}. The
+/// terrain cuts a path short (<see cref="Stopped"/>) and decides where a blink lands (<see cref="Landing"/>), both on the map's
+/// walk grid. Touched only under <see cref="World.Sync"/>.
 /// </summary>
 public static class SpellMovement
 {
@@ -136,24 +137,65 @@ public static class SpellMovement
     }
 
     /// <summary>
-    /// Where a forced path from <paramref name="from"/> towards <paramref name="to"/> ends on the map's walk grid (stageN spells-bosses): the
-    /// whole way when its line crosses no blocked cell (or there is no grid), else the furthest tenth of it that does.
-    /// <paramref name="standable"/>: the end must also be a cell a unit can stand in (no blocked cell in its 3×3, <see cref="WalkGrid.Free"/>),
-    /// which is what a player's own dash or blink needs — a landing 1 m from the water is not a landing. A start on a blocked cell (a unit
-    /// hugging a wall) is tested from the nearest open cell instead of skipping the check.
+    /// How far along its line a unit standing on a blocked cell may go to leave it (m): the first open cell within this is where the
+    /// test of its path starts; with none it does not move. Before, a path from a blocked cell was not tested at all.
     /// </summary>
-    public static Vector2 Stopped(World world, Map map, Vector2 from, Vector2 to, bool standable = false)
+    private const float LeaveBlocked = 1.5f;
+
+    /// <summary>
+    /// Where a forced path from <paramref name="from"/> towards <paramref name="to"/> ends on the map's walk grid (stageN spells-bosses,
+    /// public issue #27): the whole way when the line meets no blocked cell (or there is no grid yet), else <paramref name="clearance"/>
+    /// before the point where it enters the first one — water, rock, a wall, the cluster edge. One grid ray (<see cref="WalkGrid.Ray"/>,
+    /// the cell walk of the client's a84.f 0x18052CC30), so the end is exact, not the furthest tenth of the line. The ray runs
+    /// <paramref name="clearance"/> past the aim too, so a path that ends right at a wall keeps the same distance. Only the line itself
+    /// is tested: a path that grazes a corner sideways keeps less than the clearance to it [the client pushes its own unit out there,
+    /// a84.g; not modelled]. A start on a blocked cell is tested from the first open cell on the line (<see cref="LeaveBlocked"/>).
+    /// </summary>
+    public static Vector2 Stopped(World world, Map map, Vector2 from, Vector2 to, float clearance = WalkGrid.UnitRadius)
     {
         if (AI.MobNav.Grid(world, map) is not { } grid) return to;
-        var start = grid.Open(from) ? from : grid.NearestOpen(from, 2) ?? from;
-        bool Ok(Vector2 at) => grid.ClearOpen(start, at) && (!standable || grid.Free(at));
-        if (Ok(to)) return to;
-        for (var k = 9; k > 0; k--)
+        var line = to - from;
+        var length = line.Length();
+        if (!float.IsFinite(length)) return from;
+        if (length < 0.01f) return to;
+        var dir = line / length;
+        var start = from;
+        if (!grid.Open(from))
         {
-            var at = from + (to - from) * (k / 10f);
-            if (Ok(at)) return at;
+            if (!grid.Ray(from, from + dir * Math.Min(length, LeaveBlocked), out start, blocked: false)) return from;
+            start += dir * 0.01f; // inside the open cell, not on its border
         }
-        return from;
+        if (!grid.Ray(start, to + dir * clearance, out var hit)) return to;
+        var free = Vector2.Distance(from, hit) - clearance;
+        return free <= Vector2.Distance(from, start) + 0.01f ? from : from + dir * Math.Min(free, length);
+    }
+
+    /// <summary>
+    /// Where a blink from <paramref name="from"/> to <paramref name="to"/> lands (public issue #27): at the aim when no tile blocks its
+    /// cell, else at the point nearest to it on the way back to the caster that is <see cref="WalkGrid.UnitRadius"/> inside open
+    /// ground; null when there is none (nothing open between the aim and the caster) and the blink does not happen. What lies between
+    /// the two is not tested: a teleport is not a path, and whether a spell may be aimed across a wall is the spell's own
+    /// <c>lineofsight</c> (BLINK "false"), which the client tests before it sends the cast (cwc.u 0x1809D9270: the grid ray with the
+    /// spell's lineofsightcollision mask, bio.vv 0x1806C3100 — Projectile 2, Ground 1, Both 3). So a blink crosses a river or a wall
+    /// to open ground behind it, and one aimed into the water, a rock or off the cluster lands on the near edge of it.
+    /// </summary>
+    public static Vector2? Landing(World world, Map map, Vector2 from, Vector2 to)
+    {
+        if (AI.MobNav.Grid(world, map) is not { } grid || grid.Open(to)) return to;
+        var back = from - to;
+        var length = back.Length();
+        if (!float.IsFinite(length) || length < 0.01f) return null;
+        var dir = back / length;
+        var at = to;
+        for (var tries = 0; tries < 8; tries++) // an open strip thinner than the radius is passed over
+        {
+            if (!grid.Ray(at, from, out var edge, blocked: false)) return null;
+            var d = Vector2.Distance(to, edge) + WalkGrid.UnitRadius;
+            if (d >= length - 0.01f) return null;
+            at = to + dir * d;
+            if (grid.Open(at)) return at;
+        }
+        return null;
     }
 
     /// <summary>
@@ -191,8 +233,11 @@ public static class SpellMovement
     /// along the line (HEROICSTRIKE2 −2), the length clamped to [mindistance, maxdistance or castrange]; the end after length /
     /// movespeed (timebasedondistance, the default; FLAMEDASH 4.59 m / 28 → 164 ms) or maxdistance (castrange) / movespeed
     /// (constanttime; HAMMER_SHOVE 2 / 16). Its endeffect runs at the end. The path is stopped by the terrain
-    /// (<see cref="Stopped"/>: a wall, water, the cluster edge — a player's landing must be a cell it can stand in), as a
-    /// knockback and a mob's dash already were.
+    /// (<see cref="Stopped"/>: a wall, water, the cluster edge), as a knockback and a mob's dash are: the client only follows the path
+    /// of the ForcedMovement (cux.afk glides along key 5 and sets the unit on its end), so the end the server sends is where the
+    /// character stands (public issue #27: AXE_CHARGE aimed across a river ended on the water; the client lets it be aimed there,
+    /// because water blocks the ground but not a spell's line of sight). A dash with no room at all — the caster at the wall it aims
+    /// at — sends no path and runs its endeffect where the caster stands [inference: not captured].
     /// </summary>
     public static void Dash(SpellCasts.SpellContext c, SpellTemplate spell, XElement node, int index)
     {
@@ -210,13 +255,19 @@ public static class SpellMovement
         length = Math.Max(SpellTemplate.Float(node, "mindistance"), length);
         if (max > 0) length = Math.Min(max, length);
         if (length <= 0.01f) return;
-        var to = Stopped(world, map, here, here + dir * length, standable: true);
+        var to = Stopped(world, map, here, here + dir * length);
         var travelled = Vector2.Distance(here, to);
-        if (travelled <= 0.01f) return; // a wall right in front: no dash at all
+        var endEffect = (string?)node.Attribute("endeffect") is { Length: > 0 } name ? world.Spells?.Template(name) : null;
+        if (travelled <= 0.01f)
+        {
+            // A wall right in front: no path. The endeffect (AXE_CHARGE_CONDITION, FLAMEDASH_END) still runs, on the spot, after the cast's own batch.
+            var spot = new ForcedMove(0, c.Ticks, c.Ticks, here, here, speed, spell.Id, (byte)index);
+            if (endEffect is not null) map.Timers.At(world.Now, () => EndEffect(c, endEffect, spot));
+            return;
+        }
         var seconds = (string?)node.Attribute("ruleset") == "constanttime" && max > 0 ? max / speed : travelled / speed;
         var end = c.Ticks + (long)Math.Round(seconds * 1000) * TimeSpan.TicksPerMillisecond;
         var move = new ForcedMove(0, c.Ticks, end, here, to, speed, spell.Id, (byte)index);
-        var endEffect = (string?)node.Attribute("endeffect") is { Length: > 0 } name ? world.Spells?.Template(name) : null;
         Start(world, p, move, p.Id, endEffect is null ? null : () => EndEffect(c, endEffect, move));
     }
 

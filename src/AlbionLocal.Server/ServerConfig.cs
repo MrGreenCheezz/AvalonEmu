@@ -322,6 +322,13 @@ public sealed record ServerConfig
     public bool RareResources { get; init; } = true;
 
     /// <summary>
+    /// World:MoveCheck (true): a Move whose position lies deep in ground no tile allows — on the water, in a rock mass, outside the
+    /// cluster bounds — is answered with the MoveResponse correction back to the connection's last open position instead of being
+    /// taken (public issue #27; <see cref="Network.WorldSession"/>'s Move). Off: every position the client sends is taken, as before.
+    /// </summary>
+    public bool MoveCheck { get; init; } = true;
+
+    /// <summary>
     /// World:OpenWorldChests (true): the loot chests of the open world (stageH bosses SPEC §4.2-4.4): the POI chests of the static
     /// mob areas, the reward chests of their boss points and the camps' personal chests with their local quests. False: none.
     /// </summary>
@@ -1202,6 +1209,7 @@ public sealed record ServerConfig
                 : bool.TryParse(all, out var b) ? b : throw new InvalidDataException($"World:AnnounceAll: '{all}' is not true or false"),
             RareResources = Take("World:RareResources") is not { } rare ? true
                 : bool.TryParse(rare, out var r) ? r : throw new InvalidDataException($"World:RareResources: '{rare}' is not true or false"),
+            MoveCheck = Flag("World:MoveCheck", true),
             Rates = LoadRates(values, d.Rates),
             OpenWorldChests = Flag("World:OpenWorldChests", true),
             ChestsPoiLimit = Int("Chests:PoiLimit", d.ChestsPoiLimit, -1, 1000),
