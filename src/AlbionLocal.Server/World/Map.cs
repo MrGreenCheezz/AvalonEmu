@@ -167,14 +167,17 @@ public sealed class Map(string cluster)
 
     /// <summary>
     /// Puts an object made after the map got its template on it (a mob spawned or respawned, stage 5): into the objects and
-    /// its grid cell, and to every player whose window holds that cell (<see cref="VisibilityTracker.Show"/>).
+    /// its grid cell, and to every player whose window holds that cell (<see cref="VisibilityTracker.Show"/>). A cluster-wide object
+    /// (<see cref="AnnounceRange.Cluster"/>: an expedition's finish exit at the completion) goes to <see cref="ClusterWide"/> and to every
+    /// player on the map instead.
     /// </summary>
     internal void AddObject(WorldObject o)
     {
         if (Grid is null) throw new InvalidOperationException($"map {Cluster} has no template yet");
         o.Map = this;
         _objects.Add(o.Id, o);
-        Grid.Add(o);
+        if (o.Range == AnnounceRange.Cluster) _clusterWide.Add(o);
+        else Grid.Add(o);
         foreach (var player in _players.Values) player.Visibility.Show(o);
     }
 
@@ -195,7 +198,8 @@ public sealed class Map(string cluster)
     internal void RemoveObject(WorldObject o)
     {
         if (!_objects.Remove(o.Id)) return;
-        Grid?.Remove(o);
+        if (o.Range == AnnounceRange.Cluster) _clusterWide.Remove(o);
+        else Grid?.Remove(o);
         foreach (var player in _players.Values) player.Visibility.Forget(o);
     }
 

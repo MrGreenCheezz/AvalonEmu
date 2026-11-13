@@ -706,7 +706,8 @@ public sealed class Expeditions(World world)
     // ---- inside (SPEC §2.7, §2.8, §5) ----
 
     /// <summary>
-    /// At the fill of an instance map (MapSpawner): its exits, narrators and checkpoints (cluster-wide, never left); the map's mobs spawn
+    /// At the fill of an instance map (MapSpawner): its start exit, narrators and checkpoints (cluster-wide, never left; the finish exit
+    /// only at the completion, <see cref="OpenFinishExit"/>); the map's mobs spawn
     /// once (clustertype mobspawns defaulttimefactor 9999), × the instance's group scaling, and on a hardcore level with its mobmodifier
     /// (MOB_HARDCORE_EXPEDITION_BUFF_nn, as a random dungeon level's: <see cref="SpawnManager.LevelBuff"/>) and its silver, loot and fame
     /// factors on the kills (<see cref="Map.Difficulty"/>); a task whose mob has no spawn point in the instance starts done (§4.3 safety net).
@@ -736,7 +737,24 @@ public sealed class Expeditions(World world)
                 instance.Counts[i] = task.Count;
                 instance.Done[i] = true;
             }
-        return instance.Objects;
+        return instance.Objects.Where(o => instance.Finished || o is not ExpeditionExit { Start: false }); // the finish exit: OpenFinishExit
+    }
+
+    /// <summary>
+    /// Issue #29: the finish exit goes on the map (and out to everyone on it, <see cref="Map.AddObject"/>) only at the completion. The client
+    /// never gates the exit's interaction on its closed state: ExpeditionExitObjectView.WillHandleStaticInteraction (0x181A486D0) always
+    /// answers interaction type 32, cka.x5 (0x180B33B60) tests the distance only, and dzs.as9 (0x181A1D020) shows
+    /// "@EXPEDITION_LEAVE_PENALTY_WARNING" for any exit while the expedition is unfinished; so an exit announced at the Join with key 4
+    /// false, shown closed, still offers the leave prompt. Created after the completion it is still the finish exit (Initialize 0x181A47DA0
+    /// puts a key-4-false view into ghj+0x30 and opens it at once when ghj's state is past 7; within the 3.5 s before that ghj.a8
+    /// 0x180C6EC60 plays its spawn). No capture holds an expedition instance: whether the official server also holds it back is an
+    /// inference. A Join after the completion gets it in phase B with the other cluster-wide objects.
+    /// </summary>
+    private void OpenFinishExit(ExpeditionInstance i)
+    {
+        if (world.Maps.Find(i.Id) is not { Grid: not null } map) return;
+        foreach (var exit in i.Objects.OfType<ExpeditionExit>())
+            if (!exit.Start && exit.Map is null) map.AddObject(exit);
     }
 
     /// <summary>
@@ -851,6 +869,7 @@ public sealed class Expeditions(World world)
         i.FinishedAt = world.Now;
         Log.Info("world", string.Create(CultureInfo.InvariantCulture, $"{i} completed in {(world.Now - i.StartedAt).TotalSeconds:0} s"));
         i.Owed.UnionWith(i.Members.Keys);
+        OpenFinishExit(i);
         foreach (var p in Inside(i).ToList())
             if (i.Owed.Remove(p.Character.Id)) Reward(p, i);
         if (LevelOf(i) is { BonusChest: true }) SpawnBonusChest(i);
