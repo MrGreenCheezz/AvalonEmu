@@ -290,14 +290,27 @@ public sealed class TreasureCoffers(World world)
     /// 0x181BEA7A0 adds a minimap label per Guid of the current cluster and removes the labels of the Guids gone), so every 284 is the full
     /// list. Key 0 is not read and not sent (captures 002835, 103829, 113433, 114814: keys 1-8 only, empty arrays without a treasure, at every
     /// Join); a null array would throw, so the empty ones go too. Key 1 Guid, 2 the index in the client's treasure list (<see
-    /// cref="TreasureDistributionData.ClientIndex"/>), 3 enchantment 0, 4 the id (cjl.b; the chest object's [assume]), 5 position, 6 a stamp
-    /// (cjl.f; the label's timer only with showminimaptimer, which no TreasureLootchest has): GameNow of this list, 7 (cjl.g) 0, 8 the
-    /// subtype; keys 6 and 7 as the issue #23 report gives them [report].
+    /// cref="TreasureDistributionData.ClientIndex"/>), 3 enchantment 0, 4 the id (cjl.b; the chest object's [assume]), 5 position, 6 the moment it
+    /// becomes openable (cjl.f: the label's countdown target for a TreasureLootchest, TreasureSpawnMapLabel.UpdateTime), 7 its despawn (cjl.g,
+    /// the target for the mob-carried types) or 0 when it has no lifetime, 8 the subtype.
+    /// <para>
+    /// Keys 6/7 used to be "now" and 0, i.e. already expired, which hid the countdown the moment it arrived. Note the client also hides it unless
+    /// the treasure definition sets <c>showminimaptimer</c> (bf1.cs:295), which no &lt;treasure&gt; of this build does — only the two faction-banner
+    /// &lt;TreasureMob&gt;s. So a lootchest shows an icon that changes with its state, not a timer; the times are still sent correctly for the types
+    /// that can show one, and for the world map's protection countdown.
+    /// </para>
     /// </summary>
     public LocalTreasuresUpdateEvent LocalTreasures(Map? map)
     {
         var listed = map is not null && _maps.TryGetValue(map, out var m) ? m.Listed.Where(kv => Standing(map, kv.Key)).ToList() : [];
-        var now = world.GameNow;
+        // When the chest can be opened: its protection runs from the state that locked it, the same value FillWorldMap sends as key 54.
+        static long Openable(LootChest c) => c.LockState == LockedByTimer
+            ? c.StateTicks + TimeSpan.FromSeconds(c.Template.ProtectionSeconds).Ticks
+            : c.StateTicks;
+        // When it despawns unopened: its maxlifetime runs from its spawn, which is the state it was listed with (0 when it has none).
+        static long Despawn(Listing l, LootChest c) => l.Def is { MaxLifetimeSeconds: > 0 } d
+            ? c.StateTicks + TimeSpan.FromSeconds(d.MaxLifetimeSeconds).Ticks
+            : 0;
         return new LocalTreasuresUpdateEvent
         {
             cnq = [.. listed.Select(kv => kv.Value.Guid)],
@@ -305,8 +318,8 @@ public sealed class TreasureCoffers(World world)
             cns = new int[listed.Count],
             cnt = [.. listed.Select(kv => kv.Key.Id)],
             cnu = [.. listed.Select(kv => kv.Key.Position)],
-            cnv = [.. listed.Select(_ => now)],
-            cnw = new long[listed.Count],
+            cnv = [.. listed.Select(kv => Openable(kv.Key))],
+            cnw = [.. listed.Select(kv => Despawn(kv.Value, kv.Key))],
             cnx = [.. listed.Select(kv => kv.Value.Subtype)],
         };
     }

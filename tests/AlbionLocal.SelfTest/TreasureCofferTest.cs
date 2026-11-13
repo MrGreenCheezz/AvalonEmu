@@ -81,6 +81,16 @@ public static class TreasureCofferTest
         Check(entry.Index == Ix("DEFAULT_CHEST_VETERAN") && entry.Index > 1 && entry.Subtype == "CHEST" && chest.TreasureGuid == entry.Guid,
               $"a spawn: 284 to the player 300 m off with {{2 DEFAULT_CHEST_VETERAN's index, 8 CHEST, 1 the chest's Guid}} (got {entry})");
 
+        // Keys 6 and 7 are the two stamps the minimap countdown reads (TreasureSpawnMapLabel.UpdateTime: key 6 for a lootchest, key 7 for
+        // the mob types), and MapLabelTimer hides the text as soon as now >= the stamp. They used to be GameNow and 0, i.e. expired.
+        var k6 = spawned!.Parameters[6] as long[];
+        var k7 = spawned.Parameters[7] as long[];
+        var openAt = chest.LockState == TreasureCoffers.LockedByTimer
+            ? chest.StateTicks + TimeSpan.FromSeconds(chest.Template.ProtectionSeconds).Ticks
+            : chest.StateTicks;
+        Check(k6 is { Length: 1 } && k6[0] == openAt && k6[0] != world.GameNow && k7 is { Length: 1 } && k7[0] >= 0,
+              $"284 keys 6/7: the openable-at stamp {openAt} and the despawn {k7?[0]}, not now {world.GameNow} / 0 (got {k6?[0]} / {k7?[0]})");
+
         // A second player joining far off: 284 at Join, before JoinFinished, with the entry.
         var rival = EventTest.NewHero(characters, spot);
         rival.Cluster = found;
