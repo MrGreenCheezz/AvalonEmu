@@ -168,7 +168,7 @@ public static class ExpeditionTest
         var progress = peer2.Events.FindIndex(e => Code(e) == (int)EventCodes.ExpeditionQuestProgressInfo);
         var first = progress >= 0 ? peer2.Events[progress] : null;
         Check(join.a8i == instance!.Id && join.a8j == new Vector2(119, -170) && map.Template?.Id == "Mine-SOLO" && map.NoRespawn
-              && exitEvents.Count == 2 && exitEvents.Count(e => e.Parameters.GetValueOrDefault((byte)4) is true) == 1 && exitEvents.All(e => e.Parameters[3] is "ExpeditionExit")
+              && exitEvents is [var startExit] && startExit.Parameters.GetValueOrDefault((byte)4) is true && startExit.Parameters[3] is "ExpeditionExit"
               && narratorEvents.Select(e => (e.Parameters[3], e.Parameters.GetValueOrDefault((byte)4) is true)).Order().SequenceEqual([("ExpeditionNarrator", false), ("ExpeditionNarratorFinish", true)])
               && cps.Count == 4 && cps.All(e => e.Parameters[1] is float[] { Length: 2 } && Int(e, 2) == 0)
               && Of(peer2, EventCodes.ExpeditionRegistrationInfo) is [var inside] && Int(inside, 3) == 7
@@ -176,7 +176,7 @@ public static class ExpeditionTest
               && Convert.ToInt64(peer2.Events[full].Parameters[2]) == instance.StartTicks
               && first is not null && Int(first, 2) == 0 && first.Parameters[3] is "[[0],[0],[0]]" && first.Parameters[4] is bool[] { Length: 3 } f0 && !f0.Any(x => x)
               && Int(first, 5) == -1 && Int(first, 6) == -1,
-              $"Join of {instance.Id} at (119, -170): 2 exits (one start), the two narrators, 4 checkpoints in state 0; 263 kind 7, 260 {{0 me, 1 3, 2 start}} then 261 \"[[0],[0],[0]]\" (got {join.a8i} {join.a8j}, {exitEvents.Count}/{narratorEvents.Count}/{cps.Count})");
+              $"Join of {instance.Id} at (119, -170): only the start exit (issue #29: the finish exit at the completion), the two narrators, 4 checkpoints in state 0; 263 kind 7, 260 {{0 me, 1 3, 2 start}} then 261 \"[[0],[0],[0]]\" (got {join.a8i} {join.a8j}, {exitEvents.Count}/{narratorEvents.Count}/{cps.Count})");
 
         // Kills (§5): 4 archers → [[4],[0],[0]] [true, false, false], 5/6 = 0/0; a 5th changes nothing.
         Mob[] Mobs(string name) => [.. map.Objects.Values.OfType<Mob>().Where(m => m.Template.Name == name && !m.Dead)];
@@ -223,14 +223,21 @@ public static class ExpeditionTest
               && Of(peer3, EventCodes.FullExpeditionInfo).Count == 1 && Of(peer3, EventCodes.NewExpeditionCheckPoint).Any(e => Convert.ToInt64(e.Parameters[0]) == points[1].Id && Int(e, 2) == 1),
               $"dead: the push {{0: the id, 1: Mine-SOLO}}, the Join at the active checkpoint with 260 again and its state 1 (got {rejoin.a8j})");
 
-        // The finish exit is shut before the completion; the mages and the boss complete it with the bonus (§5.1).
-        var finishExit = map.Objects.Values.OfType<ExpeditionExit>().Single(e => !e.Start);
+        // The finish exit is shut before the completion: not on the map, not sent (issue #29), an ExitEnterStart on its id refused with 254;
+        // the mages and the boss complete it with the bonus (§5.1), then the finish exit goes out once, after the last 261.
+        var finishExit = instance.Objects.OfType<ExpeditionExit>().Single(e => !e.Start);
+        Check(!map.Objects.ContainsKey(finishExit.Id) && Of(peer3, EventCodes.NewExpeditionExit).Count == 1, "issue #29: no finish exit (251 key 4 false) at the Joins before the completion");
         Move(s3, finishExit.Position);
         Call(s3, peer3, new ExitEnterStartRequest { wf = world.GameNow, kq = finishExit.Id }, 30);
         Check(Of(peer3, EventCodes.ExitEnterCancel).Count == 1, "the finish exit before the completion: 254");
         var silver = me.Character.Silver;
+        var beforeEnd = peer3.Events.Count;
         foreach (var m in Mobs("T2_MOB_EXP_HERETIC_MAGE").Take(5).Concat(Mobs("T2_MOB_EXP_HERETIC_OVERSEER_BOSS"))) Kill(m);
         var end = Of(peer3, EventCodes.ExpeditionQuestProgressInfo)[^1];
+        var opened = Of(peer3, EventCodes.NewExpeditionExit, beforeEnd);
+        Check(opened is [var fx] && Convert.ToInt64(fx.Parameters[0]) == finishExit.Id && fx.Parameters.GetValueOrDefault((byte)4) is not true && fx.Parameters[3] is "ExpeditionExit"
+              && peer3.Events.IndexOf(fx) > peer3.Events.IndexOf(end) && map.ClusterWide.Contains(finishExit),
+              $"issue #29: at the completion the finish exit once (251 {{0: its id, 3: ExpeditionExit, 4 false}}) after the last 261, cluster-wide for later Joins (got {opened.Count})");
         var bag = me.Inventory.Bag.Items.Select(i => i.Template.Name).ToList();
         Check(instance.Finished && end.Parameters[4] is bool[] f2 && f2.All(x => x) && f2.Length == 3 && me.Character.Silver - silver == 3000 * 10000
               && bag.Contains("T4_LOOTBAG_EXPEDITION_ROYAL_SIGIL") && bag.Contains("T3_SKILLBOOK_NONTRADABLE") && me.Character.Expeditions is { Last: "T3_EXP_STD_HERETIC_MINE", Bonus.Count: 1 }

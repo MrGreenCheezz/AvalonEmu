@@ -4,7 +4,8 @@ using AlbionLocal.Server.Protocol;
 namespace AlbionLocal.Server.Entities;
 
 /// <summary>
-/// The objects of an expedition instance (stageH expeditions SPEC §2.7): sent cluster-wide at the Join and never left (the client's
+/// The objects of an expedition instance (stageH expeditions SPEC §2.7): sent cluster-wide at the Join (the finish exit from the completion
+/// on) and never left (the client's
 /// expedition service ghj keeps lists of the exit and narrator views; a Leave would remove them).
 /// </summary>
 public abstract class ExpeditionObject(long id, ExpeditionObjectSpawn spawn) : WorldObject(id, spawn)
@@ -18,7 +19,8 @@ public abstract class ExpeditionObject(long id, ExpeditionObjectSpawn spawn) : W
 /// <summary>
 /// NewExpeditionExit (251, atq; cka.af 0x180B33930): key 3 the tile name "ExpeditionExit" (the client makes that prefab itself), key 4
 /// spawnatstartup: true for the start exit, false for the finish exit, which the client shows closed until it sees the expedition
-/// complete. Used by ExitEnterStart (op 237, SPEC §2.10).
+/// complete but keeps clickable (issue #29): the server sends the finish exit only at the completion (Expeditions.OpenFinishExit).
+/// Used by ExitEnterStart (op 237, SPEC §2.10).
 /// </summary>
 public sealed class ExpeditionExit(long id, ExpeditionObjectSpawn spawn) : ExpeditionObject(id, spawn)
 {

@@ -58,6 +58,9 @@ public sealed class VisibilityTracker(Player player)
     /// </summary>
     private bool _joining;
 
+    /// <summary>Set by this Join's phase B (<see cref="SendClusterWide"/>): a cluster-wide object added later goes out at once (<see cref="Show"/>).</summary>
+    private bool _clusterSent;
+
     /// <summary>
     /// From <see cref="Join"/> until <see cref="SendAccessStatus"/> (right after JoinFinished): the buildings entered in that
     /// time, whose AccessStatus waits for that batch (002835: every building of the Join after JoinFinished).
@@ -107,6 +110,7 @@ public sealed class VisibilityTracker(Player player)
         _unlisted.Clear();
         _listedSent.Clear();
         _accessPending = [];
+        _clusterSent = false;
         Cell = null;
         if (map.Grid is not null && !player.IsBot) Pass(position); // stage I: a bot tracks players only
         // Then the players in view (stage 7 SPEC §3: official 611 NewCharacter in phase A); they hear of this one later.
@@ -133,6 +137,7 @@ public sealed class VisibilityTracker(Player player)
     public void SendClusterWide()
     {
         if (_map is null) return;
+        _clusterSent = true;
         foreach (var o in _map.ClusterWide) Enter(o);
         player.World.Outposts.Joined(player);
     }
@@ -324,11 +329,18 @@ public sealed class VisibilityTracker(Player player)
 
     /// <summary>
     /// An object put on the map after the player's last pass (a mob spawned, stage 5): sent now when its cell is within
-    /// <see cref="VisibilityOptions.EnterCells"/> of the player's (any distance with AnnounceAll), else by a later pass.
+    /// <see cref="VisibilityOptions.EnterCells"/> of the player's (any distance with AnnounceAll), else by a later pass. A cluster-wide
+    /// one (an expedition's finish exit at the completion) is sent now when this Join's phase B is over, else by phase B.
     /// </summary>
     public void Show(WorldObject o)
     {
-        if (_map is null || o.Map != _map || Cell is not { } cell || o.Range != AnnounceRange.Window) return;
+        if (_map is null || o.Map != _map) return;
+        if (o.Range == AnnounceRange.Cluster)
+        {
+            if (_clusterSent) Enter(o);
+            return;
+        }
+        if (Cell is not { } cell || o.Range != AnnounceRange.Window) return;
         if (AnnounceAll || CellGrid.Distance(o.Cell, cell) <= Options.EnterCells) Enter(o);
     }
 
