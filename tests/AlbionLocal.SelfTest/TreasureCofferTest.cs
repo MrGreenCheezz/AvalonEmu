@@ -108,6 +108,17 @@ public static class TreasureCofferTest
         Check(info is not null && Guids(info.GetValueOrDefault((byte)51)).SequenceEqual([chest.TreasureGuid!.Value]) && info[52] is int[] wi && wi.SequenceEqual([Ix("DEFAULT_CHEST_VETERAN")]),
               "world map: ClusterInfoUpdate {51 the Guid, 52 the index}");
 
+        // An unlock (a GM's .chest unlock, or the protecting mobs dying): a new 284 at once, key 6 now the moment it unlocked, so the
+        // client stops counting down to the protection end that no longer applies.
+        var beforeUnlock = openAt;
+        mark = peerA.Events.Count;
+        lock (world.Sync) world.WorldChests.Unlock(chest, a.Player!);
+        Tick(0.1);
+        var unlocked = peerA.Events.Skip(mark).LastOrDefault(e => Code(e) == (int)EventCodes.LocalTreasuresUpdate);
+        var u6 = unlocked?.Parameters[6] as long[];
+        Check(unlocked is not null && u6 is { Length: 1 } && u6[0] == chest.StateTicks && u6[0] != beforeUnlock,
+              $"an unlock: a new 284 with key 6 = the unlock moment {chest.StateTicks}, not the old protection end {beforeUnlock} (got {u6?[0]})");
+
         // Gone (despawned): the next list is empty.
         mark = peerA.Events.Count;
         lock (world.Sync) Combat.RemoveBag(chest, "test");

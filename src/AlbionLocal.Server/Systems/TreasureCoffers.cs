@@ -90,7 +90,14 @@ public sealed class TreasureCoffers(World world)
     }
 
     /// <summary>A listed treasure: its Guid (284 key 1, NewLootChest key 20), its index in the client's list (key 2), its subtype (key 8) and definition.</summary>
-    public sealed record Listing(Guid Guid, int Index, string Subtype, TreasureLootchest Def);
+    public sealed record Listing(Guid Guid, int Index, string Subtype, TreasureLootchest Def)
+    {
+        /// <summary>
+        /// The lock state the last 284 carried. The countdown target is derived from it (key 6 is "openable at" while the chest is
+        /// LockedByTimer, else the moment it stopped being locked), so a change means the client's list is stale and must go again.
+        /// </summary>
+        public byte LockState { get; set; }
+    }
 
     private readonly ConditionalWeakTable<Map, MapTreasures> _maps = new();
 
@@ -280,7 +287,7 @@ public sealed class TreasureCoffers(World world)
         }
         var guid = Guid.NewGuid();
         chest.TreasureGuid = guid;
-        m.Listed[chest] = new Listing(guid, index, subtype, def);
+        m.Listed[chest] = new Listing(guid, index, subtype, def) { LockState = chest.LockState };
         m.ListChanged = true;
     }
 
@@ -452,6 +459,15 @@ public sealed class TreasureCoffers(World world)
             m.Listed.Remove(c);
             m.ListChanged = true;
         }
+        // A chest that stopped being locked (its protecting mobs dead, a GM's .chest unlock) keeps its marker but its countdown is
+        // over: key 6 becomes the moment it unlocked, and the client hides the timer once now >= it. Without a new list the client
+        // kept counting down to the protection end that no longer applied.
+        foreach (var (chest, listing) in m.Listed)
+            if (listing.LockState != chest.LockState)
+            {
+                listing.LockState = chest.LockState;
+                m.ListChanged = true;
+            }
         if (m.ListChanged)
         {
             m.ListChanged = false;
