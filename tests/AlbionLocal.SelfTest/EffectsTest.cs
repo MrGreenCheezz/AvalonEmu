@@ -33,6 +33,7 @@ public static class EffectsTest
         ("effects: BLINK shoes through the CastStart handler 6 m away (stageM): ForcedMovement {1 1, 3 = 2, 5 [P, aim], 7 4065, 8 5} to the caster and the watcher before the list, no Teleport, the key-6 echo; pull is kind 4", BlinkCast),
         ("effects: ENERGY_BARRIER shield (DamageShieldUpdate, absorb without HealthUpdate, bare at +3 s), ENRAGE stacks on damage, PARRY channel end and cancel", ShieldsAndChannels),
         ("effects: ENFEEBLEAURA toggle: TerminateToggleSpell takes it off (CastCancel {4 true, 5 slot, cooldown}), castable after the cooldown, ends by itself at +5 s; ChannelingCancel", Toggles),
+        ("effects: a dash and a blink stop at the walk grid (wall 3 m away, a blocked start, the cluster edge) and a Move into a blocked cell is corrected with MoveResponse", Terrain),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -602,5 +603,89 @@ public static class EffectsTest
         lock (world.Sync) Knockdown.Start(me, me.Id, "test", world.GameNow);
         Check(!me.Combat.Toggles.ContainsKey(slot) && me.Effects.Find(aura.Id, me.Id) is null && Since(peer, mark).Any(e => e.Code == EventCodes.ActiveSpellEffectsUpdate),
               "knocked down: the toggle off, the list without it sent");
+    }
+
+    /// <summary>
+    /// A dash and a blink are stopped by the walk grid (reported: the Greataxe leap landed on water and outside the map, and a
+    /// Move into that spot was accepted). A wall of blocked cells 3 m east of the stand: the helper stops a 6 m line before it,
+    /// FLAMEDASH and BLINK both end west of it, and a Move that enters a blocked cell is answered with the MoveResponse
+    /// correction instead of being relayed. Also: a caster standing on a blocked cell is still clamped, and a path off the
+    /// cluster edge stops inside the bounds.
+    /// </summary>
+    private static void Terrain()
+    {
+        using var arena = new Arena();
+        var world = arena.World;
+        var (session, peer, me) = arena.Join("Dasher", new InventoryItem("T4_MAIN_FIRESTAFF"));
+        var map = world.Maps.Find("0204")!; // loaded by the Join above
+        var p = me.PositionAt(DateTime.UtcNow);
+        int sx = (int)Math.Floor(p.X), sz = (int)Math.Floor(p.Y);
+        var grid = WalkGrid.FromCells(sx - 20, sz - 20, sx + 20, sz + 20, Enumerable.Range(sz - 10, 21).Select(z => (sx + 3, z)), [p]);
+        AlbionLocal.Server.AI.MobNav.Use(map, grid);
+        try
+        {
+            // 1. The helper itself: the wall, the cluster edge, and a start on a blocked cell.
+            var east = p + new Vector2(6, 0);
+            var stopped = SpellMovement.Stopped(world, map, p, east, standable: true);
+            Check(grid.Free(stopped) && stopped.X > p.X && stopped.X < sx + 3,
+                  $"a 6 m line east stops on a standable cell before the wall at x {sx + 3} (end {stopped.X:0.##}, free {grid.Free(stopped)})");
+            var off = SpellMovement.Stopped(world, map, p, new Vector2(sx + 500, p.Y));
+            Check(off.X < grid.MaxX && grid.Open(off), $"a line off the cluster edge stops inside the bounds (end x {off.X:0.##}, MaxX {grid.MaxX})");
+            // A caster walled in on every side cannot dash out at all: the old code skipped the whole check when the start cell was
+            // blocked, so a leap out of a rock or a wall worked. The ring is blocked from 1 to 3 m around the caster.
+            var (cx, cz) = ((int)Math.Floor(p.X), (int)Math.Floor(p.Y));
+            var ring = WalkGrid.FromCells(sx - 20, sz - 20, sx + 20, sz + 20,
+                from dz in Enumerable.Range(-3, 7)
+                from dx in Enumerable.Range(-3, 7)
+                where Math.Max(Math.Abs(dx), Math.Abs(dz)) is >= 1 and <= 3
+                select (cx + dx, cz + dz), [p]);
+            AlbionLocal.Server.AI.MobNav.Use(map, ring);
+            var boxed = SpellMovement.Stopped(world, map, p, p + new Vector2(6, 0), standable: true);
+            Check(Vector2.Distance(boxed, p) < 0.01f,
+                  $"walled in on every side: the dash does not move (end {boxed.X:0.##}, {boxed.Y:0.##}, start {p.X:0.##}, {p.Y:0.##})");
+            AlbionLocal.Server.AI.MobNav.Use(map, grid);
+
+            // 2. FLAMEDASH through the cast: the ForcedMovement ends west of the wall and the caster stands there.
+            var flame = T("FLAMEDASH");
+            var mark = peer.Events.Count;
+            Hit(arena, me, flame, 4, 200, east);
+            var fm = Since(peer, mark).FirstOrDefault(e => e.Code == EventCodes.ForcedMovement).P;
+            var path = fm?[5] as float[];
+            Check(fm is not null && path is { Length: 4 } && path[2] < sx + 3 && path[2] > p.X,
+                  $"FLAMEDASH aimed 6 m east: the path ends before the wall (got {(path is null ? "no ForcedMovement" : $"({path[0]:0.##}, {path[1]:0.##}) -> ({path[2]:0.##}, {path[3]:0.##})")})");
+            arena.Run(0.4);
+            var landed = me.PositionAt(DateTime.UtcNow);
+            Check(grid.Open(landed) && landed.X < sx + 3, $"the dasher stands west of the wall ({landed.X:0.##}, {landed.Y:0.##})");
+
+            // 3. BLINK through the cast: no teleport past the wall.
+            var blink = T("BLINK");
+            var bmark = peer.Events.Count;
+            Hit(arena, me, blink, 5, 200, east);
+            var bfm = Since(peer, bmark).FirstOrDefault(e => e.Code == EventCodes.ForcedMovement && Is(e.P, me.Id)).P;
+            var bpath = bfm?[5] as float[];
+            var blinkEnd = me.PositionAt(DateTime.UtcNow);
+            Check((bpath is null || bpath[2] < sx + 3) && grid.Open(blinkEnd) && blinkEnd.X < sx + 3,
+                  $"BLINK aimed 6 m east into the wall: no teleport past it ({(bpath is null ? "no ForcedMovement" : $"end x {bpath[2]:0.##}")}, position {blinkEnd.X:0.##})");
+
+            // 4. A Move that enters a blocked cell: MoveResponse back to the last valid position, and the walk is not taken.
+            var (walkerSession, walkerPeer, walker) = arena.Join("Walker", new InventoryItem("T4_MAIN_SWORD"));
+            var before = walker.PositionAt(DateTime.UtcNow);
+            var rmark = walkerPeer.Responses.Count;
+            Send(walkerSession, new MoveRequest { wf = world.GameNow, v6 = [sx + 3.5f, before.Y], v7 = 90, v8 = [sx + 3.5f, before.Y + 3], v9 = 5.5f });
+            var corr = walkerPeer.Responses.Skip(rmark).LastOrDefault();
+            Check(corr is not null && corr.Parameters.TryGetValue(ReservedKeys.OperationCode, out var op) && Convert.ToInt16(op) == (short)OperationCodes.Move
+                  && corr.Parameters[0] is float[] back && back[0] < sx + 3
+                  && Vector2.Distance(walker.PositionAt(DateTime.UtcNow), before) < 0.01f,
+                  $"a Move into a blocked cell: MoveResponse back to ({before.X:0.##}, {before.Y:0.##}) (got {string.Join("; ", walkerPeer.Responses.Skip(rmark))}, "
+                  + $"at ({walker.PositionAt(DateTime.UtcNow).X:0.##}, {walker.PositionAt(DateTime.UtcNow).Y:0.##}))");
+
+            // 5. A Move on open ground is taken as before (the guard must not touch the normal path).
+            var open = walkerPeer.Responses.Count;
+            Send(walkerSession, new MoveRequest { wf = world.GameNow, v6 = [before.X - 1, before.Y], v7 = 90, v8 = [before.X - 2, before.Y], v9 = 5.5f });
+            Check(walkerPeer.Responses.Count == open && Vector2.Distance(walker.PositionAt(DateTime.UtcNow), before + new Vector2(-1, 0)) < 0.05f,
+                  $"a Move on open ground: no MoveResponse, the walk is taken (responses {walkerPeer.Responses.Count - open}, "
+                  + $"at ({walker.PositionAt(DateTime.UtcNow).X:0.##}, {walker.PositionAt(DateTime.UtcNow).Y:0.##}) vs ({before.X - 1:0.##}, {before.Y:0.##}))");
+        }
+        finally { AlbionLocal.Server.AI.MobNav.Use(map, null); }
     }
 }

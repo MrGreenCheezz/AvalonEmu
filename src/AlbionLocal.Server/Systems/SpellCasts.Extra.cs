@@ -135,7 +135,9 @@ public static partial class SpellCasts
     /// teleport (MOUNTSPELL_BAT_BLINK, the blink shoes) at client index <paramref name="index"/>: the caster stands at the aim point (a
     /// ground spell) or its target, pulled in to castrange; ForcedMovement kind 1 to the caster and its observers
     /// (<see cref="SpellMovement.Teleport"/>; stageM movement NOTES: the client moves its own player only so), then the node's endeffect
-    /// runs there. Walkability is not checked (no collision data on the server).
+    /// runs there. The destination must be a cell the caster can stand in and reach in a straight line from where it is
+    /// (<see cref="SpellMovement.Stopped"/>: a wall, water, the cluster edge stop it); a blink that cannot move at all is dropped
+    /// together with its endeffect, so a blink into rock does nothing instead of putting the caster inside it.
     /// </summary>
     private static void Blink(SpellContext c, SpellTemplate spell, XElement node, int index)
     {
@@ -144,6 +146,7 @@ public static partial class SpellCasts
         var to = spell.Target == "ground" || c.Target is null ? c.Point : SpellMovement.PositionOf(c.Target, c.Ticks);
         var d = Vector2.Distance(from, to);
         if (spell.CastRange > 0 && d > spell.CastRange) to = from + (to - from) * (spell.CastRange / d);
+        if (p.Map is { } map) to = SpellMovement.Stopped(p.World, map, from, to, standable: true);
         if (Vector2.Distance(from, to) < 0.01f) return;
         SpellMovement.Teleport(c, spell, to, index);
         if ((string?)node.Attribute("endeffect") is { } name && p.World.Spells?.Template(name) is { } end)
