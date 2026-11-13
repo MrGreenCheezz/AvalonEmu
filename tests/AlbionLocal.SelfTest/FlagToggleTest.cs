@@ -93,11 +93,13 @@ public static class FlagToggleTest
         var bm = z.B.P.Events.Count;
         Check(z.Flag(to) == 0, $"{where}: op 354 {{0 {to}}} rc 0");
         z.Run(15.2);
-        var seen = Since(z.B.P, bm).Where(e => e.Code is EventCodes.CastStart or EventCodes.CastSpell or EventCodes.ChangeFlaggingFinished).Select(e => e.Code).ToList();
-        Check(p.Flag == to && seen is [EventCodes.CastStart, EventCodes.CastSpell, EventCodes.ChangeFlaggingFinished]
+        var seen = Since(z.B.P, bm).Where(e => e.Code is EventCodes.CastStart or EventCodes.CastFinished or EventCodes.CastSpell or EventCodes.ChangeFlaggingFinished).Select(e => e.Code).ToList();
+        var finished = Since(z.B.P, bm).FirstOrDefault(e => e.Code == EventCodes.CastFinished).P;
+        Check(p.Flag == to && seen is [EventCodes.CastStart, EventCodes.CastFinished, EventCodes.CastSpell, EventCodes.ChangeFlaggingFinished]
+              && finished is not null && Convert.ToByte(finished[3]) == Flagging.Slot && Convert.ToInt16(finished[2]) == Client.Spells!.IdOf(Flagging.SpellName(to))
               && Since(z.A.P, am).Any(e => e.Code == EventCodes.ChangeFlaggingFinished && (e.P.ContainsKey(1) ? L(e.P, 1) : 0) == to)
               && !Since(z.A.P, am).Any(e => e.Code is EventCodes.CastCancel or EventCodes.CastStart),
-              $"{where}: flag {to} after 15 s: B sees 14, 19, 364; A gets 364, no CastCancel ({string.Join(",", seen)})");
+              $"{where}: flag {to} after 15 s: B sees 14, 18, 19, 364; A gets 364, no CastCancel ({string.Join(",", seen)})");
     }
 
     /// <summary>Op 354 to <paramref name="to"/> is refused: rc -501, CastCancel and a SystemMessage to A only, the flag unchanged.</summary>
