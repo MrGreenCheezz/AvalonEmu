@@ -235,9 +235,9 @@ public static class SpellMovement
     /// (constanttime; HAMMER_SHOVE 2 / 16). Its endeffect runs at the end. The path is stopped by the terrain
     /// (<see cref="Stopped"/>: a wall, water, the cluster edge), as a knockback and a mob's dash are: the client only follows the path
     /// of the ForcedMovement (cux.afk glides along key 5 and sets the unit on its end), so the end the server sends is where the
-    /// character stands (public issue #27: AXE_CHARGE aimed across a river ended on the water; the client lets it be aimed there,
-    /// because water blocks the ground but not a spell's line of sight). A dash with no room at all — the caster at the wall it aims
-    /// at — sends no path and runs its endeffect where the caster stands [inference: not captured].
+    /// character stands (public issue #27: AXE_CHARGE aimed across a river ended on the water; the client's own aim test is a
+    /// line-of-sight ray, cwc.u 0x1809D9270, and let it be aimed there). A dash with no room at all — the caster at the wall it
+    /// aims at — sends no path and runs its endeffect where the caster stands [inference: not captured].
     /// </summary>
     public static void Dash(SpellCasts.SpellContext c, SpellTemplate spell, XElement node, int index)
     {
