@@ -47,6 +47,9 @@ public static class Flagging
     /// <summary>CharacterSpellSlot ChangeFlagging (SPEC §0).</summary>
     public const byte Slot = 24;
 
+    /// <summary>The cast counter of a flag cast: CastStart key 8, CastFinished key 4 and CastSpell key 6 are 1 in every captured one (28 of 28).</summary>
+    public const byte Counter = 1;
+
     /// <summary>The return code of a refused op 354 (RcGeneric.InvalidState; the client ignores the response).</summary>
     public const short Refused = -501;
 
@@ -150,7 +153,7 @@ public static class Flagging
         var cast = new FlagCast(to, spell, spell?.Id ?? DefaultId(to), now, now + SpellCasts.Seconds(seconds));
         p.SendToObservers(new CastStartEvent
         {
-            ddn = p.Id, bwb = cast.Start, bwe = cast.End, bwf = cast.SpellId, bwg = -1, bwh = p.Id, Extra = new() { [8] = (byte)0, [9] = Slot },
+            ddn = p.Id, bwb = cast.Start, bwe = cast.End, bwf = cast.SpellId, bwg = -1, bwh = p.Id, Extra = new() { [8] = Counter, [9] = Slot },
         });
         Log.Info("pvp", $"'{p.Character.Name}' flags {FlagName(to)} ({to}) in {seconds:0.#} s on {where}: the cast starts");
         p.PvpState.FlagCast = cast;
@@ -203,18 +206,22 @@ public static class Flagging
         var world = p.World;
         var now = world.GameNow;
         var at = p.PositionAt(DateTime.UtcNow);
-        // CastFinished (18) {0 me, 1 me, 2 the spell, 3 slot 24, 4 0, 5 the cast end, 6 1.0} before the hit: it is what ends the
-        // client's own cast of slot 24. Without it the client stayed in the casting animation with its input blocked — the player
-        // was stuck until a relog (reported after a deflag: FLAG_MOUNTAIN → FLAG_BLUE, 15 s). Official batch, one instant:
-        // fortress-capture-kit/output/fortress_20261107_231749.transcript.txt 1794090356.9412 (events 8, 18, 19, 364 for spell 1044
-        // on slot 24, CastFinished key 3 = 24, key 6 = 1.0); the ordinary cast path sends the same pair in SpellCasts.Finish.
+        // EnergyUpdate (8) {0 me, 1 the cast end, 3 energy, 4 7, 5 me, 6 the spell; no key 2: the flag spells cost nothing} and
+        // CastFinished (18) {0 me, 1 me, 2 the spell, 3 slot 24, 4 counter 1, 5 the cast end, 6 the cooldown factor} before the hit,
+        // one batch with CastSpell and 364: 28 of 28 flag changes of other players in captures 103829 and 002835 (23 × a 0 s flag
+        // spell, 5 × FLAG_BLUE 15 s; key 4 = 1 and CastStart key 8 = 1, CastSpell key 6 = 1 in all; key 6 = 1 or the caster's factor,
+        // 0.90-0.98 in six). CastFinished is what ends the client's own cast of slot 24 (cwb.u 0x1809D6960: the cast action under way
+        // is ended, then the slot's cooldown set); without it the client stayed in the casting animation with its input blocked — the
+        // player was stuck until a relog (public PR #33: reported after a deflag, FLAG_MOUNTAIN → FLAG_BLUE). The ordinary cast path
+        // sends the same three in SpellCasts.Finish.
+        p.SendAround(new EnergyUpdateEvent { ddn = p.Id, b5b = cast.End, b5d = p.Energy.Value, b5e = Combat.EnergyCast, b5f = p.Id, b5g = cast.SpellId });
         p.SendAround(new CastFinishedEvent
         {
-            ddn = p.Id, bux = p.Id, buy = cast.SpellId, buz = Slot, bu0 = 0, bu1 = cast.End, bu2 = 1.0f,
+            ddn = p.Id, bux = p.Id, buy = cast.SpellId, bu1 = cast.End, bu2 = SpellCasts.CooldownFactorOf(p), Extra = new() { [3] = Slot, [4] = Counter },
         });
         p.SendAround(new CastSpellEvent
         {
-            ddn = p.Id, bvw = p.Id, bvx = at, bvy = cast.SpellId, bvz = now, bv0 = now, Extra = new() { [6] = (byte)0, [7] = (short)0 },
+            ddn = p.Id, bvw = p.Id, bvx = at, bvy = cast.SpellId, bvz = now, bv0 = now, Extra = new() { [6] = Counter, [7] = (short)0 },
         });
         Set(p, cast.To);
         if (cast.To == Pvp.Red) p.PvpState.RedSince = world.Clock.Now;
