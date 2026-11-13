@@ -254,6 +254,47 @@ public sealed class WalkGrid
         return true;
     }
 
+    /// <summary>A character's collision radius (characters.xml collisionradius 0.75): how far its centre stays from a blocked cell it ran into.</summary>
+    public const float UnitRadius = 0.75f;
+
+    /// <summary>The most cell borders one <see cref="Ray"/> crosses: more than the longest line inside any cluster's bounds.</summary>
+    private const long MaxRaySteps = 8192;
+
+    /// <summary>
+    /// The grid ray (public issue #27): the first cell on the straight segment a → b that a tile blocks — or, with
+    /// <paramref name="blocked"/> false, the first one no tile blocks — walked from cell border to cell border, so every cell the
+    /// segment touches is tested exactly once and none is skipped (about two cells a metre, whatever the length). It is the walk of
+    /// the client's own ray, a84.f(Vector2, Vector2, out Vector2, byte mask) 0x18052CC30 in Albion.Common (the assembly the client
+    /// shares with the official server): mask 1 there is Tile.CollisionFlags.BlockGround, the one bit this grid keeps.
+    /// <paramref name="hit"/>: where the segment enters that cell (a itself when it starts in one). False when the segment ends
+    /// without one. Outside the bounds counts as blocked.
+    /// </summary>
+    public bool Ray(Vector2 a, Vector2 b, out Vector2 hit, bool blocked = true)
+    {
+        int x = Cell(a.X), z = Cell(a.Y);
+        hit = a;
+        var d = b - a;
+        if (!float.IsFinite(a.X + a.Y + d.X + d.Y)) return blocked; // a NaN aim: blocked ground at once, open ground never
+        if (Blocked(x, z) == blocked) return true;
+        int stepX = Math.Sign(d.X), stepZ = Math.Sign(d.Y);
+        // The segment's parameter (0 at a, 1 at b) at its next crossing of a cell border along x and along z, and the gap between two.
+        var nextX = stepX == 0 ? float.PositiveInfinity : ((stepX > 0 ? x + 1 : x) - a.X) / d.X;
+        var nextZ = stepZ == 0 ? float.PositiveInfinity : ((stepZ > 0 ? z + 1 : z) - a.Y) / d.Y;
+        var gapX = stepX == 0 ? float.PositiveInfinity : stepX / d.X;
+        var gapZ = stepZ == 0 ? float.PositiveInfinity : stepZ / d.Y;
+        // One border per step: exactly as many as the two end cells are apart (a ray out of the bounds ends at the first cell outside).
+        for (var left = Math.Min(Math.Abs((long)Cell(b.X) - x) + Math.Abs((long)Cell(b.Y) - z), MaxRaySteps); left > 0; left--)
+        {
+            float t;
+            if (nextX <= nextZ) (t, nextX, x) = (nextX, nextX + gapX, x + stepX);
+            else (t, nextZ, z) = (nextZ, nextZ + gapZ, z + stepZ);
+            if (Blocked(x, z) != blocked) continue;
+            hit = a + d * Math.Clamp(t, 0, 1);
+            return true;
+        }
+        return false;
+    }
+
     /// <summary>
     /// Mob navigation (stageN mobnav SPEC): whether cell (x, z) is free, no blocked cell in its 3×3 (in or out of the bots' component:
     /// a mob walks wherever it stands, its region is whatever free cells connect to it, so dungeon floors and islands work too).
