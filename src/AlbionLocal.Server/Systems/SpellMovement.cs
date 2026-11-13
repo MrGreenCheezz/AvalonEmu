@@ -137,16 +137,21 @@ public static class SpellMovement
 
     /// <summary>
     /// Where a forced path from <paramref name="from"/> towards <paramref name="to"/> ends on the map's walk grid (stageN spells-bosses): the
-    /// whole way when its line crosses no blocked cell (or there is no grid, or the unit stands on a blocked cell already), else the
-    /// furthest tenth of it that does.
+    /// whole way when its line crosses no blocked cell (or there is no grid), else the furthest tenth of it that does.
+    /// <paramref name="standable"/>: the end must also be a cell a unit can stand in (no blocked cell in its 3×3, <see cref="WalkGrid.Free"/>),
+    /// which is what a player's own dash or blink needs — a landing 1 m from the water is not a landing. A start on a blocked cell (a unit
+    /// hugging a wall) is tested from the nearest open cell instead of skipping the check.
     /// </summary>
-    public static Vector2 Stopped(World world, Map map, Vector2 from, Vector2 to)
+    public static Vector2 Stopped(World world, Map map, Vector2 from, Vector2 to, bool standable = false)
     {
-        if (AI.MobNav.Grid(world, map) is not { } grid || !grid.Open(from) || grid.ClearOpen(from, to)) return to;
+        if (AI.MobNav.Grid(world, map) is not { } grid) return to;
+        var start = grid.Open(from) ? from : grid.NearestOpen(from, 2) ?? from;
+        bool Ok(Vector2 at) => grid.ClearOpen(start, at) && (!standable || grid.Free(at));
+        if (Ok(to)) return to;
         for (var k = 9; k > 0; k--)
         {
             var at = from + (to - from) * (k / 10f);
-            if (grid.ClearOpen(from, at)) return at;
+            if (Ok(at)) return at;
         }
         return from;
     }
@@ -185,14 +190,16 @@ public static class SpellMovement
     /// <paramref name="spell"/> (SPEC §5.1): from where it is to the aim point (ground spells) or to the target + endpositionoffset
     /// along the line (HEROICSTRIKE2 −2), the length clamped to [mindistance, maxdistance or castrange]; the end after length /
     /// movespeed (timebasedondistance, the default; FLAMEDASH 4.59 m / 28 → 164 ms) or maxdistance (castrange) / movespeed
-    /// (constanttime; HAMMER_SHOVE 2 / 16). Its endeffect runs at the end.
+    /// (constanttime; HAMMER_SHOVE 2 / 16). Its endeffect runs at the end. The path is stopped by the terrain
+    /// (<see cref="Stopped"/>: a wall, water, the cluster edge — a player's landing must be a cell it can stand in), as a
+    /// knockback and a mob's dash already were.
     /// </summary>
     public static void Dash(SpellCasts.SpellContext c, SpellTemplate spell, XElement node, int index)
     {
         var p = c.Caster;
         var world = p.World;
         var speed = SpellTemplate.Float(node, "movespeed", 10);
-        if (speed <= 0 || p.Combat.Down is not null) return;
+        if (speed <= 0 || p.Combat.Down is not null || p.Map is not { } map) return;
         var here = PositionOf(p, c.Ticks);
         var aim = c.Target is { } target ? PositionOf(target, c.Ticks) : c.Point;
         var line = aim - here;
@@ -203,9 +210,12 @@ public static class SpellMovement
         length = Math.Max(SpellTemplate.Float(node, "mindistance"), length);
         if (max > 0) length = Math.Min(max, length);
         if (length <= 0.01f) return;
-        var seconds = (string?)node.Attribute("ruleset") == "constanttime" && max > 0 ? max / speed : length / speed;
+        var to = Stopped(world, map, here, here + dir * length, standable: true);
+        var travelled = Vector2.Distance(here, to);
+        if (travelled <= 0.01f) return; // a wall right in front: no dash at all
+        var seconds = (string?)node.Attribute("ruleset") == "constanttime" && max > 0 ? max / speed : travelled / speed;
         var end = c.Ticks + (long)Math.Round(seconds * 1000) * TimeSpan.TicksPerMillisecond;
-        var move = new ForcedMove(0, c.Ticks, end, here, here + dir * length, speed, spell.Id, (byte)index);
+        var move = new ForcedMove(0, c.Ticks, end, here, to, speed, spell.Id, (byte)index);
         var endEffect = (string?)node.Attribute("endeffect") is { Length: > 0 } name ? world.Spells?.Template(name) : null;
         Start(world, p, move, p.Id, endEffect is null ? null : () => EndEffect(c, endEffect, move));
     }

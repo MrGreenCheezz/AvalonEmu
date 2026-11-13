@@ -1,6 +1,7 @@
 using System.Numerics;
 using AlbionLocal.Photon;
 using AlbionLocal.Photon.Serialization;
+using AlbionLocal.Server.AI;
 using AlbionLocal.Server.Entities;
 using AlbionLocal.Server.Protocol;
 using AlbionLocal.Server.Systems;
@@ -36,6 +37,7 @@ public sealed partial class WorldSession
         var walks = req.v6 is [var px, var py] && Knockdown.Walks(new Vector2(px, py), req.v8 is [var wx, var wy] ? new Vector2(wx, wy) : null);
         if (walks && (SpellEffects.Stunned(player, world.GameNow) || SpellEffects.Rooted(player, world.GameNow))) return null;
         if (!SpellMovement.AcceptMove(player, req.wb, world.GameNow, req.v6 is [var ex, var ey] ? new Vector2(ex, ey) : null)) return null; // on a dash: only its key-6 echo ends the lock
+        if (BlockedMove(player, req.v6) is { } last) { Correct(player, last, req.v6); return null; }
         if (walks && player.Combat.Channel is { Info.AllowMovement: false }) SpellCasts.EndChannel(player, SpellCasts.ChannelEnd.Cancelled);
         if (walks) Emotes.Stop(player, "walks"); // stageN qol: a looping emote ends for the observers (the client has left it)
         if (walks) Revive.Interrupt(player, "walks", interrupted: false); // stageN: PLAYER_BLEEDOUT_REVIVE has keepmovingaftercast false (the client has left it)
@@ -77,6 +79,42 @@ public sealed partial class WorldSession
 
     /// <summary>ENet channel of event 3 (official: 0).</summary>
     private const byte MovementChannel = 0;
+
+    /// <summary>The shortest time between two corrections of one connection (a client that ignores a MoveResponse must not be answered 10× a second).</summary>
+    private static readonly TimeSpan CorrectionInterval = TimeSpan.FromMilliseconds(500);
+
+    private DateTime _lastCorrection;
+
+    /// <summary>
+    /// The position to correct <paramref name="player"/> back to when its Move to <paramref name="v6"/> enters a cell no tile allows
+    /// (water, rock, the far side of a wall, outside the cluster bounds), else null. Movement is predicted by the client, so the walk
+    /// grid is the only thing that can refuse it — and the only way to refuse it is a <see cref="Relocate"/> correction, because
+    /// dropping the Move alone leaves the client where it predicted. Only a Move that *enters* a blocked cell is corrected (the
+    /// position it came from must be open), so a player the grid disagrees with is never frozen in place; nothing happens at all
+    /// before the map's grid is built (<see cref="AI.MobNav.Grid"/> returns null then).
+    /// </summary>
+    private Vector2? BlockedMove(Player player, float[]? v6)
+    {
+        if (v6 is not [var x, var y] || player.Map is not { } map || AI.MobNav.Grid(world, map) is not { } grid) return null;
+        if (grid.Open(new Vector2(x, y))) return null;
+        var last = player.PositionAt(DateTime.UtcNow);
+        return grid.Open(last) ? last : null;
+    }
+
+    /// <summary>
+    /// The <see cref="Relocate"/> correction for a Move the grid refused: the client is put back at <paramref name="last"/> and stops,
+    /// and the Move is not relayed to the observers. At most one per <see cref="CorrectionInterval"/>; the ones in between are dropped
+    /// without an answer.
+    /// </summary>
+    private void Correct(Player player, Vector2 last, float[]? v6)
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastCorrection < CorrectionInterval) return;
+        _lastCorrection = now;
+        Log.Debug(Name, $"-> MoveResponse: ({v6![0]:0.##}, {v6[1]:0.##}) is a blocked cell, back to ({last.X:0.##}, {last.Y:0.##})");
+        Combat.LogOnce("move-blocked:" + player.Map?.Cluster, $"{player.Character.Name}: a Move into a cell no tile allows is corrected (a dash or a walk onto water, rock or outside the cluster)");
+        Relocate(last, player.Facing);
+    }
 
     /// <summary>
     /// A server teleport within the player's cluster (GM .go): the MoveResponse correction to this client (key 0 the
