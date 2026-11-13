@@ -212,7 +212,8 @@ public sealed partial class Islands
     /// <summary>
     /// GetIslandInfos (op 218, response afw, client ctp.af_82 0x180995890; SPEC §1.2): the player's islands as parallel arrays, every row
     /// key 0-8 and 10-22 present with one entry per island (a missing or short one makes the client throw), key 9 left out (only read
-    /// for guild-owned rows). No island (or islands off): the empty answer of before (FillEmpty, no rows). With Islands:StarterIsland a
+    /// for guild-owned rows: a guild island listed there may not be visited). The guild island of the player's guild follows its own
+    /// (owner key 4 = the guild, <see cref="OfGuild"/>). No island (or islands off): the empty answer of before (FillEmpty, no rows). With Islands:StarterIsland a
     /// character without a personal island first gets one of the city whose merchant it stands at (<see cref="GrantStarter"/>).
     /// </summary>
     public GetIslandInfosResponse Infos(Player p)
@@ -220,7 +221,8 @@ public sealed partial class Islands
         if (!Enabled) return new GetIslandInfosResponse().FillEmpty();
         GrantStarter(p);
         PrefetchShowroom(p);
-        var mine = Of(p.Character.Id);
+        var guild = world.Guilds.Of(p.Character.Id);
+        List<Island> mine = [.. Of(p.Character.Id), .. guild is null ? [] : OfGuild(guild.Id)]; // the official answer: personal first
         if (mine.Count == 0) return new GetIslandInfosResponse().FillEmpty();
         var n = mine.Count;
         var ids = mine.Select(i => i.Id).ToArray();
@@ -229,15 +231,16 @@ public sealed partial class Islands
             azq = ids,                                         // [0] island Guid (= the instance's)
             azr = [.. mine.Select(i => i.AccessPoint)],        // [1] "<access point>@<city>"
             azs = [.. mine.Select(i => i.Type)],               // [2] island type (bg3.abo)
-            azt = [.. mine.Select(i => i.OwnerName)],          // [3] owner name
-            azu = [.. mine.Select(i => i.Owner)],              // [4] owner = the character (Join key 1): "my islands"
+            azt = [.. mine.Select(i => i.Guild ? guild!.Name : i.OwnerName)], // [3] owner name (a guild row: the guild's)
+            azu = [.. mine.Select(i => i.Owner)],              // [4] owner = the character (Join key 1): "my islands"; a guild row: the guild (→ ctp+0x460)
             azv = ids,                                         // [5] the level rows (key 6-8)
             azw = [.. mine.Select(i => i.Level)],              // [6] level 0-5
             azx = [.. mine.Select(i => i.LevelChanged)],       // [7] last level change (0 = never; "upgrading" for 130 s after)
             azy = [.. mine.Select(i => i.Bought)],             // [8] purchase
             az0 = new int[n], az1 = new int[n], az2 = new int[n], // [10-12] captured 0
-            az3 = [.. mine.Select(i => CityFlag(i.City))],    // [13] FlaggingStatus (the personal Lymhurst island: 2)
-            az4 = new int[n], az5 = new int[n], az6 = new int[n], az7 = new int[n], az8 = new int[n], // [14-18] guild territory data: 0
+            az3 = [.. mine.Select(i => i.Guild ? (byte)0 : CityFlag(i.City))], // [13] FlaggingStatus (the personal Lymhurst island: 2, the guild's 0 [cap])
+            // [14-18] guild territory data, read for guild rows only (bux.j 0x18079CA30): 0 takes the defaults (bux.j_8 0x18079D700 clamps)
+            az4 = new int[n], az5 = new int[n], az6 = new int[n], az7 = new int[n], az8 = new int[n],
             az9 = new float[n], a0a = new float[n],            // [19-20] 0
             a0b = [.. mine.Select(i => i.Favorite)],           // [21] favourite
             a0c = [.. mine.Select(i => i.Hidden)],             // [22] hidden
@@ -282,7 +285,7 @@ public sealed partial class Islands
     }
 
     /// <summary>The guild of a character for the island management (Join key 56 and its name); null without one.</summary>
-    private (Guid Id, string Name)? GuildOf(Guid character) => world.Guilds.Of(character) is { } g ? (g.Id, g.Name) : null;
+    private (Guid Id, string Name)? GuildOf(Guid owner) => (world.Guilds.Of(owner) ?? world.Guilds.ById(owner)) is { } g ? (g.Id, g.Name) : null; // a guild island's owner is the guild
 
     /// <summary>
     /// The location of the vault a bank on <paramref name="map"/> opens (§0.2): on an island the city bank of world.xml bankgroup

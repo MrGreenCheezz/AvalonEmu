@@ -610,6 +610,20 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         """
         ALTER TABLE characters ADD COLUMN avatar_ring INTEGER NOT NULL DEFAULT 0;    -- 0 = RING1, the default ring
         """,
+        // v47 (public issue #20 follow-up): the guild islands (BuyGuildIsland 220), owned by a guild: a row goes with the guild. Apart from
+        // islands, whose owner is a character. IF NOT EXISTS: safe at whichever position a merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS guild_islands (
+            id            TEXT PRIMARY KEY,                 -- Guid (instance "@ISLAND@<id>", GetIslandInfos key 0)
+            guild         TEXT NOT NULL REFERENCES guilds (id) ON DELETE CASCADE,
+            island_type   INTEGER NOT NULL,                 -- worldsettings.xml island, 1-based (key 2; a GUILD_ISLAND_* type)
+            level         INTEGER NOT NULL,                 -- 0-5 (key 6)
+            access_point  TEXT NOT NULL,                    -- "<islandaccesspoint id>@<city>" (key 1)
+            bought        INTEGER NOT NULL,                 -- UTC ticks (key 8)
+            level_changed INTEGER NOT NULL DEFAULT 0        -- UTC ticks, 0 = never (key 7)
+        );
+        CREATE INDEX IF NOT EXISTS guild_islands_guild ON guild_islands (guild);
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";

@@ -333,7 +333,7 @@ public static class HideoutTest
                 c.Open();
                 using var cmd = c.CreateCommand();
                 cmd.CommandText = "PRAGMA user_version";
-                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 46, "schema version 46");
+                Check(Convert.ToInt64(cmd.ExecuteScalar()) == 47, "schema version 47");
             }
         }
         finally { Directory.Delete(dir, true); }

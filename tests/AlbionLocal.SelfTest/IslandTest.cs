@@ -29,6 +29,7 @@ public static class IslandTest
         ("islands phase 5: plots 1 (level 0) / 16 (level 5); a player builds a T1_PASTURE (op 68) for 100 silver + 30 wood/rock/planks/blocks, the plot then refused, gives it up (op 64)", Construction),
         ("islands phase 5: a placed animal is picked up again (op 71: the baby back, the object gone); a seed cannot be", Pickup),
         ("islands: labourers: a T2 house (op 68), a bed and a table in it (op 69), a wood labourer from its contract, a full T2 wood journal after settling in (op 257), its loot after 22 h (op 258)", Labourers),
+        ("islands: guild island (issue #20): op 220 refused without ISLAND_MANAGEMENT / with too little in the guild account, bought for 5,000,000 from the account, stored, listed, visited by a member, upgraded (op 222)", GuildIsland),
     ];
 
     private static ClusterStore Store => Client.Clusters!;
@@ -557,6 +558,75 @@ public static class IslandTest
         Check(up?.ReturnCode == 0 && me.Inventory.Bag.Items.Count(i => i.Template == baby) == 1 && !me.Map.Objects.ContainsKey(animal!.Id)
               && world.Islands.CropsOf(island.Id).Count == 1 && seedUp?.ReturnCode == 1 && me.Map.Objects.ContainsKey(crop!.Id),
               $"picked up: RC {up?.ReturnCode}, baby back {me.Inventory.Bag.Items.Count(i => i.Template == baby)}, the seed's pick-up RC {seedUp?.ReturnCode} ({placed.Count} placed)");
+        world.Dispose();
+    }
+
+    /// <summary>
+    /// Public issue #20 follow-up: the merchant's guild tab. BuyGuildIsland (220, no price) is refused for a RECRUIT (no ISLAND_MANAGEMENT)
+    /// and while the guild account holds less than GUILD_ISLAND_LYMHURST level 0 (5,000,000); then the guild master buys it: the account pays,
+    /// the buyer's own silver does not, ad7 {0 the island, 1 the AP}; a second one is refused; it is stored (guild_islands), listed in the
+    /// recruit's GetIslandInfos with owner = the guild, the recruit travels to it; UpgradeGuildIsland (222) to level 1 for 3,750,000.
+    /// </summary>
+    private static void GuildIsland()
+    {
+        var dir = NewDir();
+        var characters = Repository(dir);
+        var world = new World(new ServerConfig { JoinByCharacterId = true, GuildCreateCost = 0 }, characters, Client.Items, Client.GameData, Client.Spells)
+        {
+            Sync = new object(), Clusters = Store, MapSeed = 5,
+        };
+        world.MobAi = false;
+        var city = Store.Get("1000");
+        _ = Store.Get("ISLAND-GUILD-FOREST-0001a");
+        var apSpawn = city.IslandAccessPoints.Single();
+        Guid New(string prefix)
+        {
+            var c = StarterKit.Default.NewCharacter(prefix + Guid.NewGuid().ToString("N")[..10]);
+            (c.Cluster, c.PositionX, c.PositionY, c.Silver) = ("1000", apSpawn.Position.X + 1, apSpawn.Position.Y, 100 * 10_000L);
+            Check(characters.Create(c), "character created");
+            return c.Id;
+        }
+        var (master, recruit) = (Join(world, New("M")), Join(world, New("R")));
+        OperationResponse Call(WorldSession session, FakePeer on, AlbionRequest req, int id)
+        {
+            lock (world.Sync) session.OnRequest(Request(req, id), encrypted: false);
+            return on.Responses[^1];
+        }
+        Guild g;
+        lock (world.Sync)
+        {
+            var (m, r) = (master.Session.Player!, recruit.Session.Player!);
+            Check(world.Guilds.Create(m, "Isle Wardens", GuildLogo.Default, null, out _) == 0 && world.Guilds.Invite(m, r.Character.Name, out _, out _) == 0
+                  && world.Guilds.Accept(r, out _) == 0, "a guild with its master and a recruit");
+            g = world.Guilds.Of(m.Character.Id)!;
+            g.SilverA7m = 4_000_000 * 10_000L;
+        }
+        var merchant = master.Session.Player!.Map!.Objects.Values.OfType<IslandAccessPoint>().Single();
+        var ap = $"{apSpawn.Guid:D}@1000";
+        var noRight = Call(recruit.Session, recruit.Peer, new BuyGuildIslandRequest { db = merchant.Id, dc = ap }, 3);
+        var poor = Call(master.Session, master.Peer, new BuyGuildIslandRequest { db = merchant.Id, dc = ap }, 4);
+        g.SilverA7m = 6_000_000 * 10_000L;
+        var bought = Call(master.Session, master.Peer, new BuyGuildIslandRequest { db = merchant.Id, dc = ap }, 5);
+        var again = Call(master.Session, master.Peer, new BuyGuildIslandRequest { db = merchant.Id, dc = ap }, 6);
+        var island = world.Islands.OfGuild(g.Id).SingleOrDefault();
+        var stored = characters.LoadIslands().SingleOrDefault(i => i.Guild);
+        Check(noRight.ReturnCode == 1 && poor.ReturnCode == 1 && bought.ReturnCode == 0 && again.ReturnCode == 1
+              && island is { Type: 9, Level: 0, Guild: true } && island.Owner == g.Id && Fill<BuyGuildIslandResponse>(bought.Parameters) is { ane: var a } resp && resp.and == island.Id && a == ap
+              && g.SilverA7m == 1_000_000 * 10_000L && master.Session.Player.Character.Silver == 100 * 10_000L && world.Islands.Of(master.Session.Player.Character.Id).Count == 0
+              && stored is { Type: 9 } && stored.Id == island.Id && stored.Owner == g.Id && stored.OwnerName == "Isle Wardens",
+              $"recruit refused, 4,000,000 refused, bought: RC 0 {{0 island, 1 AP}}, the account 6,000,000 → 1,000,000, the master's silver kept; a second refused; stored for the guild (got {noRight.ReturnCode}/{poor.ReturnCode}/{bought.ReturnCode}/{again.ReturnCode}, {island}, {g.SilverA7m / 10_000})");
+
+        var infos = Fill<GetIslandInfosResponse>(Call(recruit.Session, recruit.Peer, new GetIslandInfosRequest(), 7).Parameters);
+        var target = $"{apSpawn.World!.Travelpoint:D}@1000";
+        var trip = Call(recruit.Session, recruit.Peer, new BuyJourneyRequest { df = merchant.Id, dg = target, di = island!.Id }, 8);
+        Check(infos is { azs: [9], az3: [0], az4: [0] } && infos.azq is [var row] && row == island.Id && infos.azu is [var owner] && owner == g.Id && infos.azt is ["Isle Wardens"]
+              && recruit.Peer.Responses.Count(x => x.ReturnCode == 0) >= 2 && recruit.Session.Status == SessionStatus.Transferring,
+              $"the recruit's GetIslandInfos: one guild row (type 9, owner = the guild, flag 0), and the journey onto it (got journey RC {trip.ReturnCode})");
+
+        g.SilverA7m = 3_750_000 * 10_000L;
+        var up = Call(master.Session, master.Peer, new UpgradeGuildIslandRequest { ahy = merchant.Id, ahz = ap, ah0 = 1 }, 9);
+        Check(up.ReturnCode == 0 && island is { Level: 1 } && island.LevelChanged > 0 && g.SilverA7m == 0 && characters.LoadIslands().Single(i => i.Guild).Level == 1,
+              $"upgrade 0 → 1 for 3,750,000 from the account, saved (got {up.ReturnCode}, {island}, {g.SilverA7m / 10_000})");
         world.Dispose();
     }
 
