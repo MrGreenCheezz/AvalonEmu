@@ -1068,7 +1068,7 @@ these values. Any key written in the file or on the command line wins over its p
 | `Guild:MightFactor` (content/goals.json) | `10`: ten times the client data's guild might | `1` |
 | `Islands:StarterIsland` | `true`: a free personal island at the first island merchant visited (see Personal islands) | `false`: islands are bought |
 | `Islands:StarterBuildings` | `true`: a new island (and one without buildings, on its map load) comes with a farm and a herb garden | `false`: only a GM builds them |
-| `Islands:GrowthSpeed` | `4`: crops grow in 5.5 h instead of 22 h | `1` |
+| `Islands:GrowthSpeed` | `4`: crops grow in 5.5 h instead of 22 h; baby animals and animal products (eggs, milk) 4 x as fast too | `1` |
 | `Islands:WaterFocusFactor` | `0`: watering a crop takes no focus | `1`: 1000 focus (the seed's cost) |
 | `Premium:Mode` | `Free`: every character is premium, always, at no cost (see Premium, focus and learning points) | `None`: nobody (no premium shop) |
 | `Focus:Start`, `LearningPoints:Start` | `30000`, `500`: a new character's focus and learning points (the premium lifetime reward) | `0`, `0` |
@@ -2787,7 +2787,11 @@ Animals (phase 4) and building farm buildings from the build menu (phase 5) work
   twice that) up to its `nutritionmax`; a full feed lasts its whole growtime (T3 horse: 10 crops, 44 h, ÷
   `Islands:GrowthSpeed`). A grown baby is collected: the grown animal (`T3_FARM_HORSE_GROWN`, the stable's mount
   resource), the baby back with its offspring chance (84 % for the T3 horse; more after a focus care), and its fame. A
-  grown chicken, goat, … placed in a pasture eats too and gives its product (eggs, milk) once per production time.
+  grown chicken, goat, … placed in a pasture eats too and gives its product (eggs, milk) once per production time
+  (÷ `Islands:GrowthSpeed` as well). The client takes an animal's full time from its own data and counts at normal
+  speed, so while the speed is not 1 the server sends the progress so that the animal's timer shows the real time left
+  (GrowthSpeed 30: a chicken baby about 1 h 28 min instead of 44 h); the bar then starts nearly full, and the food bar
+  is brought to the server's value every 5 min.
 - **Building (phase 5, `../analysis/work/stageN/islands5/SPEC.md`).** On the own island the client's build menu places a farm
   (`T1_FARMHOUSE`), herb garden, pasture or kennel (the four buildings.xml farm buildings) on a free plot: the island template's
   buildable ground (tiles.xml BuildingAndFertile), 2 x 2 cells of 10 m per building, so level 0 has 1 plot (centre (185, 115)) and
