@@ -22,11 +22,20 @@ public sealed class TickProfile
     /// <summary>Ticks measured since the start or the last <see cref="Reset"/>.</summary>
     public long Ticks { get; private set; }
 
+    private volatile string? _after;
+
+    /// <summary>
+    /// The last section of the running tick that has ended ("" = none yet), null between ticks. Read without the lock by
+    /// <see cref="WorldWatchdog"/> (issue #28): the tick is stuck in the section after it.
+    /// </summary>
+    public string? After => _after;
+
     /// <summary>A tick starts.</summary>
     public void Begin()
     {
         _tick.Clear();
         _last = _tickStart = Stopwatch.GetTimestamp();
+        _after = "";
     }
 
     /// <summary>The section <paramref name="name"/> of this tick ends now (it took the time since the last mark).</summary>
@@ -35,6 +44,7 @@ public sealed class TickProfile
         var now = Stopwatch.GetTimestamp();
         var took = now - _last;
         _last = now;
+        _after = name;
         _tick.Add((name, took));
         if (!_sections.TryGetValue(name, out var s)) _sections[name] = s = new Section();
         s.Total += took;
@@ -48,6 +58,7 @@ public sealed class TickProfile
     public void End()
     {
         var took = Stopwatch.GetTimestamp() - _tickStart;
+        _after = null;
         Last = Ms(took);
         _total += took;
         if (took > _max) _max = took;

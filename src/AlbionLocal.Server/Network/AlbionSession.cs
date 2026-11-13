@@ -85,6 +85,7 @@ public abstract class AlbionSession : IPhotonPeerHandler
         var handler = _opcodes.Find(code);
         var quiet = handler is { Quiet: true };
         var head = $"<- {code}{(requestId is { } id ? $" #{id}" : "")}{(encrypted ? " (enc)" : "")}";
+        using var holding = WorldActivity.Hold(head, Name); // what the watchdog names should this not come back (issue #28)
         if (quiet) Log.Trace(Name, head); else Log.Info(Name, head);
         if (Log.Level <= (quiet ? LogLevel.Trace : LogLevel.Debug))
             Log.Write(quiet ? LogLevel.Trace : LogLevel.Debug, Name, msg is null ? MessageDump.Describe(request.Parameters) : MessageDump.Describe(msg));

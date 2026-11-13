@@ -85,39 +85,65 @@ public static class Log
         _fileBytes = stream.Length < _rotateBytes ? stream.Length : 0;
     }
 
+    private static long _writingSince; // Environment.TickCount64 + 1 while a line is being written, 0 otherwise
+
+    /// <summary>
+    /// How long the line being written has taken so far (zero when none is). A console that stops taking output (a Windows console
+    /// with a QuickEdit selection, a paused terminal) blocks the writer, and every thread that logs waits behind it, the world thread
+    /// too while it holds the world lock (public issue #28): the server's watchdog reads this without the lock.
+    /// </summary>
+    public static TimeSpan WritingFor => Interlocked.Read(ref _writingSince) is var since and > 0
+        ? TimeSpan.FromMilliseconds(Environment.TickCount64 + 1 - since) : TimeSpan.Zero;
+
+    /// <summary>
+    /// <paramref name="line"/> appended to "&lt;log file&gt;.watchdog.txt" without the logger's lock (it may be the one that is stuck); nothing
+    /// without a log file. For the server's watchdog.
+    /// </summary>
+    public static void WriteAside(string line)
+    {
+        if (Volatile.Read(ref _filePath) is not { } path) return;
+        try { File.AppendAllText(path + ".watchdog.txt", $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {line}{Environment.NewLine}"); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+    }
+
     private static void Emit(LogLevel level, string source, string message)
     {
         lock (Gate)
         {
-            var line = $"{DateTime.Now:HH:mm:ss.fff} {level,-5} [{source}] {message}";
-            var old = Console.ForegroundColor;
-            Console.ForegroundColor = level switch
-            {
-                LogLevel.Trace => ConsoleColor.DarkGray,
-                LogLevel.Debug => ConsoleColor.Gray,
-                LogLevel.Warn => ConsoleColor.Yellow,
-                LogLevel.Error => ConsoleColor.Red,
-                _ => ConsoleColor.White,
-            };
-            Console.WriteLine(line);
-            Console.ForegroundColor = old;
-            if (_file is null) return;
+            Interlocked.Exchange(ref _writingSince, Environment.TickCount64 + 1);
             try
             {
-                _file.WriteLine(line);
-                if ((_fileBytes += line.Length + Environment.NewLine.Length) >= _rotateBytes)
+                var line = $"{DateTime.Now:HH:mm:ss.fff} {level,-5} [{source}] {message}";
+                var old = Console.ForegroundColor;
+                Console.ForegroundColor = level switch
                 {
-                    _file.Dispose();
+                    LogLevel.Trace => ConsoleColor.DarkGray,
+                    LogLevel.Debug => ConsoleColor.Gray,
+                    LogLevel.Warn => ConsoleColor.Yellow,
+                    LogLevel.Error => ConsoleColor.Red,
+                    _ => ConsoleColor.White,
+                };
+                Console.WriteLine(line);
+                Console.ForegroundColor = old;
+                if (_file is null) return;
+                try
+                {
+                    _file.WriteLine(line);
+                    if ((_fileBytes += line.Length + Environment.NewLine.Length) >= _rotateBytes)
+                    {
+                        _file.Dispose();
+                        _file = null;
+                        OpenFile(_filePath!);
+                    }
+                }
+                catch (Exception e) when (e is IOException or ObjectDisposedException or UnauthorizedAccessException)
+                {
+                    // A full disk or a removed drive: say so once and go on with the console.
                     _file = null;
-                    OpenFile(_filePath!);
+                    Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} Warn  [log] writing {_filePath} failed: {e.Message}; console only");
                 }
             }
-            catch (Exception e) when (e is IOException or ObjectDisposedException or UnauthorizedAccessException)
-            {
-                // A full disk or a removed drive: say so once and go on with the console.
-                _file = null;
-                Console.WriteLine($"{DateTime.Now:HH:mm:ss.fff} Warn  [log] writing {_filePath} failed: {e.Message}; console only");
-            }
+            finally { Interlocked.Exchange(ref _writingSince, 0); }
         }
     }
 

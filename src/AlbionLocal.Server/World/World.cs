@@ -588,22 +588,31 @@ public sealed class World : IDisposable
         Systems.MarketExpiry.Update(this, now); // stageJ mail: once a minute the expired market orders and mails
         Systems.LearningPoints.Update(this, now); // stageJ focus-lp: once a minute the learning points of the online players
         Profile.Mark("instances");
-        // World timers: the keepalive of every joined connection, then the saves that are due.
+        // World timers: the keepalive of every joined connection, then the saves that are due. One profiler section each (issue #28: the
+        // report's 1-2 s ticks named only "sessions and saves", which held all of them).
         foreach (var map in Maps.Maps)
             foreach (var player in map.Players.Values)
                 player.Session.UpdateKeepalive(now);
+        Profile.Mark("keepalives");
         Parties.Update(now); // party invitations that time out, members whose cluster change never arrived
-        Guilds.Update(now); // guild invitations that time out
+        Profile.Mark("parties");
+        Guilds.Update(now); // guild invitations that time out; every 30 s the changed guilds' progress written (SaveGuildProgress)
+        Profile.Mark("guilds");
         Alliances.Update(now); // stageP: alliance leave protections that end
         GuildGoals.Update(); // stage I: a new guild season told to the members in game
+        Profile.Mark("alliances and guild goals");
         Social.Update(now); // stageJ: characters whose cluster change never arrived log out for their friends and chat
+        Profile.Mark("social");
         Duels.Update(); // challenges that time out, duel starts, areas and ends (stageE pvp SPEC §2)
         Trades.Update(); // stageJ: trade invitations that lapse, trades whose players are apart, offered items that left the bag
+        Profile.Mark("duels and trades");
         Dungeons.UpdateExits(); // stageM exit: the click-and-channel entries at random dungeon portals (every tick)
         Hideouts.UpdateChannels(); // stageP hideouts: the 4 s channels into and out of a hideout
+        Profile.Mark("exit channels");
         Dungeons.Update(now); // stageG: exit rerolls, despawns and refills, dungeons that close
+        Profile.Mark("random dungeons");
         Saves.Update(now);
-        Profile.Mark("sessions and saves");
+        Profile.Mark("saves");
         if (Config.MapIdleUnload > TimeSpan.Zero)
             // A floor of a live random dungeon stays until the dungeon closes (its own empty lifetime, RandomDungeons.Close).
             // So does an expedition instance's map (Expeditions.Close), a corrupted dungeon's (CorruptedDungeons.Close), a hellgate's (Hellgates.Close)
