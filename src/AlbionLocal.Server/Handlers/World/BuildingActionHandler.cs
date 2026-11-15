@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Text.RegularExpressions;
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
@@ -10,7 +11,7 @@ using AlbionLocal.Server.Systems;
 namespace AlbionLocal.Server.Network;
 
 /// <summary>ActionComponentType (op 55 key 2): what a station action is.</summary>
-public enum StationAction : byte { CraftItem = 1, RepairItem = 2, SalvageItem = 3, RerollQuality = 6, UpgradeEnchantment = 7, Awaken = 8 }
+public enum StationAction : byte { CraftItem = 1, RepairItem = 2, SalvageItem = 3, MeldItem = 5, RerollQuality = 6, UpgradeEnchantment = 7, Awaken = 8 }
 
 /// <summary>RepairItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 2).</summary>
 public enum RepairError : byte
@@ -20,6 +21,13 @@ public enum RepairError : byte
 
 /// <summary>SalvageItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 3; cml.aaq 0x180B6E700 shows it as @REPAIRBUILDING_SALVAGE_ERROR_*).</summary>
 public enum SalvageError : byte { OutOfRange = 2, ItemNotSalvageable = 3, InventoryFull = 4, ItemTierToHigh = 6 }
+
+/// <summary>MeldItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 5).</summary>
+public enum MeldError : byte
+{
+    Invalid = 0, Ok = 1, OutOfRange = 2, ItemNotMeldable = 3, NotEnoughResources = 4, InventoryFull = 5, InvalidRights = 6,
+    PlayerNotRegistered = 7, DurabilityLow = 8, NutritionLow = 9, NotEnoughCraftCapacity = 10,
+}
 
 /// <summary>CraftItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 1).</summary>
 public enum CraftError : byte { NotEnoughSilver = 6, NotEnoughResources = 8, InventoryFull = 14, PriceChanged = 23 }
@@ -79,6 +87,9 @@ public sealed partial class WorldSession
             StationAction.CraftItem when building.Template.CraftItems.Count == 0 => Generic($"{building.Template.Name} crafts nothing"),
             StationAction.CraftItem when far => Generic("out of range"),
             StationAction.CraftItem => StartCraft(player, building, req),
+            StationAction.MeldItem when !building.Template.Melds || building.Template.Meldings.Count == 0 => Generic($"{building.Template.Name} does not meld"),
+            StationAction.MeldItem when far => StationRefused(player, req, StationComponentError, (byte)MeldError.OutOfRange, "out of range"),
+            StationAction.MeldItem => StartMeld(player, building, req),
             StationAction.UpgradeEnchantment when !building.Template.Enchants => Generic($"{building.Template.Name} does not enchant"),
             StationAction.UpgradeEnchantment when far => StationRefused(player, req, StationComponentError, (byte)EnchantError.OutOfRange, "out of range"),
             StationAction.UpgradeEnchantment => StartEnchant(player, building, req),
@@ -100,6 +111,122 @@ public sealed partial class WorldSession
     {
         Log.Info(Name, $"'{player.Character.Name}' station action {(StationAction)req.p} at object {req.o} refused (RC {rc}{(error != 0 ? $", error {error}" : "")}): {why}");
         return new ActionOnBuildingStartResponse { ReturnCode = rc, ajj = req.o, ajk = req.p, ajl = req.q, ajm = error };
+    }
+
+    /// <summary>
+    /// MeldItem (ACT 5): key 10 is the client's target key ("6_2_Red"), key 9 the number of combinations. The
+    /// building's meldingcombinations select the consumed fragments and the loot.xml list rolled once per combination.
+    /// The fragment stacks go at the start, the rolled artifacts come when the action ends; a cancel gives the fragments
+    /// back. The client opens the normal station action and its result list from the item and finish events.
+    /// </summary>
+    private AlbionResponse? StartMeld(Player player, Building building, ActionOnBuildingStartRequest req)
+    {
+        AlbionResponse Refuse(MeldError error, string why) => StationRefused(player, req, StationComponentError, (byte)error, why);
+        AlbionResponse Generic(string why) => StationRefused(player, req, StationGenericError, 0, why);
+        if (!TryMeldTarget(req.x, out var tier, out var power, out var aspect))
+            return Refuse(MeldError.ItemNotMeldable, $"unknown melding target '{req.x}'");
+        var combination = building.Template.Meldings.FirstOrDefault(c =>
+            c.Tier == tier && c.PowerLevel == power && string.Equals(c.Aspect, aspect, StringComparison.OrdinalIgnoreCase));
+        if (combination is null) return Refuse(MeldError.ItemNotMeldable, $"{building.Template.Name} has no T{tier}.{power} {aspect} melding");
+        if (req.w <= 0 || req.w > 9999) return Refuse(MeldError.ItemNotMeldable, $"amount {req.w}");
+        var amount = req.w;
+        var bag = player.Inventory.Bag;
+        var needs = new Dictionary<ItemTemplate, int>();
+        foreach (var needed in combination.Needed)
+        {
+            if (world.Items.Find(needed.Item) is not { } type) return Refuse(MeldError.ItemNotMeldable, $"unknown item {needed.Item}");
+            var count = checked(needed.Count * amount);
+            needs[type] = needs.GetValueOrDefault(type) + count;
+        }
+        foreach (var (type, count) in needs)
+        {
+            var have = CountOf(bag, type);
+            if (have < count) return Refuse(MeldError.NotEnoughResources, $"{have} of {count} x {type.Name}");
+        }
+        if (world.Clusters?.LootIfLoaded is not { } loot || !loot.Has(combination.LootList))
+            return Generic($"loot list {combination.LootList} is not loaded");
+
+        var results = new Dictionary<ItemTemplate, int>();
+        for (var n = 0; n < amount; n++)
+        {
+            foreach (var (name, count) in loot.RollList(combination.LootList, world.CraftRandom))
+            {
+                if (world.Items.Find(name) is not { CanCreate: true } type)
+                    return Generic($"the melding result {name} cannot be created");
+                results[type] = results.GetValueOrDefault(type) + count;
+            }
+        }
+        var freed = 0;
+        foreach (var (type, count) in needs)
+        {
+            var left = count;
+            for (var slot = bag.Size - 1; slot >= 0 && left > 0; slot--)
+            {
+                if (bag[slot] is not { } stack || stack.Template != type) continue;
+                if (left < stack.Count) break;
+                left -= stack.Count;
+                freed++;
+            }
+        }
+        if (!Fits(bag, results.Select(r => (r.Key, r.Value)), freed))
+            return Refuse(MeldError.InventoryFull, "the melded artifacts do not fit the inventory");
+
+        var now = world.GameNow;
+        var seconds = Math.Max(0, combination.Time) * amount;
+        var action = new BuildingAction(building, req.p, req.q, now, now + TimeSpan.FromSeconds(seconds).Ticks);
+        Systems.Mounts.BeforeAction(player, "melds"); // every accepted station action dismounts first
+        player.Action = action;
+        SendEvent(building.NewBuilding(inUse: true));
+        StartedToObservers(player, action);
+        foreach (var (type, count) in needs) TakeItems(player, type, count);
+        Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
+            $"'{player.Character.Name}' melds {amount} x T{tier}.{power} {aspect} at {building.Template.Name}: ")
+            + string.Join(", ", needs.Select(n => $"{n.Value} x {n.Key.Name}")));
+        action.OnCancel = () =>
+        {
+            foreach (var (type, count) in needs) GiveItem(player, type, count);
+            Log.Info(Name, $"'{player.Character.Name}' melding cancelled: the fragments returned");
+        };
+        void Finish()
+        {
+            if (action.Over || player.Action != action || player != Player) return;
+            if (!Fits(player.Inventory.Bag, results.Select(r => (r.Key, r.Value))))
+            {
+                CancelAction(player, "the melded artifacts do not fit any more", tellClient: true);
+                return;
+            }
+            action.Over = true;
+            player.Action = null;
+            foreach (var (type, count) in results) GiveItem(player, type, count);
+            SendEvent(building.NewBuilding());
+            Finished(player, action);
+            player.SaveItems();
+            Log.Info(Name, string.Create(CultureInfo.InvariantCulture,
+                $"'{player.Character.Name}' melded {amount} x T{tier}.{power} {aspect}: ")
+                + string.Join(", ", results.Select(r => $"{r.Value} x {r.Key.Name}")));
+        }
+        if (seconds <= 0) Finish();
+        else player.Map!.Timers.At(world.ClockAt(action.End), Finish);
+        return null;
+    }
+
+    /// <summary>The client's melding target key "T&lt;tier&gt;.&lt;power level&gt; &lt;aspect&gt; ...".</summary>
+    private static bool TryMeldTarget(string? text, out int tier, out int power, out string aspect)
+    {
+        tier = power = 0;
+        aspect = "";
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var match = Regex.Match(text, @"^\s*T?\s*(?<tier>[1-8])\s*[._,]\s*(?<power>[1-4])(?:_|\s|$)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!match.Success) return false;
+        tier = int.Parse(match.Groups["tier"].Value, CultureInfo.InvariantCulture);
+        power = int.Parse(match.Groups["power"].Value, CultureInfo.InvariantCulture);
+        (string Name, string[] Aliases)[] aspects =
+        [
+            ("red", ["red", "红"]), ("blue", ["blue", "蓝"]), ("green", ["green", "绿"]), ("all", ["all", "全部", "全"]),
+        ];
+        aspect = aspects.FirstOrDefault(a => a.Aliases.Any(x => text.Contains(x, StringComparison.OrdinalIgnoreCase))).Name ?? "";
+        return aspect.Length > 0;
     }
 
     /// <summary>

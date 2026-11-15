@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-15 - Artifact foundry melding
+
+- **Artifact foundry** (op 55 ACT 5, `MeldItem`): the meld tab answered with a generic internal error because the action was not implemented. The server now reads the artifact foundry's 80 `meldingcombinations` from `buildings.bin`, validates the selected tier, power level, aspect and quantity, consumes the required artifact fragments, and rolls the combination's `loot.xml` list once per meld. The action supports the normal progress bar, batch melding, inventory checks and fragment refunds on cancellation. Component failures use the client's `MeldItemErrorCode` values, so insufficient fragments, an invalid combination and a full inventory are reported by the client's own messages.
+- Built from the client's ACT 5 request and the game data; the client has been checked with a real T6.2 Red meld.
+
 ## 2026-11-13 — Dashes stop at walls and water, guild islands, animal timers, the expedition exit, a world watchdog
 
 - **Dashes and blinks** (issue #27, PR #31, `World:MoveCheck`): a dash aimed across a river or off the map ended on the water or outside the cluster, and the character could go on walking there. A player's dash now ends where the terrain stops it — a character's radius (0.75 m) before a wall, the water's edge or the cluster border — found with one ray over the collision grid, the same cell walk the client's own ray does. A blink is tested at its landing only: it crosses a river or a wall to open ground behind it, as the client allows for such spells, and one aimed into water, rock or off the map lands on the near edge. Knockbacks, pulls, fears and mob dashes end the same way. A position deep in blocked ground (on the water, in rock, outside the cluster) is corrected back to the last open one; `World:MoveCheck: false` switches that off.
