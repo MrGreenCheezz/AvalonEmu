@@ -1442,6 +1442,11 @@ server build refuses the converted file).
   (never lower; normal always improves). **Crafted quality** now rises with the destiny board's quality bonuses for the item
   (itemcraftquality) and with focus (+50): every chance above normal × (1 + bonus / 100), an assumption (the official formula
   is server-side; analysis/work/stageN/enchant/SPEC.md).
+- **Melding** at the artifact foundry (the artifact tab): op 55 ACT 5 reads the building's melding combinations from
+  buildings.bin, consumes the listed fragments per selected quantity, and rolls the combination's loot.xml list once for
+  each result. The client's target key uses the form `6_2_Red` (tier, power level and aspect); failures use the client's
+  MeldItemErrorCode values. Batch melding has the normal station progress bar, checks the inventory before starting, and
+  returns the fragments if the action is cancelled.
 - **Awakened weapons** at the meld building (its awakening tabs; analysis/work/stageN/awakening/SPEC.md): a weapon of the
   legendaryitems.bin groups (the swords, axes, staffs, bows, ... of every line) at tier 4+ and enchantment .4 is awakened for
   6 000 000 silver and 100 UNIQUE_GVGTOKEN_GENERIC + 100 QUESTITEM_TOKEN_AVALON, each × the tier scaling (T4 0.021: 124 534

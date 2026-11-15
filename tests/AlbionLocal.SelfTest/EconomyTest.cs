@@ -31,6 +31,7 @@ public static class EconomyTest
         ("economy: op 55 at Thetford: repair (no response, the corrected burst), shop purchase (the captured order), failures {0 building, 1 ACT, 2 counter, 3 error} with RC 2202, a timed smelter batch", Stations),
         ("economy: salvage (ACT 3) at the repair shop: the T4 sword at half durability gives no silver (no itemvalue), 1-2 bars, 0-1 leather, kept over a relog; a worn sword; one destroyed meanwhile gives nothing; refusals; AccessStatus of the shop", Salvage),
         ("economy: enchanting (ACT 7) T4 sword .0 → .1 with 288 runes at the meld building (quality and spells kept, new object, saved), refused without runes; quality reroll (ACT 6) 1 → better at the repair shop (event 67, silver); crafting quality bonus", Enchanting),
+        ("economy: melding (ACT 5) 6_2_Red twice consumes 100 T6 souls and gives two rolled T6 artifacts; insufficient fragments are a component error", Melding),
         ("economy: awakening (ACT 8) a T4 sword@4 at the meld building: silver and 2 + 2 tokens taken, NewEquipmentItem key 11 = 1 and event 37 with 3 traits, kept over a relog; a sword@3 refused (ItemEnchantmentTooLow)", Awakening),
         ("economy: trait value reroll (ACT 8 sub 4): attunement and silver charged, event 552 old -> new (never lower), soul re-sent; an attuned TRAIT_HITPOINTS_MAX adds hitpointsmax", TraitReroll),
         ("economy: crafting: refine 10 T3 planks at the carpenter, craft a T4 sword at the forge (quality, returns, crafting fame into CRAFT_REFINE_WOOD_T4 / CRAFT_SWORDS)", Crafting),
@@ -501,6 +502,43 @@ public static class EconomyTest
     /// scaling 0.0208, rounded) and 6000000 × 0.0208 silver gets a soul with 3 traits after 1.5 s: tokens and silver gone, NewEquipmentItem key
     /// 11 = 1, event 37 {0 the sword, 4 attuned to me, 8 three trait names}, saved over a relog. A T4 sword@3 is refused (enchantment &lt; 4).
     /// </summary>
+    /// <summary>
+    /// ACT 5 at the artifact foundry: two 6_2_Red melds consume 100 T6 souls (50 each) and roll two T6 artifacts from
+    /// MELD_6_2_RED_LOOT. An attempt with too few souls is the component's NotEnoughResources and consumes nothing.
+    /// </summary>
+    private static void Melding()
+    {
+        using var town = new Town(meld: true);
+        var world = town.World;
+        var (session, peer, me) = town.Join("Melder", 0,
+            new InventoryItem("T6_SOUL", 120), new InventoryItem("T5_SOUL", 1));
+        var meld = town.Station("T8_MELDBUILDING");
+        int Count(string name) => me.Inventory.Bag.Items.Where(i => i.Template.Name == name).Sum(i => i.Count);
+        int Artifacts() => me.Inventory.Bag.Items.Where(i => i.Template.Name.StartsWith("T6_ARTEFACT_", StringComparison.Ordinal)).Sum(i => i.Count);
+        void Op55(ActionOnBuildingStartRequest req)
+        {
+            lock (world.Sync) session.OnRequest(Request(req, 7), encrypted: false);
+        }
+        Check(meld.Template.Meldings.Count == 80
+              && meld.Template.Meldings.Any(c => c is { Tier: 6, PowerLevel: 2, Aspect: "all", LootList: "MELD_6_2_ALL_LOOT" }
+                  && c.Needed is [{ Item: "T6_SOUL", Count: 36 }]),
+              "the artifact foundry has 80 melding combinations, including T6.2 All for 36 T6 souls");
+        var mark = peer.Events.Count;
+        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 5, q = 1, x = "6_2_Red", w = 2 });
+        town.Run(2.5);
+        var events = Since(peer, mark);
+        Check(Count("T6_SOUL") == 20 && Count("T5_SOUL") == 1 && Artifacts() == 2 && me.Action is null
+              && events.Any(e => e.Code == EventCodes.ActionOnBuildingFinished)
+              && events.Count(e => e.Code == EventCodes.NewSimpleItem) >= 2,
+              $"two 6_2_Red melds: 100 souls consumed, {Artifacts()} artifacts gained, finish event sent (got {Show(events)})");
+        var answers = peer.Responses.Count;
+        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 5, q = 2, x = "T6.2 All", w = 1 });
+        Check(Answers(peer, answers) is [{ ReturnCode: WorldSession.StationComponentError } bad]
+              && L(bad.Parameters, 3) == (byte)MeldError.NotEnoughResources && Count("T6_SOUL") == 20,
+              "twenty remaining T6 souls: RC 2202 NotEnoughResources, nothing consumed");
+    }
+
+    /// <summary>Awakening (ACT 8) and its component errors at the artifact foundry.</summary>
     private static void Awakening()
     {
         using var town = new Town(meld: true);
