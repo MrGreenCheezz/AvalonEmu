@@ -26,6 +26,7 @@ public static class IslandTest
         ("islands phase 2-3: Join 91, buy 20,000 / upgrade 500,000 (8046 for 130 s), flags, showroom and back; starter farm + herb garden, plant 665 (slot, keys, FOI), water, harvest at 79200 s not 79199, destroy, store, GrowthSpeed 4", Farming),
         ("islands: animals: a T3 horse baby in a pasture grows only while fed (10 wheat = 480 nutrition = 158400 s), collected as T3_FARM_HORSE_GROWN", Animals),
         ("islands: animals: GrowthSpeed 30: a fed chicken baby's timer shows 5280 s (1/30 of 158400), grown then (public issue #24)", AnimalSpeed),
+        ("islands: animals: a grown T3 horse and ox baby (480 nutrition) show 0 s left through the client's keys 1/2 on enter, op 74 gives them (public issue #24)", GrownBaby),
         ("islands phase 5: plots 1 (level 0) / 16 (level 5); a player builds a T1_PASTURE (op 68) for 100 silver + 30 wood/rock/planks/blocks, the plot then refused, gives it up (op 64)", Construction),
         ("islands phase 5: a placed animal is picked up again (op 71: the baby back, the object gone); a seed cannot be", Pickup),
         ("islands: labourers: a T2 house (op 68), a bed and a table in it (op 69), a wood labourer from its contract, a full T2 wood journal after settling in (op 257), its loot after 22 h (op 258)", Labourers),
@@ -390,10 +391,10 @@ public static class IslandTest
         Tick(TimeSpan.FromSeconds(79200 + 3600)); // an hour more than it needs: it stops at its growtime
         var done = Call(new FarmableFinishGrownItemRequest { lg = animal.Id }, 6);
         var got = Fill<FarmableFinishGrownItemResponse>(done.Parameters);
-        Check(unfed == 0 && fed.lb is [10] && wheat.Count == 2 && early.ReturnCode == 1 && half.b9c == 79200 * 10000L && half.b9g is [var n] && n == 240 * 10000L
+        Check(unfed == 0 && fed.lb is [10] && wheat.Count == 2 && early.ReturnCode == 1 && half.b89 == 79200 * 10000L && half.b9g is [var n] && n == 240 * 10000L
               && done.ReturnCode == 0 && got.la is ["T3_FARM_HORSE_GROWN", ..] && me.Inventory.Bag.Items.Any(i => i.Template.Name == "T3_FARM_HORSE_GROWN")
               && !me.Map.Objects.ContainsKey(animal.Id) && world.Islands.CropsOf(island.Id).Count == 0,
-              $"unfed growth {unfed}; fed {string.Join(",", fed.lb ?? [])} wheat (left {wheat.Count}); at 79200 s RC {early.ReturnCode}, FOI 4 = {half.b9c}, 8 = {string.Join(",", half.b9g ?? [])}; collected RC {done.ReturnCode}: {string.Join(",", got.la ?? [])}");
+              $"unfed growth {unfed}; fed {string.Join(",", fed.lb ?? [])} wheat (left {wheat.Count}); at 79200 s RC {early.ReturnCode}, FOI 1 = {half.b89}, 8 = {string.Join(",", half.b9g ?? [])}; collected RC {done.ReturnCode}: {string.Join(",", got.la ?? [])}");
         world.Dispose();
     }
 
@@ -415,12 +416,56 @@ public static class IslandTest
         var events = peer.Events.Count;
         call(new FarmableFillRequest { ld = animal.Id, le = [me.Inventory.Bag.Items.Single(i => i.Template.Name == "T3_WHEAT").Id], lf = [9] }, 4);
         var sent = peer.Events.Skip(events).Where(e => Code(e) == (int)EventCodes.FarmableObjectInfo).Select(e => Fill<FarmableObjectInfoEvent>(e.Parameters)).LastOrDefault();
-        var left = sent is null ? -1 : 158400 - sent.b9c / 10000 - (world.GameNow - sent.b9d) / TimeSpan.TicksPerSecond;
+        var left = sent is null ? -1 : ClientLeft(baby.Animal!, sent, world.GameNow);
         tick(TimeSpan.FromSeconds(5279));
         var early = world.Islands.AnimalGrown(animal.Crop, baby.Animal!, world.GameNow);
         tick(TimeSpan.FromSeconds(1));
         Check(baby.Animal is { GrowTime: 158400 } && left == 5280 && !early && world.Islands.AnimalGrown(animal.Crop, baby.Animal, world.GameNow),
               $"GrowthSpeed 30: a fed chicken baby shows {left} s left (5280 = 158400 / 30), grown at 5280 s, not 5279 (early {early})");
+        world.Dispose();
+    }
+
+    /// <summary>
+    /// The seconds the client's animal window shows left for a baby (`co0.aqp` 0x180B8EEB0 / `co0.af_4` 0x180B8E130): its &lt;grownitem&gt;
+    /// bar, growtime × key 12 long, filled from keys 1/2 (whole seconds × 10000 and the stamp they hold at) and running one second per
+    /// second unless a food bar (keys 8/9) is empty (`co0.aq9` 0x180B8ED70). 0 = grown, the collect offered.
+    /// </summary>
+    private static long ClientLeft(AnimalData a, FarmableObjectInfoEvent e, long now)
+    {
+        var fed = e.b9g is { Length: > 0 } foods && foods.All(f => f > 0);
+        var ran = fed ? (now - e.b9a) / TimeSpan.TicksPerSecond : 0;
+        return Math.Max(0, (long)(a.GrowTime * e.b9k) - e.b89 / 10000 - ran);
+    }
+
+    /// <summary>
+    /// Public issue #24 as reported from the client: a T3 horse and a T3 ox baby whose rows hold the whole growth (1 584 000 000 000 ticks =
+    /// 158400 s) and 480 nutrition. Their FarmableObjectInfo on a fresh enter (the object's create events) shows no time left through the
+    /// client's computation (<see cref="ClientLeft"/>; it showed ≈ 43.9 h while the nutrition went in key 1), and op 74 gives the grown animal.
+    /// </summary>
+    private static void GrownBaby()
+    {
+        var (world, island, s, _, call, tick) = OnIsland(("T3_FARM_HORSE_BABY", 1), ("T3_FARM_OX_BABY", 1));
+        var me = s.Player!;
+        world.Islands.Build(island, "T1_PASTURE", new Vector2(185, 110), 0, out _);
+        foreach (var (name, x, id) in new[] { ("T3_FARM_HORSE_BABY", 185f, 3), ("T3_FARM_OX_BABY", 191f, 4) })
+        {
+            var item = Client.Items.Find(name)!;
+            call(new PlaceableObjectPlaceRequest { x7 = me.Inventory.Bag.Items.Single(i => i.Template == item).Id, x8 = world.Islands.ItemBuildingId(item), x9 = new Vector2(x, 110) }, id);
+            tick(TimeSpan.FromSeconds(1));
+        }
+        var animals = me.Map!.Objects.Values.OfType<FarmableObject>().OrderBy(o => o.Position.X).ToList();
+        foreach (var o in animals)
+            (o.Crop.Growth, o.Crop.Nutrition, o.Crop.FedAt) = (Islands.CycleTicks(o.Seed.Animal!), 480, world.GameNow);
+        tick(TimeSpan.FromSeconds(5));
+        var seen = animals.Select(o => (o, Info: o.BuildCreate(me).OfType<FarmableObjectInfoEvent>().Single())).ToList();
+        var left = seen.Select(x => ClientLeft(x.o.Seed.Animal!, x.Info, world.GameNow)).ToList();
+        var grown = animals.Select(o => o.Seed.Animal!.GrownItem).ToList();
+        var got = animals.Select((o, i) => call(new FarmableFinishGrownItemRequest { lg = o.Id }, 10 + i)).ToList();
+        Check(animals.Count == 2 && animals.All(o => o.Crop.Growth == 1_584_000_000_000) && left is [0, 0]
+              && got.All(r => r.ReturnCode == 0) && grown.All(g => g is not null && me.Inventory.Bag.Items.Any(i => i.Template.Name == g))
+              && !me.Map.Objects.Values.OfType<FarmableObject>().Any(),
+              $"{animals.Count} babies; FOI keys 1/2/4/8: {string.Join("; ", seen.Select(x => $"{x.o.Seed.Name} {x.Info.b89}/{x.Info.b9a}/{x.Info.b9c}/{string.Join(",", x.Info.b9g ?? [])}"))}; "
+              + $"client left {string.Join(",", left)} s; op 74 RC {string.Join(",", got.Select(r => r.ReturnCode))}, grown {string.Join(",", grown)}");
         world.Dispose();
     }
 

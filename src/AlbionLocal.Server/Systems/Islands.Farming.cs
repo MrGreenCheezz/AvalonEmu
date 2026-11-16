@@ -380,7 +380,7 @@ public sealed partial class Islands
     /// <summary>
     /// The progress (ticks) an animal's FarmableObjectInfo shows for <paramref name="grown"/> of a <paramref name="cycle"/>, so that the client's
     /// bar ends when the server's growth does. The client takes the bar's length from its own items.xml (`co0.aqp` 0x180B8EEB0: `a5a.m`
-    /// with the &lt;grownitem growtime&gt; or the &lt;product productiontime&gt;, rate 1, key 12 does not touch it) and runs it at one
+    /// with the &lt;grownitem growtime&gt; × key 12, sent 1, or the &lt;product productiontime&gt;, rate 1) and runs it at one
     /// second per second from the sent progress and stamp (`co0.af_4` 0x180B8E130 → `a5a.n`); its timer is that length minus the progress.
     /// While Islands:GrowthSpeed is not 1 the server grows the animal faster, so the progress is moved on to the length minus the real time
     /// still needed ((cycle − grown) / GrowthSpeed, rounded up): the timer then shows the real remaining time, while the bar starts nearer
@@ -395,12 +395,17 @@ public sealed partial class Islands
     }
 
     /// <summary>
-    /// The FarmableObjectInfo of an animal: keys 4/5 its growth or product progress as <see cref="ShownTicks"/> (whole seconds × 10000 and
-    /// their stamp, as a crop's), for a grown animal also keys 10/11 per product (the client's product bars `co0+0x1d8`, read in `co0.af_4`;
-    /// it makes no growth bar without a &lt;grownitem&gt;, so keys 4/5 alone show no product timer [inference from the decompile, not
-    /// client-checked]), keys 1/2 and 8/9 its nutrition now (a7m) [unverified which of the two bars the client shows as food; both are
-    /// sent], key 3 false. The client drains the food at the official rate between two infos; while Islands:GrowthSpeed is not 1 the
-    /// <see cref="GrowthRefresh"/> brings it to the server's.
+    /// The FarmableObjectInfo of an animal. The client builds one bar per items.xml element of the farmable (`co0.aqp` 0x180B8EEB0; the
+    /// elements as `bdb.me` 0x1806052D0 reads them) and fills each from its own keys (`co0.af_4` 0x180B8E130):
+    /// &lt;harvest&gt; (bdb+0x238, crops only) → bar co0+0x1c8 ← keys 4/5; &lt;grownitem growtime&gt; (bdb+0x240, `bdb.c` 0x1806042A0 reads
+    /// growtime into +0x1c) → bar co0+0x1d0, length growtime × key 12 ← keys 1/2; &lt;products&gt; → one bar each co0+0x1d8 ← keys 10/11;
+    /// &lt;consumption&gt; foods → one bar each co0+0x1c0 ← keys 8/9. An empty food bar sets co0+0x1a8 (`co0.aq9` 0x180B8ED70), which
+    /// pauses the growth bars. So a baby's growth goes in keys 1/2 (whole seconds × 10000 as <see cref="ShownTicks"/>, and the stamp it
+    /// holds at, as a crop's keys 4/5: the same `a5a.n` 0x1809091A0 reads both), a grown animal's production in keys 10/11 per product,
+    /// the nutrition (a7m) in keys 8/9. Keys 4/5 have no bar for an animal and stay 0. Public issue #24: the nutrition used to go in keys
+    /// 1/2 too, so the client showed 480 nutrition as 480 s of a 158400 s growth (≈ 43.9 h left on a grown horse) and never offered the
+    /// collect. Key 3 (co0+0x1e0, set with the grownitem bar) is sent false [its meaning is unknown]. The client drains the food at the
+    /// official rate between two infos; while Islands:GrowthSpeed is not 1 the <see cref="GrowthRefresh"/> brings it to the server's.
     /// </summary>
     private FarmableObjectInfoEvent AnimalInfo(FarmableObject o, AnimalData a, long now)
     {
@@ -409,14 +414,14 @@ public sealed partial class Islands
         var whole = grown / TimeSpan.TicksPerSecond * TimeSpan.TicksPerSecond;
         var food = (long)Math.Round(nutrition * 10000);
         var eats = a.NutritionMax > 0;
-        var products = a.GrownItem is null ? a.Products.Count : 0;
+        var baby = a.GrownItem is not null;
+        var products = baby ? 0 : a.Products.Count;
         return new FarmableObjectInfoEvent
         {
             ddn = o.Id,
-            b89 = eats ? food : 0,          // [1] nutrition (a7m)
-            b9a = eats ? now : 0,           // [2] its stamp
-            b9c = whole / 1000,             // [4] growth, a7m seconds
-            b9d = now - (grown - whole),    // [5]
+            b89 = baby ? whole / 1000 : 0,             // [1] the grownitem growth, a7m seconds
+            b9a = baby ? now - (grown - whole) : 0,    // [2] the stamp it holds at
+            b9c = 0, b9d = now,                        // [4], [5] the <harvest> bar: none for an animal
             b9e = [], b9f = [],
             b9g = eats ? [food] : [], b9h = eats ? [now] : [], // [8], [9] the food entry: nutrition and stamp
             b9i = [.. Enumerable.Repeat(whole / 1000, products)],             // [10] product progress (a7m), one cycle for all
