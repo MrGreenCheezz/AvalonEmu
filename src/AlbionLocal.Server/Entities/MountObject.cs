@@ -29,25 +29,29 @@ public sealed class MountObject(long id, ClusterObject spawn, Player owner, Item
     public override bool LeaveOnRange => true;
 
     /// <summary>
-    /// NewMountObject (as captured for an own ox without a guild): 0 id, 1 the mount item's index, 2 skin -1 (none), 3 position,
+    /// NewMountObject (as captured for an own ox without a guild): 0 id, 1 the mount item's index, 2 the mount-skin item's index
+    /// (-1 = none), 3 position,
     /// 4 facing, 5 the owner's character Guid, 7 byte 3 (bgi, always 3), 11-15 -1 and 17 1.0 (no guild logo); 6 FlaggingStatus 0,
     /// 8 (never sent), 9/10 (guild, alliance) and 16 are left out.
     /// </summary>
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
-        var skin = Owner.World.Vanity.MountSkinFor(Owner.Character, Item); // stageN vanity: the owner's skin of the mount's category
+        var skinNumber = Owner.World.Vanity.MountSkinFor(Owner.Character, Item);
+        var skin = skinNumber >= 0 ? Owner.World.Vanity.Catalog.MountSkin(skinNumber) : null;
+        var skinItem = skin is null ? null : Owner.World.Items.Find(skin.Name);
+        var skinIndex = skinItem?.Index ?? -1;
         yield return new NewMountObjectEvent
         {
             c69 = Id,                        // [0]
             c7a = Item.Index,                // [1]
-            c7b = skin,                      // [2] the skin number, -1 = none (0 goes through Extra)
+            c7b = skinIndex,                 // [2] the mount-skin item's index, -1 = none (0 goes through Extra)
             c7c = Position,                  // [3]
             c7d = Direction,                 // [4]
             c7e = Owner.Character.Id,        // [5]
             c7g = 3,                         // [7]
             c7k = -1, c7l = -1, c7m = -1, c7n = -1, c7o = -1, // [11-15] no guild logo
             c7q = 1f,                        // [17]
-            Extra = skin == 0 ? new() { [2] = 0 } : null,
+            Extra = skinIndex == 0 ? new() { [2] = 0 } : null,
         };
     }
 }

@@ -34,6 +34,7 @@ public static class MountsTest
         ("mounts: allowmounts false (an expedition's cluster type, not a royal city's): a character saved mounted joins there on foot (no Mounted), Mount refused there", NoMountClusters),
         ("mounts: the speed emblems' zone spells: on Caerleon's SPELLZONE_CITY_SPEEDBUFF emblem a player gets its effect each second, 10 m away not", SpeedEmblems),
         ("mounts: a selected skin is sent as ChangeMountSkin after the first Mounted, on a mounted rejoin, and to a new observer", MountSkinRestored),
+        ("mounts: a dismounted mount object sends the mount and mount-skin item indices in NewMountObject", MountSkinAfterDismount),
     ];
 
     private static void Check(bool cond, string what) => AlbionTests.Check(cond, what);
@@ -271,6 +272,41 @@ public static class MountsTest
         Check(me.IsMounted && mounted >= 0 && changed > mounted && cooldown > changed
             && newCharacter >= 0 && newMounted > newCharacter && newChanged > newMounted,
             $"mounted rejoin: Mounted, ChangeMountSkin, MountCooldownUpdate; the observer's NewCharacter, Mounted, ChangeMountSkin (got {Show(rejoin)} / {Show(spawn)})");
+    }
+
+    private static void MountSkinAfterDismount()
+    {
+        using var arena = new Arena();
+        var world = arena.World;
+        var vanity = world.Vanity;
+        var (session, peer, me) = Join(arena, "SkinDropper");
+        var (_, watcher, _) = Join(arena, "SkinDropWatcher", ox: false);
+        var skin = vanity.Pool.First(u => u.Type == AlbionLocal.Server.Data.VanityCatalog.UnlockType.Mount
+            && vanity.Catalog.MountCategories[u.Slot] == "OXEN");
+        var skinItemIndex = world.Items.Find(skin.Name)!.Index;
+        string? applied;
+        lock (world.Sync)
+        {
+            vanity.Grant(me, skin, "test");
+            applied = vanity.SetMountSkin(me, skin.Slot, skin.Number);
+        }
+        Check(applied is null, $"a T5 ox skin {skin} is selected");
+
+        Ride(session, me);
+        arena.Run(3.1);
+        lock (world.Sync) me.Facing = 90;
+        var (mark, wmark) = (peer.Events.Count, watcher.Events.Count);
+        Off(session, me);
+        var mine = Since(peer, mark);
+        var seen = Since(watcher, wmark);
+        var objectAt = mine.FindIndex(e => e.Code == EventCodes.NewMountObject);
+        var mounted = mine.FindIndex(e => e.Code == EventCodes.Mounted && L(e.P, 0) == me.Id);
+        var changed = mine.Any(e => e.Code == EventCodes.ChangeMountSkin);
+        var observed = seen.Any(e => e.Code == EventCodes.ChangeMountSkin);
+        Check(objectAt >= 0 && L(mine[objectAt].P, 1) == 3040 && L(mine[objectAt].P, 2) == skinItemIndex
+              && skinItemIndex != skin.Number
+              && !changed && !observed && mounted > objectAt,
+            $"dismount: NewMountObject item 3040 skin item {skinItemIndex} (selection {skin.Number}); ChangeMountSkin is not used while unmounted (got {Show(mine)} / {Show(seen)})");
     }
 
     private static void CancelsAndRefusals()
