@@ -115,10 +115,11 @@ public static class MistsTest
         throw new InvalidOperationException("no royal T5 cluster with SOLO markers");
     }
 
-    internal static Character Hero(SqliteCharacterRepository characters, string cluster, Vector2 at)
+    internal static Character Hero(SqliteCharacterRepository characters, string cluster, Vector2 at, IEnumerable<string>? items = null)
     {
         var hero = StarterKit.Default.NewCharacter("M" + Guid.NewGuid().ToString("N")[..10]);
         (hero.Cluster, hero.PositionX, hero.PositionY) = (cluster, at.X, at.Y);
+        foreach (var item in items ?? []) hero.Inventory.Add(new InventoryItem(item, 1));
         Check(characters.Create(hero), "character created");
         return hero;
     }
@@ -163,7 +164,7 @@ public static class MistsTest
         var (world, clock, dir, characters) = NewWorld(ServerConfig.PveDefaults.Mists, 21);
         var t5 = RoyalT5();
         var spot = t5.DungeonMarkers.First(m => m.Type == "SOLO").Position + new Vector2(3, 0);
-        var hero = Hero(characters, t5.Id, spot);
+        var hero = Hero(characters, t5.Id, spot, Enumerable.Range(2, 7).Select(t => $"T{t}_2H_TOOL_AXE")); // an axe of every node tier (public issue #35)
         var watcherChar = Hero(characters, t5.Id, spot + new Vector2(0, 2));
         var (s, peer, _) = Join(world, hero.Id);
         var (_, watcher, _) = Join(world, watcherChar.Id);
@@ -229,6 +230,24 @@ public static class MistsTest
               && info.Parameters[2] is string back && back == t5.Id && info.Parameters[4] is string target && target == t5.Id && Convert.ToInt64(info.Parameters[5]) == zone.ShutdownTicks
               && world.WorldChests.AreasOf(map).Count >= 1 && mobs.Where(m => m.Template.Name.Contains("_MOB_CAMP_MISTS_", StringComparison.Ordinal)).ToList() is { Count: > 5 } camp && camp.All(m => m.Template.Tier == zone.Tier),
               $"Join phase A: {borders.Count} border exits in view at their tiles, the 520 (one 523 in the zone, rarity 1); 521 {{0 the 520, 1 its end, 2/4 {t5.Id}, 5 the shutdown}}; {world.WorldChests.AreasOf(map).Count} camp(s), the camps' mobs of T{zone.Tier} (Mists spawn behaviours)");
+
+        // Public issue #35: the zone has the client's resource placement (resourcedistpresets.xml Mists presets): resource nodes and the prefabs'
+        // mob spawn points (roaming mobs, critters) bound for the zone; the WOOD node nearest the player is sent to it (list 39 or event 40) and harvested.
+        var res = zone.Template.Resources;
+        var nodes = map.Objects.Values.OfType<Harvestable>().Where(h => h.IsResourceNode).ToList();
+        var tree = nodes.Where(n => n.Type.Name == "WOOD").MinBy(n => Vector2.Distance(n.Position, me.PositionAt(DateTime.UtcNow)))!;
+        Move(world, s2, tree.Position - new Vector2(1.5f, 0));
+        var sent = peer2.Events.Any(e => Code(e) == (int)EventCodes.NewSimpleHarvestableObjectList && ((long[])e.Parameters[0]!).Contains(tree.Id)
+            || Code(e) == (int)EventCodes.NewHarvestableObject && Convert.ToInt64(e.Parameters[0]) == tree.Id);
+        var axe = me.Inventory.Bag.Items.First(i => i.Template.Name == $"T{tree.Tier}_2H_TOOL_AXE");
+        var full = tree.Charges;
+        lock (world.Sync) s2.OnRequest(Request(new HarvestStartRequest { Start = world.GameNow + TimeSpan.TicksPerSecond, HarvestableId = tree.Id, ToolObjectId = axe.Id }, 6), encrypted: false);
+        var answer = peer2.Responses[^1].ReturnCode;
+        Tick(world, clock, 15);
+        Check(res is { Invalid: null, Preset: { } } && nodes.Count > 100 && res.MobSpawnPoints.Count(p => p.Block is not null || p.Template is not null) > 0
+              && sent && answer == 0 && tree.Charges < full && me.Inventory.Bag.Items.Any(i => i.Template.Name.StartsWith($"T{tree.Tier}_WOOD", StringComparison.Ordinal)),
+              $"the zone's resource layout ({res?.Preset}, {res?.Invalid}; built in {zone.Template.LoadTime.TotalMilliseconds:0} ms): {nodes.Count} resource nodes, {res?.MobSpawnPoints.Count} prefab mob spawn points; "
+              + $"T{tree.Tier} WOOD {tree.Id} sent {sent}, HarvestStart rc {answer}, charges {full} → {tree.Charges}");
 
         // A8: op 476 after its 30 s refused; then the open-world exit (Entrance) back to the portal's front.
         Tick(world, clock, 31);

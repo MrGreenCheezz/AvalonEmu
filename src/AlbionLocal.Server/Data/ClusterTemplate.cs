@@ -397,12 +397,20 @@ public sealed class ClusterTemplate
     /// one Guid …0001 to the layout's up target, every later one …0002 to its down target, each a synthetic
     /// <see cref="WorldExit"/> with the target exit Guid (ad / ag). Its <see cref="Info"/> carries the instance id, the cluster
     /// name (a80.b) and the dungeon clustertype (a9p.x, for the PvP and danger rules); the mobs bind at the dungeon's tier.
-    /// Missing templates become <see cref="Problems"/>. Reads template files: never under the world lock.
+    /// Missing templates become <see cref="Problems"/>. A mists zone also gets the resource layout the client places on its node tiles
+    /// (<see cref="LayoutResources"/>, public issue #35): its harvestables and its prefabs' mob spawn points (roaming mobs, camps,
+    /// critters), bound at the zone's tier in <see cref="Builder.Finish"/>. Reads template files: never under the world lock.
     /// </summary>
     internal static ClusterTemplate FromLayout(ClusterStore store, A80Layout layout)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var info = new ClusterInfo { Id = layout.Id, File = layout.Name, Type = layout.ClusterType, DisplayName = layout.DisplayName, Origin = layout.Origin, Size = layout.Size };
+        var info = new ClusterInfo
+        {
+            Id = layout.Id, File = layout.Name, Type = layout.ClusterType, DisplayName = layout.DisplayName, Origin = layout.Origin, Size = layout.Size,
+            // Public issue #35: a mists zone's resource nodes are enchanted by its rarity's distribution (mists.xml difficultylevel
+            // rareresourcedistribution MISTS_E0..E4), read by ResourceNodes where a world cluster has world.xml's attribute.
+            Attrs = layout is MistsLayout { RareDistribution: { } rare } ? new Dictionary<string, string> { ["rareresourcedistribution"] = rare } : new Dictionary<string, string>(),
+        };
         var name = ClusterName.Parse(info.File);
         // A random dungeon floor's two exits lead up and down; a mists zone (stageL mists SPEC §6.3) has no exit members, its ways out are its own objects.
         var b = new Builder(store, info, info.Critical)
@@ -412,6 +420,7 @@ public sealed class ClusterTemplate
                 : (DungeonExits.Down, new WorldExit(DungeonExits.Down, pos, floor.DownExit, floor.DownCluster, "", new Dictionary<string, string>())),
         };
         var instances = new List<TemplateInstance>();
+        var sources = new List<(string Slot, TemplateLayout Layout, Placement Place, HashSet<string> Layers)>();
         foreach (var t in layout.Templates)
         {
             var active = t.Layers.ToHashSet(StringComparer.Ordinal);
@@ -422,9 +431,48 @@ public sealed class ClusterTemplate
                 b.Problem($"template {t.Template} not in templates/{t.Folder}");
                 continue;
             }
-            b.Place(t.Slot, tl, new Placement(t.Position.X, t.Y, t.Position.Y, t.Rotation), active, guidless: true);
+            var place = new Placement(t.Position.X, t.Y, t.Position.Y, t.Rotation);
+            if (sources.All(x => x.Slot != t.Slot)) sources.Add((t.Slot, tl, place, active));
+            b.Place(t.Slot, tl, place, active, guidless: true);
         }
-        return b.Finish(name, layout.Origin, layout.Size, instances, null, watch);
+        var resources = LayoutResources(store, layout, info, sources, b.Problem);
+        if (resources is { Placements.Count: > 0 }) PrefabColliders(store.Tiles, resources.Placements, b.Colliders);
+        return b.Finish(name, layout.Origin, layout.Size, instances, resources, watch);
+    }
+
+    /// <summary>
+    /// Public issue #35: the resource placement of a layout cluster. The client runs it for a layout as for a world.xml cluster: the
+    /// layout path a81.p 0x180518D70 registers the same component handlers as the .cluster path a81.p 0x180518660 (the resourcenode one
+    /// among them), and at the end of the load ddt.kh 0x180AD3890 calls a81.p 0x180519A80 → 0x180517EF0 → d0.a 0x1808BAA40 with
+    /// <list type="bullet">
+    /// <item>the seed d0.a(key 57, ciy+0x10), ciy+0x10 = ChangeCluster key 0 = the instance id (<see cref="A80Layout.Id"/>, "@MISTS@&lt;guid&gt;"),</item>
+    /// <item>the ClusterNameInformation of the cluster's file name (a80.b) and the PvpRules of its clustertype's archetype,</item>
+    /// <item>the difficulty = the layout's virtual kd() (vtable +0x188; a80.kd 0x180491110 returns 0, a9i.kd 0x1804C2280 returns a9i.v,
+    /// the zone's rarity <see cref="MistsLayout.Level"/>), the preset filter's "D&lt;n&gt;".</item>
+    /// </list>
+    /// So a mists zone (type 21 Mists, 23 ResourceMists) gets the resourcedistpresets.xml MISTS / RESOURCE MISTS presets (T5_MI_MIS_WLD_PA, …).
+    /// The node order: the client walks the layout's a9r dictionary, the server sorts by slot as for a .cluster file; the slot keys are
+    /// instanceslot_00, _01, … in insertion order, so both orders agree [infer: the walk order of the layout path is not decompiled].
+    /// A random dungeon floor (a9p) is left without: resourcedistpresets.xml has no RandomDungeon preset, so the client places
+    /// nothing there either [data]; the same holds for Knightfall Abbey (MistsDungeon), whose placement comes out invalid ("no preset").
+    /// Null without a session (--check-content), as <see cref="Resolve"/>.
+    /// </summary>
+    private static ResourceLayout? LayoutResources(ClusterStore store, A80Layout layout, ClusterInfo info,
+        List<(string Slot, TemplateLayout Layout, Placement Place, HashSet<string> Layers)> sources, Action<string> problem)
+    {
+        if (layout is not MistsLayout mists || store.Options.Session is not { } session) return null;
+        var cni = ClusterNameInfo.Parse(info.File);
+        if (cni is null) return new ResourceLayout { Session = session, Invalid = $"the cluster name {info.File} does not parse" }; // a81.p 0x180517EF0: no placement
+        try
+        {
+            var (_, _, pvpRules) = store.Archetypes.Of(info.Type);
+            return Place(store, info, cni, pvpRules, session, sources, problem, mists.Level);
+        }
+        catch (Exception e) when (e is InvalidDataException or IOException)
+        {
+            problem($"resource placement: {e.Message}");
+            return new ResourceLayout { Session = session, Invalid = e.Message };
+        }
     }
 
     /// <summary>
@@ -978,7 +1026,7 @@ public sealed class ClusterTemplate
     /// tile or compound child with a harvestable component becomes a live resource node.
     /// </summary>
     private static ResourceLayout Place(ClusterStore store, ClusterInfo info, ClusterNameInfo cni, int pvpRules, LayoutSession session,
-        List<(string Slot, TemplateLayout Layout, Placement Place, HashSet<string> Layers)> sources, Action<string> problem)
+        List<(string Slot, TemplateLayout Layout, Placement Place, HashSet<string> Layers)> sources, Action<string> problem, int difficulty = 0)
     {
         var nodes = new Dictionary<(int, string), List<NodeTile>>();
         var areas = new NodeAreas();
@@ -1000,7 +1048,7 @@ public sealed class ClusterTemplate
                 areas.Add(m.Components, (float)x, (float)z, TileMath.Mod360(place.Yaw + m.Yaw));
             }
         }
-        var preset = store.Presets.Find(ResourcePresets.Key(cni, pvpRules));
+        var preset = store.Presets.Find(ResourcePresets.Key(cni, pvpRules, difficulty)); // difficulty: 0 for a world.xml cluster, a layout's kd() (LayoutResources)
         var mapping = store.Mappings.Find(cni);
         var seed = DaySeed.Of(info.Id, session.Key57);
         var layoutOf = new ResourceLayout

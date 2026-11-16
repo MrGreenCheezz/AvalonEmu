@@ -940,7 +940,10 @@ there, with knockdowns (`Pvp:Mode` `Consensual`, `Pvp:LethalDeath` false); a Blu
   open-world exit or nothing, from rarity 1 always the open-world exit, often a Brecilien entrance too). The mobs come from the client's
   Mists spawn tables at the map's tier, with the instance's mob level drawn once (the client's `mists` difficulty group: up to x1.81 loot,
   silver and fame). You arrive at a border of the zone with a return portal at your feet for 30 s. The camps work as in the open world: the
-  camp quest bar fills with the camp's kills and opens your own camp chest.
+  camp quest bar fills with the camp's kills and opens your own camp chest. The resource nodes are the ones the client places itself, as in
+  the open world (public issue #35): the client's Mists preset of the zone's tier (a T5 zone: about 500 gatherable nodes of wood, rock, ore and
+  fiber T2-T5) with its roaming mobs, mob camps and hide and fiber critters at the zone's tier; their enchantment goes by the rarity's
+  distribution (`MISTS_E0`-`MISTS_E4`, more enchanted nodes the rarer the zone).
 - **Treasures** (`content/mists.json` `Treasures`): each zone rolls the client's treasure table of its mode: a treasure chest (45 %), up
   to three coffers (33 % each), and from rarity 1 up to two **mist bosses** (65 % each: the mythical Griffin, Spider or Fairy Dragon of the
   zone's tier). Each appears at a camp's spot, at least 40 m from the arrivals and 30 m from the others, at a random time between the
