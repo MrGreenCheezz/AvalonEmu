@@ -240,7 +240,11 @@ public sealed partial class WorldSession
         {
             if (map.Objects.GetValueOrDefault(id) is not SilverPile pile || !pile.MayTake(player) || player.Combat.Down is not null || !InReach(player, pile))
                 continue;
-            if (taken == 0) Mounts.BeforeAction(player, "takes silver"); // stageD mounts SPEC §4.3
+            // stageD mounts SPEC §4.3 lists TakeSilver among the dismounting actions (not captured mounted: [infer]). A server cast goes on
+            // (public issue #34): the client's auto pickup (czh.u 0x180A0CB20, every 80 ms from czh.afk 0x180A0C7C0) sends TakeSilver {2 true,
+            // 3 ids} (c32.i 0x180A726C0) after only a Move flush (ctp.atp 0x1809A79D0), leaving its cast running; captured pickups
+            // (103829, 114814) come amid auto-attacks that go on, with nothing but the pickup's events from the server.
+            if (taken == 0) Mounts.BeforeAction(player, "takes silver", endsCast: false);
             // A dead player's silver (stageE E3) is the victim's own: it moves as it was, no pickup factor, no tax [infer].
             var fromPlayer = pile.SourceKind == SilverPile.FromPlayer;
             // × the premium silver factor (premiumsilverlootfactor 1.5, Premium:SilverFactor; stageJ focus-lp SPEC §5.5): key 7 true, as captured.

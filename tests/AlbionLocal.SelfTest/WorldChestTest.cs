@@ -164,15 +164,23 @@ public static class WorldChestTest
         var seer = NewHero(characters, new Vector2(-92, -137));
         var (_, peerW) = Join(world, seer.Id);
         Tick(0.1);
-        mark = peerA.Events.Count;
-        var seen = peerW.Events.Count;
         // From the edge of the cast's reach (castrange 5 + 1 m): the client walks only into castrange, casts there and opens the loot from there.
         var edge = poi.Position + Vector2.Normalize(me.PositionAt(DateTime.UtcNow) - poi.Position) * 5.6f;
+        // A ghoul killed at that spot leaves its silver there (issue #34, below).
+        lock (world.Sync) Combat.Damage(me, SpawnManager.SpawnAt(map, store.Mobs.Find("T4_MOB_ROAMING_UNDEAD_GHOUL")!, edge, 0, world), 1e9, EffectType.Physical, HitOrigin.Direct, 0, world.GameNow);
+        var pile = map.Objects.Values.OfType<SilverPile>().FirstOrDefault(s => s.MayTake(me) && Vector2.Distance(s.Position, edge) < 0.1f);
+        mark = peerA.Events.Count;
+        var seen = peerW.Events.Count;
         lock (world.Sync) a.OnRequest(Request(new MoveRequest { wf = DateTime.UtcNow.Ticks, v6 = [edge.X, edge.Y], v8 = [edge.X, edge.Y], v9 = 0f }, 79), encrypted: false);
         var shrineCast = CastAt(poi.Position, world.Spells.IdOf("OPEN_BUFFSHRINE"), 2);
         var farCast = CastAt(poi.Position + new Vector2(0, 30), openSpell, 3);
         var accepted = CastAt(poi.Position, openSpell, 4);
-        var shown = peerW.Events.Skip(seen).FirstOrDefault(e => Code(e) == (int)EventCodes.CastStart && Convert.ToInt64(e.Parameters[0]) == me.Id)?.Parameters;
+        // Public issue #34: the client's auto pickup sends TakeSilver 15 ms into the opening and keeps casting; the pile goes, the cast goes on.
+        lock (world.Sync) if (pile is not null) a.OnRequest(Request(new TakeSilverRequest { wf = world.GameNow, agp = true, agq = [pile.Id] }, 78), encrypted: false);
+        Check(pile is not null && !map.Objects.ContainsKey(pile.Id) && world.FakeCasts.Of(me) is not null
+              && !peerA.Events.Skip(mark).Concat(peerW.Events.Skip(seen)).Any(e => Code(e) == (int)EventCodes.CastCancel),
+              "issue #34: TakeSilver during the chest opening takes the pile and leaves the cast running (no CastCancel to anyone)");
+        var shown =peerW.Events.Skip(seen).FirstOrDefault(e => Code(e) == (int)EventCodes.CastStart && Convert.ToInt64(e.Parameters[0]) == me.Id)?.Parameters;
         Tick(1);
         var early = poi.Rolled || peerA.Events.Skip(mark).Any(e => Code(e) == (int)EventCodes.LootChestOpened);
         Tick(1.1);

@@ -155,7 +155,8 @@ public static class Mounts
         var pending = new PendingMount(now, now + SpellCasts.Seconds(near ? data.RemountTime : data.MountTime), near, item);
         p.Mount.State = MountState.Mounting;
         p.Mount.Pending = pending;
-        Flagging.Interrupt(p, "mounts", interrupted: false); // stageE pvp SPEC §3.1 [infer]: mounting ends a flag cast
+        // stageE pvp SPEC §3.1 [infer]: mounting ends a server cast; the mount request is no cast of the client, so the caster is told too (#34)
+        Flagging.Interrupt(p, "mounts");
         SpellEffects.Break(world, p, "mounting", now); // mountingbreakseffect (the invisibilities, stageD effects batch 2)
         p.Session.Send(Network.WorldSession.ItemObject(item, inUse: true));
         p.SendToObservers(new MountStartEvent { ddn = p.Id, csu = now, csv = item.Template.Index, csw = near });
@@ -227,17 +228,27 @@ public static class Mounts
     /// <summary>
     /// Before an action of the player (an attack, a cast, a harvest, a station, loot; SPEC §4.2, §4.3): a mount under way is cancelled, a
     /// mounted player dismounted. A world interaction (all but the attack and the cast) also ends what has worldinteractionbreakseffect
-    /// (<see cref="SpellEffects.Break"/>, stageD effects batch 2). A flag cast under way ends (<see cref="Flagging.Interrupt"/>, as the
-    /// client's own: stageE pvp SPEC §3.1 [infer]).
+    /// (<see cref="SpellEffects.Break"/>, stageD effects batch 2). A server cast under way (a flag cast, an execute, a revive, a fake-slot
+    /// cast) ends unless <paramref name="endsCast"/> is false (<see cref="Flagging.Interrupt"/>; stageE pvp SPEC §3.1 [infer]): silently
+    /// towards the caster only for its own new cast or attack (<see cref="ClientLeftItsCast"/>), else with a CastCancel to the caster as
+    /// well, since its client still runs the cast and would wait for a CastFinished that never comes (public issue #34).
     /// </summary>
-    public static void BeforeAction(Player p, string what)
+    public static void BeforeAction(Player p, string what, bool endsCast = true)
     {
         if (what != "fishes") Fishing.End(p, $"the player {what}"); // stageG fishing SPEC §4: any other action ends a session
-        Flagging.Interrupt(p, what, interrupted: false);
+        if (endsCast) Flagging.Interrupt(p, what, interrupted: !ClientLeftItsCast(what));
         if (what is not ("attacks" or "casts")) SpellEffects.Break(p.World, p, "worldinteraction", p.World.GameNow);
         if (p.Mount.State == MountState.Mounting) Cancel(p, what);
         else if (p.IsMounted) Dismount(p);
     }
+
+    /// <summary>
+    /// Whether the action is the client's own new cast or attack (CastStart, AttackStart, the execute of slot 26, the revive of slot 27):
+    /// its client has left the cast under way for it, so the CastCancel goes to the observers only (as the CombatHandler's own). Every other
+    /// action (a station, harvest, loot, chest, island or labourer request, fishing) is a request beside the cast [infer: no capture of one
+    /// during a server cast], so the caster is told.
+    /// </summary>
+    private static bool ClientLeftItsCast(string what) => what is "attacks" or "casts" or "executes" or "revives";
 
     // ---- the dismount (SPEC §4.3) ----
 
