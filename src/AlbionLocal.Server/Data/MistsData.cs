@@ -115,7 +115,7 @@ public sealed class MistsData
                 Name = S(m, "name"), Type = S(m, "type"), ClusterType = S(m, "clustertype"), DisplayName = S(m, "clusterdisplayname"),
                 MaxTeamSize = Math.Max(1, I(m, "maxteamsize", 1)), Mapset = S(m, "mapset"),
                 Levels = [.. m.Elements("difficultylevel").Select(l => new MistsLevel(I(l, "level"), (string?)l.Attribute("wispmob"),
-                    (string?)l.Element("wispinstancedifficultyrollref")?.Attribute("randomdungeonrollref")) { WispVisualization = (string?)l.Attribute("wispmobexitvisualizationref") })],
+                    (string?)l.Element("wispinstancedifficultyrollref")?.Attribute("randomdungeonrollref")) { WispVisualization = (string?)l.Attribute("wispmobexitvisualizationref"), RareDistribution = (string?)l.Attribute("rareresourcedistribution") })],
                 Treasures = [.. m.Element("treasures")?.Elements("subtype").Select(t => new MistsTreasure(S(t, "name"), Math.Max(0, I(t, "rolls", 1)), D(t, "chance", 1),
                     D(t, "initialblocktimeseconds"), D(t, "finalblocktimeseconds"), I(t, "mindifficulty"))) ?? []],
                 OpenWorldExits = [.. m.Element("openworldexitdistribution")?.Elements("warningtype").Select(w => (S(w, "type"), D(w, "weight", 1))) ?? []],
@@ -234,6 +234,12 @@ public sealed record MistsMode
 public sealed record MistsLevel(int Level, string? WispMob, string? InstanceRoll)
 {
     public string? WispVisualization { get; init; }
+
+    /// <summary>
+    /// Public issue #35: the level's rareresourcedistribution (mists.xml: MISTS_E0 … MISTS_E4, whose enchanted weights rise with the rarity in
+    /// rareresourcedistribution.xml), the rare-state weights of a zone's resource nodes in place of world.xml's attribute.
+    /// </summary>
+    public string? RareDistribution { get; init; }
 }
 
 /// <summary>Phase B: a mode's MistsDungeonEntrance waves (SPEC §2.2): the target mode, wave interval, chance, block times, distance to players, life, tiers.</summary>

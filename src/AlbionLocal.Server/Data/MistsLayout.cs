@@ -31,6 +31,9 @@ public sealed record MistsLayout : A80Layout
     /// <summary>a9i.v (a7e.b): the zone's rarity 0-4 (the portal's key 9).</summary>
     public byte Level { get; init; }
 
+    /// <summary>Public issue #35, server only (not written): the rarity's rareresourcedistribution (<see cref="MistsLevel.RareDistribution"/>); null = DEFAULT.</summary>
+    public string? RareDistribution { get; init; }
+
     public override byte[] Write()
     {
         using var ms = new MemoryStream();
@@ -221,7 +224,7 @@ public static class MistsGenerator
             Id = id, Name = ClusterName(map, faction, mode.Type), Origin = origin, Size = size, Templates = templates, DisplayName = mode.DisplayName,
 
             ClusterType = mode.ClusterType, MiniMap = master.MiniMap with { Min = miniOrigin, Max = miniOrigin + miniSize },
-            Mode = mode.Name, Map = map.Id, Level = (byte)Math.Clamp(level, 0, 4),
+            Mode = mode.Name, Map = map.Id, Level = (byte)Math.Clamp(level, 0, 4), RareDistribution = mode.Level(level)?.RareDistribution,
         };
     }
 }
