@@ -82,6 +82,17 @@ public sealed class BuildingStore
                 CraftCapacity = Num("craftcapacity", 0),
                 CraftItems = [.. (definition.Element("craftingitemlist")?.Descendants("craftitem") ?? [])
                     .Select(c => (string?)c.Attribute("uniquename")).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)],
+                Meldings = [.. (definition.Element("meldingcombinations")?.Elements("combination") ?? [])
+                    .Select(c => new MeldingCombination(
+                        TileMath.Int((string?)c.Attribute("tier")),
+                        TileMath.Int((string?)c.Attribute("powerlevel")),
+                        ((string?)c.Attribute("aspect") ?? "").ToLowerInvariant(),
+                        double.TryParse((string?)c.Attribute("time"), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) ? seconds : 0,
+                        (string?)c.Attribute("lootlist") ?? "",
+                        [.. c.Elements("neededitem").Select(n => new MeldingRequirement(
+                            (string?)n.Attribute("uniquename") ?? "", TileMath.Int((string?)n.Attribute("quantity"))))]))
+                    .Where(c => c.Tier > 0 && c.PowerLevel > 0 && c.Aspect.Length > 0 && c.LootList.Length > 0
+                        && c.Needed.Count > 0 && c.Needed.All(n => n.Item.Length > 0 && n.Count > 0))],
                 Attrs = attrs,
                 Element = definition,
             });
@@ -125,6 +136,12 @@ public sealed record BuildingTemplate
     /// </summary>
     public IReadOnlyList<string> CraftItems { get; init; } = [];
 
+    /// <summary>
+    /// The artifact foundry's melding combinations (op 55 ACT 5): target tier, power level and aspect, duration,
+    /// loot.xml output list and the items consumed. Empty for every other building.
+    /// </summary>
+    public IReadOnlyList<MeldingCombination> Meldings { get; init; } = [];
+
     /// <summary>isshop="true" (the NPC shops: FARMING_MERCHANT, the vanity store, …) or a factionbuilding (the faction trader).</summary>
     public bool IsShop => Attrs.GetValueOrDefault("isshop") == "true" || Kind == "factionbuilding";
 
@@ -146,6 +163,9 @@ public sealed record BuildingTemplate
     /// <summary>Awakens weapons and modifies their traits (op 55 AwakenLegendaryItem, ACT 8): the client's component (cm2) is on cpj only (awakening SPEC §1).</summary>
     public bool Awakens => Kind is "meldbuilding";
 
+    /// <summary>Melds artifact fragments into a rolled artifact (op 55 MeldItem, ACT 5): the artifact foundry only.</summary>
+    public bool Melds => Kind is "meldbuilding";
+
     /// <summary>Rerolls an item's quality (op 55 RerollQuality, ACT 6): the client's component (cmk) exists on the repair shop class cpl only.</summary>
     public bool RerollsQuality => Kind is "repairbuilding";
 
@@ -155,3 +175,10 @@ public sealed record BuildingTemplate
     /// <summary>The definition element, for its children (shop lists, craft lists).</summary>
     public required XElement Element { get; init; }
 }
+
+/// <summary>One artifact foundry melding combination from buildings.xml.</summary>
+public sealed record MeldingCombination(int Tier, int PowerLevel, string Aspect, double Time, string LootList,
+    IReadOnlyList<MeldingRequirement> Needed);
+
+/// <summary>One item stack a melding combination consumes.</summary>
+public sealed record MeldingRequirement(string Item, int Count);
