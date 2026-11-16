@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-16 — Mists resources, silver during a chest cast, grown island animals, the melding key
+
+- **Mists resources** (issue #35): a Mists zone had the scenery of its resource nodes but nothing to harvest, and none of the roaming mobs, camps and critters of its prefabs. The server now runs the client's resource placement for a Mists zone as it does for a world cluster: the nodes of the zone's preset for its tier and rarity, enchanted by the rarity's `rareresourcedistribution` (MISTS_E0..E4), and the mob spawn points of the placed prefabs. A T5 solo zone that had 0 nodes now has 518. Random dungeon floors are unchanged: the game data has no resource preset for them.
+- **Silver during a chest cast** (issue #34): picking up silver while opening a world chest ended the cast on the server without telling the caster, so the client stayed in the opening pose, unable to act, until a relog. The client collects nearby silver on its own while a cast runs; TakeSilver no longer ends a cast, and the chest opens. Any other action that ends a server cast (a station action, harvesting, mounting) now sends the CastCancel to the caster as well as to the observers.
+- **Grown island animals** (issue #24): a baby animal that had finished growing still showed about 44 hours left and could not be collected. The server sent the growth in the fields the client reads for a crop and the nutrition in the fields it reads for an animal's growth, so 480 nutrition was shown as 480 seconds of a 44-hour growth. The growth now goes in the animal's own fields: a grown baby shows no time left and can be collected.
+- **Melding key** (PR #36): the foundry accepts only the key the client sends (`6_2_Red`: tier, power level, aspect name) and answers anything else with `ItemNotMeldable`.
+- None of this is checked in the client yet. Inferred, not captured: the order in which a Mists layout's tiles are walked during the placement (if the client's differs, nodes stand apart from their scenery), the CastCancel to the caster for the other actions, the dismount on a silver pickup, and field 3 of an animal's `FarmableObjectInfo`.
+
+Thanks to JumpingY for the pull request, the two reports and the database rows that showed the animal bug, and to seira10 for the original animal report.
+
 ## 2026-11-15 - Artifact foundry melding
 
 - **Artifact foundry** (op 55 ACT 5, `MeldItem`): the meld tab answered with a generic internal error because the action was not implemented. The server now reads the artifact foundry's 80 `meldingcombinations` from `buildings.bin`, validates the selected tier, power level, aspect and quantity, consumes the required artifact fragments, and rolls the combination's `loot.xml` list once per meld. The action supports the normal progress bar, batch melding, inventory checks and fragment refunds on cancellation. Component failures use the client's `MeldItemErrorCode` values, so insufficient fragments, an invalid combination and a full inventory are reported by the client's own messages.
