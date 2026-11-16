@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Numerics;
-using System.Text.RegularExpressions;
 using AlbionLocal.Photon;
 using AlbionLocal.Server.Data;
 using AlbionLocal.Server.Entities;
@@ -115,6 +114,10 @@ public sealed partial class WorldSession
     /// building's meldingcombinations select the consumed fragments and the loot.xml list rolled once per combination.
     /// The fragment stacks go at the start, the rolled artifacts come when the action ends; a cancel gives the fragments
     /// back. The client opens the normal station action and its result list from the item and finish events.
+    /// From the client's component cmg: the action lasts the combination's time × the amount (aap 0x180B62290), costs no
+    /// silver (aam, aao: zero) and is tested before it is sent (ao 0x180B630D0: range, rights, the fragments × amount, and
+    /// room for every possible result × amount, al 0x180B62810 — stricter than the server's test of the rolled results).
+    /// No capture: when the fragments go and that a cancel returns them are the server's choice [infer].
     /// </summary>
     private AlbionResponse? StartMeld(Player player, Building building, ActionOnBuildingStartRequest req)
     {
@@ -207,23 +210,19 @@ public sealed partial class WorldSession
         return null;
     }
 
-    /// <summary>The client's melding target key "T&lt;tier&gt;.&lt;power level&gt; &lt;aspect&gt; ...".</summary>
+    /// <summary>
+    /// The client's melding target key (b57.a 0x1808045E0, sent by cmg.aaw 0x180B625B0): the combination's tier, its power
+    /// level and its Aspect's name (Red, Blue, Green, All) joined by '_', as "6_2_Red". Nothing else is a key.
+    /// </summary>
     private static bool TryMeldTarget(string? text, out int tier, out int power, out string aspect)
     {
         tier = power = 0;
         aspect = "";
-        if (string.IsNullOrWhiteSpace(text)) return false;
-        var match = Regex.Match(text, @"^\s*T?\s*(?<tier>[1-8])\s*[._,]\s*(?<power>[1-4])(?:_|\s|$)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-        if (!match.Success) return false;
-        tier = int.Parse(match.Groups["tier"].Value, CultureInfo.InvariantCulture);
-        power = int.Parse(match.Groups["power"].Value, CultureInfo.InvariantCulture);
-        (string Name, string[] Aliases)[] aspects =
-        [
-            ("red", ["red", "红"]), ("blue", ["blue", "蓝"]), ("green", ["green", "绿"]), ("all", ["all", "全部", "全"]),
-        ];
-        aspect = aspects.FirstOrDefault(a => a.Aliases.Any(x => text.Contains(x, StringComparison.OrdinalIgnoreCase))).Name ?? "";
-        return aspect.Length > 0;
+        if (text?.Split('_') is not [var t, var p, var a]) return false;
+        if (!int.TryParse(t, NumberStyles.None, CultureInfo.InvariantCulture, out tier)
+            || !int.TryParse(p, NumberStyles.None, CultureInfo.InvariantCulture, out power)) return false;
+        aspect = a.ToLowerInvariant();
+        return aspect is "red" or "blue" or "green" or "all";
     }
 
     /// <summary>

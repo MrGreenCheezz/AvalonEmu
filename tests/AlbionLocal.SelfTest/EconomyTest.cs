@@ -498,11 +498,6 @@ public static class EconomyTest
     }
 
     /// <summary>
-    /// Awakening (stageN awakening SPEC §1-§2): a T4_MAIN_SWORD@4 with 2 UNIQUE_GVGTOKEN_GENERIC and 2 QUESTITEM_TOKEN_AVALON (100 × the T4
-    /// scaling 0.0208, rounded) and 6000000 × 0.0208 silver gets a soul with 3 traits after 1.5 s: tokens and silver gone, NewEquipmentItem key
-    /// 11 = 1, event 37 {0 the sword, 4 attuned to me, 8 three trait names}, saved over a relog. A T4 sword@3 is refused (enchantment &lt; 4).
-    /// </summary>
-    /// <summary>
     /// ACT 5 at the artifact foundry: two 6_2_Red melds consume 100 T6 souls (50 each) and roll two T6 artifacts from
     /// MELD_6_2_RED_LOOT. An attempt with too few souls is the component's NotEnoughResources and consumes nothing.
     /// </summary>
@@ -532,13 +527,22 @@ public static class EconomyTest
               && events.Count(e => e.Code == EventCodes.NewSimpleItem) >= 2,
               $"two 6_2_Red melds: 100 souls consumed, {Artifacts()} artifacts gained, finish event sent (got {Show(events)})");
         var answers = peer.Responses.Count;
-        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 5, q = 2, x = "T6.2 All", w = 1 });
+        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 5, q = 2, x = "6_2_All", w = 1 });
         Check(Answers(peer, answers) is [{ ReturnCode: WorldSession.StationComponentError } bad]
               && L(bad.Parameters, 3) == (byte)MeldError.NotEnoughResources && Count("T6_SOUL") == 20,
-              "twenty remaining T6 souls: RC 2202 NotEnoughResources, nothing consumed");
+              "twenty remaining T6 souls, 6_2_All needs 36: RC 2202 NotEnoughResources, nothing consumed");
+        answers = peer.Responses.Count;
+        Op55(new ActionOnBuildingStartRequest { wf = world.GameNow, o = meld.Id, p = 5, q = 3, x = "T6.2 Red", w = 1 });
+        Check(Answers(peer, answers) is [{ ReturnCode: WorldSession.StationComponentError } unknown]
+              && L(unknown.Parameters, 3) == (byte)MeldError.ItemNotMeldable && Count("T6_SOUL") == 20,
+              "a target key that is not the client's tier_power_Aspect: RC 2202 ItemNotMeldable");
     }
 
-    /// <summary>Awakening (ACT 8) and its component errors at the artifact foundry.</summary>
+    /// <summary>
+    /// Awakening (stageN awakening SPEC §1-§2): a T4_MAIN_SWORD@4 with 2 UNIQUE_GVGTOKEN_GENERIC and 2 QUESTITEM_TOKEN_AVALON (100 × the T4
+    /// scaling 0.0208, rounded) and 6000000 × 0.0208 silver gets a soul with 3 traits after 1.5 s: tokens and silver gone, NewEquipmentItem key
+    /// 11 = 1, event 37 {0 the sword, 4 attuned to me, 8 three trait names}, saved over a relog. A T4 sword@3 is refused (enchantment &lt; 4).
+    /// </summary>
     private static void Awakening()
     {
         using var town = new Town(meld: true);
