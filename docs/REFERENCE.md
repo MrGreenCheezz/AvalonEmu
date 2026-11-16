@@ -2793,8 +2793,9 @@ Animals (phase 4) and building farm buildings from the build menu (phase 5) work
   `Islands:GrowthSpeed`). A grown baby is collected: the grown animal (`T3_FARM_HORSE_GROWN`, the stable's mount
   resource), the baby back with its offspring chance (84 % for the T3 horse; more after a focus care), and its fame. A
   grown chicken, goat, … placed in a pasture eats too and gives its product (eggs, milk) once per production time
-  (÷ `Islands:GrowthSpeed` as well). The client takes an animal's full time from its own data and counts at normal
-  speed, so while the speed is not 1 the server sends the progress so that the animal's timer shows the real time left
+  (÷ `Islands:GrowthSpeed` as well). The client reads a baby's growth from its own field of the farmable info (not the
+  crops' one; the food has a field of its own), so a fully grown baby shows no time left and can be collected. It takes
+  an animal's full time from its own data and counts at normal speed, so while the speed is not 1 the server sends the progress so that the animal's timer shows the real time left
   (GrowthSpeed 30: a chicken baby about 1 h 28 min instead of 44 h); the bar then starts nearly full, and the food bar
   is brought to the server's value every 5 min.
 - **Building (phase 5, `../analysis/work/stageN/islands5/SPEC.md`).** On the own island the client's build menu places a farm
