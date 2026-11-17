@@ -129,6 +129,8 @@ public static class MapSpawner
         objects.AddRange(world.SafePortals.Populate(map, template));
         // StageN shrines (SPEC §3): the buff shrines of the active layers (396): a solo dungeon room's, the faction and invisibility shrines.
         objects.AddRange(world.Shrines.Populate(map, template));
+        // StageR lore (SPEC §2): the lore snippets of the templates (673, then the viewer's 674).
+        objects.AddRange(world.Lore.Populate(map, template));
         // StageP territories (SPEC §6 P1): a watchtower territory's monolith (109) and a castle territory's castle (112), unowned.
         objects.AddRange(world.Territories.Populate(map, template));
         // StageQ outposts: a faction warfare zone's towers (365, cluster-wide), owned by its duchy's faction at first; their guards stand on the first tick.
@@ -139,6 +141,8 @@ public static class MapSpawner
         objects.AddRange(world.Mists.Populate(map, template));
         // StageR dragon areas: an instance's exits (695) and mob level; an open-world map's entrances drawn by treasuredistribution (694).
         objects.AddRange(world.DragonAreas.Populate(map, template));
+        // StageR abyss: a Hell Den's Abyssal Depths entrances (638); a floor's exits (633/634/635), resurrection shrines (627) and mob level.
+        objects.AddRange(world.Abyss.Populate(map, template));
         // StageH islands (SPEC §1.5): an island instance's island management, owned by the island's owner.
         objects.AddRange(world.Islands.Populate(map, template));
         // StageP hideouts (SPEC §2.5): the hideouts standing in a black zone (419); a hideout instance's management (420) and exit (421).

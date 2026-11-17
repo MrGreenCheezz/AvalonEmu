@@ -52,6 +52,7 @@ public sealed class ClusterStore
         public required Retrying<CorruptedData> Corrupted;
         public required Retrying<SafePortalData> SafePortals;
         public required Retrying<DragonAreaData> DragonAreas;
+        public required Retrying<HellDungeonData> HellDungeons;
         public required Retrying<HellgateData> Hellgates;
         public required Retrying<RoadNetworkData> Roads;
         public required Retrying<MistsData> Mists;
@@ -59,6 +60,7 @@ public sealed class ClusterStore
         public required Retrying<EmoteData> Emotes;
         public required Retrying<MatchTypeData> MatchTypes;
         public required Retrying<ArenaData> Arena;
+        public required Retrying<LoreData> Lore;
     }
 
     /// <param name="folder">The client's GameData folder; nothing is read before the first cluster is asked for.</param>
@@ -106,6 +108,7 @@ public sealed class ClusterStore
             Corrupted = new(() => CorruptedData.Load(GameDataFile.Open(Folder, "corrupteddungeons.bin").Root())),
             SafePortals = new(() => SafePortalData.Load(GameDataFile.Open(Folder, "outlandsteleportationportals.bin").Root())),
             DragonAreas = new(() => DragonAreaData.Load(GameDataFile.Open(Folder, "dragonarea.bin").Root(), GameDataFile.Open(Folder, "dragonareatemplatemetadata.bin").Root())),
+            HellDungeons = new(() => HellDungeonData.Load(GameDataFile.Open(Folder, "helldungeons.bin").Root(), GameDataFile.Open(Folder, "helldungeonstemplatemetadata.bin").Root())),
             Hellgates = new(() => HellgateData.Load(GameDataFile.Open(Folder, "hellgate.bin").Root())),
             Roads = new(() => RoadNetworkData.Load(GameDataFile.Open(Folder, "tunnelsystem.bin").Root(), GameDataFile.Open(Folder, "gamedata.bin").Root())),
             Mists = new(() => MistsData.Load(GameDataFile.Open(Folder, "mists.bin").Root(), GameDataFile.Open(Folder, "miststemplatemetadata.bin").Root())),
@@ -113,6 +116,7 @@ public sealed class ClusterStore
             Emotes = new(() => EmoteData.Load(GameDataFile.Open(Folder, "emotes.bin").Root())),
             MatchTypes = new(() => MatchTypeData.Load(GameDataFile.Open(Folder, "matchtypes.bin").Root(), GameDataFile.Open(Folder, "orbtypes.bin").Root())),
             Arena = new(() => ArenaData.Load(Folder)),
+            Lore = new(() => LoreData.Load(GameDataFile.Open(Folder, "lore.bin").Root())),
         };
     }
 
@@ -265,6 +269,12 @@ public sealed class ClusterStore
     /// <summary>dragonarea.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
     public DragonAreaData? DragonAreasIfLoaded => _shared.DragonAreas.IsValueCreated ? _shared.DragonAreas.Value : null;
 
+    /// <summary>helldungeons.xml and helldungeonstemplatemetadata.xml (stageR abyss SPEC §1): read with the first use of an Abyssal Depths entrance.</summary>
+    public HellDungeonData HellDungeons => _shared.HellDungeons.Value;
+
+    /// <summary>helldungeons.xml when it has been read already, else null (under the world lock).</summary>
+    public HellDungeonData? HellDungeonsIfLoaded => _shared.HellDungeons.IsValueCreated ? _shared.HellDungeons.Value : null;
+
     /// <summary>hellgate.xml (stageL hellgates SPEC §2.1): read with the first cluster that has a hellgate shrine (a Hell Den) or is a hellgate.</summary>
     public HellgateData Hellgates => _shared.Hellgates.Value;
 
@@ -294,6 +304,9 @@ public sealed class ClusterStore
 
     /// <summary>arena_europe.bin (else arena.bin; stageP league-pvp SPEC §3.3, 7 KB): the categories and the season's ranks, read with the first ranked result.</summary>
     public ArenaData Arena => _shared.Arena.Value;
+
+    /// <summary>lore.xml (stageR lore SPEC §1, 8 KB): read with the first map that places a lore snippet, or the first RequestLoreSnippetStates.</summary>
+    public LoreData Lore => _shared.Lore.Value;
 
     /// <summary>
     /// A random dungeon floor or a mists zone from its layout (<see cref="ClusterTemplate.FromLayout"/>), not cached here (the dungeon or the

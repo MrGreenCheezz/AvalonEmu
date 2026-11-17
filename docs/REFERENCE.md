@@ -157,6 +157,25 @@ Not done (no capture, no client code that defines them): the main quest (687-691
 (698), the boss and the treasures, the party binding (700), DragonAreaPlayerJoinedInfo (690), the item power requirement, the exact
 error codes. Not checked in the client yet: the matchmaking window after 699, the instance as the client builds it, the exits.
 
+**Abyssal Depths** ("hell dungeons" in the client; `../analysis/work/stageR/abyss/SPEC.md`). `helldungeons.xml` and
+`helldungeonstemplatemetadata.xml` are read. The six Hell Dens ("Antiquarian's Den") show their entrance (NewHellDungeonStaticEntrance
+638), Open 300 s and Closed 300 s in turns (UpdateHellDungeonStaticEntranceState 639 at each change). The window's Join (op 532 with the
+mode: Duo or Trio) is checked as the client does (the codes 21280-21287: not found, out of range, closed until, already entering, blocked
+by the 70 s debuff, disabled, unknown mode, item power below 900); accepted, the player goes in 3 s later: into floor 1 of the mode,
+the instance its party entered within 60 s, else an open one of the mode with room (before its 300 s close time, under the map's soft
+limit), else a new one built off the world thread (the a9c layout: HELLDNG_MASTER_01_LVL1 and its pool's templates with their rolled boss
+layers; the client builds exactly these), pushed as ChangeCluster {0 "@HELLDUNGEON@guid", 3 a9c, 4 the mode's clustertype, 5 the tier},
+with the way back and the HELL_DUNGEON_JOINED_FROM_STATIC_ENTRANCE_DEBUFF. Inside: the templates' demons at the mode's difficulty level,
+HellDungeonsPlayerJoinedInfo 622 (the shutdown's stamps) and a chat line at each Join, the upward exits (633) out to the Hell Den, 5-8 of
+the downward exits (635) open into the next floor (floor 2 and 3, the same team rules with 300 s), the soul exits (634) closed, the
+resurrection shrines (627) standing; at 720 s a warning, at 1020 s everyone out to the Hell Den; an empty floor closes after 300 s; a relog
+keeps the layout, a floor that is gone sends the character back. Keys: `AbyssalDepths:Enabled`, `SharedInstances`, `EnterDelaySeconds`,
+`CheckItemPower` (world.jsonc). GM: `.abyss list`, `.abyss open|close [seconds]` (the entrance of the Hell Den you stand in), `.abyss shut`
+(the floor you are in). Not done (no capture, server rules unknown): souls, soul and room shrines, the soul exit's and the shrines' use,
+keys, key chests and the chest exit (636), treasures and loot chests, the party binding of the entrance (534-536), the real matchmaking,
+the shutdown damage spells. Not checked in the client yet: the entrance and its window, the floors as the client builds them, the exits,
+the 622 shutdown display.
+
 The character database gets new columns (schema v2: facing, previous cluster, pending transfer) the first time this
 version starts; a server build from before step 13 then refuses the file ("schema version 2 is newer").
 
@@ -1224,6 +1243,9 @@ these values. Any key written in the file or on the command line wins over its p
 
 `.who` and `.save` are GameMaster commands in both presets (the official game has neither; `.who` shows every player's position).
 
+Not official under **both** presets, by the user's choice: `Gold:Rewards:Enabled` (true): a little gold from bounded moments of
+play, since the server has no store and no gold market (2026-11-17; see Economy, Gold rewards). `false` gives the official rule.
+
 Under `Consensual` nobody can attack a Blue or faction-flagged player, so there are no crimes, reputation losses or outlaws.
 The client still judges hostility by its own table: in a black zone it shows other players as enemies and lets you press
 attack, and the server refuses the attack as it does one on a dead mob. The client's warning on entering a red or black zone
@@ -1679,6 +1701,34 @@ Not checked in the client yet: the station and market windows themselves (`../an
 C-A1…C-D4); the exact keys of the market's "create order" requests were read from the client's code, not from a capture.
 The Black Market window is not captured either (its SPEC §4: C-BM1, C-BM2).
 
+### Gold rewards
+
+`../analysis/work/stageR/gold/SPEC.md`. **Not official, on under every preset** (`Gold:Rewards:Enabled`, true by default: a
+deliberate departure from "official by default", made at the user's request on 2026-11-17). The official game gives no gold
+in play: this client's data has no gold reward anywhere (the achievement reward type `Gold` exists in the client code, but no
+achievement, journal entry, challenge, season or campaign uses it); its gold comes from the store and the gold market. This
+server has neither (no shop, no monetisation; the gold market is postponed), yet gold has prices (the guild crest
+`Guilds:LogoChangeGold` 3000, victory emote charges). So a few bounded moments of normal play give a little gold, never
+anything farmable (no gold per kill or per resource). Each credit goes through the wallet (UpdateMoney 81 with the new gold,
+saved with the character) and a system message in the chat says why ("[Gold] +100 gold: your first 10,000 fame today.").
+Gold stays per character, as the wallet keeps it. The caps are in the character's goals (saved, so a restart changes nothing).
+Bots get none. `.goldrewards` (every player) shows the sources and where you stand this day and week.
+
+| Source (`Gold:Rewards:` key) | Gold | Cap | A week, active |
+|---|---|---|---|
+| The day's first `DailyFameRequired` (10000) fame: kills, PvP, gathering, fishing, farming, crafting; not tomes, not a GM's `.fame` (`DailyFame`) | 100 | once per character and bounty day | 700 |
+| The Conqueror's Challenge's weekly might reaches the weekly chest (20000 might), with or without premium (`ConquerorWeekly`) | 250 | once a week | 250 |
+| An Albion Journal reward claimed (op 514; achievements and category rewards, each once ever) (`JournalClaim`) | 10 | `JournalWeeklyCap` 200 a week | up to 200 |
+| The faction warfare campaign's last daily reward reached (5000 faction points in a campaign day) (`FactionDaily`) | 50 | once a UTC campaign day | 350 (enlisted players) |
+
+An active character makes about 1150 gold a week, an enlisted one about 1500: the 3000 gold crest takes two to three weeks.
+Each amount is whole gold, 0 turns that source off; `Gold:Rewards:Enabled` false = gold only through the GM's `.money`. The days
+and weeks are the bounties' (`Bounties` reset hour, weeks from Monday), the faction day the campaign's UTC day.
+
+Not done: gold for an arena or Crystal League win, achievements of the destiny board (the client data gives none gold), a
+mail for the reward (the system message is enough), a module hook for gold (there is none for gold changes). Not checked in
+the client yet: the gold shown in the purse and the gold-priced windows after a reward, the chat line.
+
 ### City plots
 
 Public issue #18, `../analysis/work/realestate/SPEC.md`. The signs on the plots of the cities (80 in each royal city, 120 in
@@ -1865,6 +1915,30 @@ Official` (the client data's Adventurer's Challenge; only `Season.Enabled` is re
 Not checked in the client yet: the season window's bars and claim buttons for a character without premium (C-C1), the
 points popup (C-C2), the journal window's finished and claimable entries (C-B1) and the tracker's progress (C-B2).
 
+### Lore snippets
+
+(`../analysis/work/stageR/lore/SPEC.md`.) The 34 snippets of `lore.xml` (21 Keeper, 12 Dragon and a test one) are found in the
+world: every `loresnippet` spot of a cluster's templates that world.xml lists (77 spots, e.g. 0201 has KEEPER_18) stands as a
+lore snippet object (NewLoreSnippetObject 673, then the viewer's own state 674), claimed or not per character. Clicking one
+in reach sends the client's simple action ClaimLoreSnippet (DoSimpleActionStart, op 445, action 11): the server answers it,
+the 5 s channel runs (492, then 494; moving away, a knockdown or the client's cancel, op 446, drops it with 493), and the
+snippet is the character's: LoreSnippedClaimed 675 (the client's notice and lore list), 674 claimed, kept with the character's
+goals (saved, no schema step). The Albion Journal counts it: the LORE category's achievement of that snippet
+(JOURNAL_LORE_KEEPER_06 for KEEPER_18 and so on; its reward, a T5 tome, is claimed in the journal as any other) and the
+claimloresnippet missions (the Keeper lead-up season's "any n of KEEPER_01-21"). RequestLoreSnippetStates (op 542) answers
+the claimed flags. The ten UNIQUE_UNLOCK_LORE_KEEPER_* scrolls claim their snippet when used. Key `LoreSnippets:Enabled`
+(true = official; `config/world.jsonc`): false places none, refuses claims (17811) and answers all unclaimed. GM: `.lore list`
+(this map's snippets, distance, claimed), `.lore grant <uniquename|index|all>` (as a claim, with the journal),
+`.lore reset <uniquename|index|all>` (unclaimed again; the journal stays done); both end with 676 so the client asks again.
+
+Not done: the order of 674 after 673 and of the 492 event before the claim's answer are not captured; `hideuntilref`
+(none in the data) and feature switch 203 LoreSnippetIgnoreHiddenUntil are not used; the journal's own `hiddenuntil` on the
+Keeper subcategory is left to the client; the text of the refusal codes (17800-17811) is not traced; a GM reset does not undo
+the journal.
+
+Not checked in the client yet: the snippet's model and its claimed look on 0201, the click and the 5 s channel, the notice
+after it, the journal's Lore tab (the snippet's text unlocked, the reward's Claim button), and a relog keeping it claimed.
+
 ## Side windows
 
 What the client asks for besides the game itself (`../analysis/work/stageH/ops-audit/SPEC.md`): every request the ops audit
@@ -1882,6 +1956,26 @@ login, still warn).
   their progress (see "Goals" above).
 - **Season window:** the Adventurer's Challenge shows its points (see "Goals" above); the past seasons tab is empty (op 373 still the stub answer, no event 377); the faction warfare campaign shows the current month.
 - **Island showroom:** the merchant's "Showroom" travels there (see Personal islands).
+
+## Client feature switches
+
+Stage R (`../analysis/work/stageR/switches/SPEC.md`; `src/AlbionLocal.Protocol/FeatureSwitches.cs`, `Game/LoginWorld.cs`). The
+client's 227 feature switches (enum `Features`) turn windows and buttons on or off. The server sends the table in the Login
+response (key 99) and, as the official server does, again in FeatureSwitchInfo (event 503) right after every Join response (each
+login into the world and each cluster change), with the official VFX limits string in its key 4.
+
+- **Default = the official table** (identical in all 14 captured events), with one exception: 151
+  DestinyBoardShowBuyLPButtonAndCTA stays off, because its button and the destiny board's "Refill" call to action open the
+  Albion Store (no shop on this server). Compared with the client's own defaults this switches off 24 ClusterValueOverview
+  (the world map's "cluster value" and "silver value" overlays disappear from its dropdown; they were empty here), 41
+  UseSkillBookNewBatching, 46, 77, 83 (automatic bans), 100, 177 ClientPriorityUpdateScheduler, 217, 218 (mobile age checks)
+  and switches on 19 CrossPlatformRewards, 25/26 (guest accounts; this server has none) and 171 PartyFinder.
+- **Config** `Client:FeatureSwitches` (world.jsonc): `{ "PartyFinder": false, "151": true }` sets switches by Features name
+  (any case) or index 0..226. An unknown name, an index out of range, a value other than true/false or 112 DynamicTemplates
+  (the server lays clusters out by it) stops the start. For 171 it wins over `Party:Finder`. The log names every switch
+  that differs from the official table at the start.
+- **Not done**: 151 on would need the Albion Store; the Login key 104 / event key 1-3 and 5 lists stay empty (none captured).
+- **Not checked in the client yet**: the map dropdown without the value overlays; the destiny board without the LP shop button.
 
 ## Rates
 
@@ -2069,7 +2163,8 @@ Stage R (`../analysis/work/stageR/party/SPEC.md` §5; `Systems/PartyFinder.cs`, 
 world-wide list kept in memory (not saved).
 
 - **Switch**: the Login feature table has switch 171 PartyFinder on, as the official server sends it (the client's own default is
-  off: "feature disabled"). Config `Party:Finder` (default true; false = the client default).
+  off: "feature disabled"). Config `Party:Finder` (default true; false = the client default); `Client:FeatureSwitches`
+  (see Client feature switches) wins over it.
 - **Listing** (leader or solo player, "create"): activity, min item power, max group size, auto accept, title, details,
   visibility (all / guild / alliance). Players watching the activity see it at once and every change after (members, their item
   power and roles). Changing it, deleting it ("leave") and switching to "find parties" work.
@@ -3262,6 +3357,7 @@ Commands start with a `.` and are typed either into the game's chat or into the 
 | `.account password <name> <new>` | Admin, console only | sets the password and ends a lock |
 | `.account level <name> <level>` | Admin, console only | sets the account's level: `Player`, `GameMaster` or `Admin` (which chat GM commands it may run) |
 | `.money [silver] [gold]` | GameMaster | shows the player's silver and gold, or sets them (`5000`) or changes them (`+5000`, `-200`, `add 5000`); whole units |
+| `.goldrewards` | Player | the gold rewards of play (not official, `Gold:Rewards`): the sources and what you got this day and week |
 | `.account ban <name> <minutes> [reason]` | Admin, console only | bans the account (0 minutes = for good) and closes its connections |
 | `.account unban <name>` | Admin, console only | lifts the ban and a lock |
 | `.account delete <name>` | Admin, console only | deletes the account with all its characters; refused while it is online (ban first). The local account is emptied instead |

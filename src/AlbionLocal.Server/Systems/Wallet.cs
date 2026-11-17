@@ -57,6 +57,14 @@ public static class Wallet
         p.World.Modules.SilverChanged(p, raw, why); // the modules' Players.OnSilverChanged
     }
 
+    /// <summary>Gives <paramref name="raw"/> gold (a7m, ≥ 0) and sends UpdateMoney (the gold rewards of play, <see cref="GoldRewards"/>).</summary>
+    public static void CreditGold(Player p, long raw, string why)
+    {
+        if (raw <= 0) return;
+        p.Character.Gold = checked(p.Character.Gold + raw);
+        Changed(p, string.Create(CultureInfo.InvariantCulture, $"+{raw / 10000.0:0.####} gold ({why})"));
+    }
+
     /// <summary>
     /// Moves <paramref name="raw"/> gold (a7m) from <paramref name="from"/> to <paramref name="to"/> (a trade under Trade:AllowGold) when
     /// <paramref name="from"/> has that much, UpdateMoney to both; false (nothing changed) otherwise.

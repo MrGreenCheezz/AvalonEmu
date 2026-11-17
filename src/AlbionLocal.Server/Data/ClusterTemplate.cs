@@ -808,6 +808,12 @@ public sealed class ClusterTemplate
                     case "namedmarkerpoint" when A("name") is "MistsSpawnpoint" or "MistsSpecialExitSpawnpoint":
                         MistsSpots.Add(new MistsSpot { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, Kind = A("name")! });
                         break;
+                    // StageR abyss (SPEC §2): an Abyssal Depths floor's arrivals, its upward, downward and soul exits and resurrection shrines (kinds
+                    // as the components are named; the soul exit's is "helldungeosoulexit" in tiles.xml and in the client's lookup alike).
+                    case "namedmarkerpoint" when A("name") is "HellDungeonPlayerSpawnpoint":
+                        MistsSpots.Add(new MistsSpot { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, Kind = "HellDungeonPlayerSpawnpoint" });
+                        break;
+                    case "helldungeonupwardexit" or "helldungeondownwardexit" or "helldungeosoulexit" or "resurrectionshrine":
                     case "mistswispspawn" or "unrestrictedpvpzone":
                         MistsSpots.Add(new MistsSpot { Key = key, Tile = t.Tile, Position = pos, Height = (float)y, Direction = dir, Component = c, Kind = c.Name.LocalName });
                         break;

@@ -367,6 +367,36 @@ public sealed record ServerConfig
     public double DragonAreaRedrawMinutes { get; init; }
 
     /// <summary>
+    /// LoreSnippets:Enabled (true in both presets = official; stageR lore SPEC): the lore snippets stand in the world and can be claimed. False: none
+    /// is placed, a claim is refused (17811), RequestLoreSnippetStates answers all unclaimed. The client's feature switch 182 stays as it is.
+    /// </summary>
+    public bool LoreSnippetsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// AbyssalDepths:Enabled (true in both presets; stageR abyss SPEC): the Hell Dens' Abyssal Depths entrances can be used (op 532: the instance built and
+    /// entered). False: they stand, and their use is refused with the entrance window's "disabled by feature switch" (21285).
+    /// </summary>
+    public bool AbyssalDepthsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// AbyssalDepths:SharedInstances (true in both presets): a team entering a floor joins an open instance of the same mode and floor that is before its
+    /// clusterclosetime and below its softplayerlimitmax (the data's matchmaking into one instance of up to 16/24 players [infer]); false = every team its own.
+    /// </summary>
+    public bool AbyssalDepthsShared { get; init; } = true;
+
+    /// <summary>
+    /// AbyssalDepths:EnterDelaySeconds (3 in both presets [assume]): after a use of the city entrance is accepted (op 532 RC 0, the client's "registered"),
+    /// the player goes in this many seconds later (the official matchmaking wait is not known).
+    /// </summary>
+    public double AbyssalDepthsEnterDelay { get; init; } = 3;
+
+    /// <summary>
+    /// AbyssalDepths:CheckItemPower (true in both presets): op 532 is refused (21287) below the mode's itempowerrequirement (900) by the average item power
+    /// of the equipment (the client's window checks its adjusted item power, which is never above it); false = no check.
+    /// </summary>
+    public bool AbyssalDepthsCheckItemPower { get; init; } = true;
+
+    /// <summary>
     /// TreasureCoffers:Sizes (all four in both presets): which treasures may be placed, by the lootchests.xml chesttype of their chests: coffer
     /// (treasurecoffer), solo (treasurechestsmall), veteran (treasurechestmedium), elite (treasurechestlarge). A draw of a size left out places nothing.
     /// </summary>
@@ -768,6 +798,17 @@ public sealed record ServerConfig
     public bool PartyFinderEnabled { get; init; } = true;
 
     /// <summary>
+    /// Client:FeatureSwitches:&lt;name or index&gt; (none): switches of the client's feature table (Login key 99, event 503) set
+    /// over the default, which is the official table with [151] off (stageR switches SPEC). A name is a Features name
+    /// (Protocol/FeatureSwitches.cs Names, any case), an index 0..226; [112] DynamicTemplates cannot be changed (the server's
+    /// cluster layout follows it). For [171] an entry here wins over Party:Finder.
+    /// </summary>
+    public IReadOnlyDictionary<int, bool> FeatureSwitchOverrides { get; init; } = NoSwitchOverrides;
+
+    /// <summary>The shared empty <see cref="FeatureSwitchOverrides"/> (one instance, so that configs without the key compare equal).</summary>
+    public static readonly IReadOnlyDictionary<int, bool> NoSwitchOverrides = new Dictionary<int, bool>();
+
+    /// <summary>
     /// Guilds:Enabled (true): guilds (stageH guilds SPEC, <see cref="Systems.Guilds"/>). False: every guild request is refused and
     /// no guild key is sent; saved guilds stay, but a deleted character still leaves its guild and a guild left empty at startup goes.
     /// </summary>
@@ -1068,6 +1109,12 @@ public sealed record ServerConfig
     /// <summary>Stage N: the cosmetics' drops (Vanity:*, <see cref="VanityOptions"/>).</summary>
     public VanityOptions Vanity { get; init; } = new();
 
+    /// <summary>
+    /// StageR gold: the gold rewards of play (Gold:Rewards:*, <see cref="GoldRewardOptions"/>). NOT official, on under every preset: the user's
+    /// request of 2026-11-17 (no store and no gold market here, so gold must come from play).
+    /// </summary>
+    public GoldRewardOptions GoldRewards { get; init; } = new();
+
     /// <summary>StageP: the guild territories and castles (Territories:*, Castles:*, <see cref="TerritoryOptions"/>).</summary>
     public TerritoryOptions Territories { get; init; } = new();
 
@@ -1172,6 +1219,25 @@ public sealed record ServerConfig
         RuleSource Rules(string key, RuleSource fallback) => Take(key) is not { } v ? fallback
             : Enum.TryParse<RuleSource>(v, ignoreCase: true, out var rs) && Enum.IsDefined(rs) ? rs
             : throw new InvalidDataException($"{key}: '{v}' is not Official or Content");
+        // Client:FeatureSwitches:<name or index> = true/false (stageR switches SPEC §4): a Features name (any case) or 0..226, not 112.
+        IReadOnlyDictionary<int, bool> SwitchOverrides()
+        {
+            const string prefix = "Client:FeatureSwitches:";
+            var result = new Dictionary<int, bool>();
+            foreach (var key in values.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+            {
+                var name = key[prefix.Length..];
+                var index = Protocol.FeatureSwitches.IndexOf(name);
+                if (index < 0)
+                    throw new InvalidDataException($"{key}: '{name}' is no feature switch (a Features name such as PartyFinder, or 0..{Protocol.FeatureSwitches.Count - 1})");
+                if (index == Protocol.FeatureSwitches.DynamicTemplates)
+                    throw new InvalidDataException($"{key}: [112] DynamicTemplates cannot be changed (the server lays its clusters out by it)");
+                if (result.ContainsKey(index))
+                    throw new InvalidDataException($"{key}: [{index}] {Protocol.FeatureSwitches.Names[index]} is given twice");
+                result[index] = Flag(key, false);
+            }
+            return result.Count == 0 ? NoSwitchOverrides : result;
+        }
 
         var (web, backup) = WebOptions.Load(values, d.Web, d.Backup);
         var config = new ServerConfig
@@ -1262,6 +1328,11 @@ public sealed record ServerConfig
             DragonAreasEnabled = Flag("DragonAreas:Enabled", d.DragonAreasEnabled),
             DragonAreaNaturalSpawn = Flag("DragonAreas:NaturalSpawn", d.DragonAreaNaturalSpawn),
             DragonAreaRedrawMinutes = Number("DragonAreas:RedrawMinutes", d.DragonAreaRedrawMinutes, 0, 1440),
+            LoreSnippetsEnabled = Flag("LoreSnippets:Enabled", d.LoreSnippetsEnabled),
+            AbyssalDepthsEnabled = Flag("AbyssalDepths:Enabled", d.AbyssalDepthsEnabled),
+            AbyssalDepthsShared = Flag("AbyssalDepths:SharedInstances", d.AbyssalDepthsShared),
+            AbyssalDepthsEnterDelay = Number("AbyssalDepths:EnterDelaySeconds", d.AbyssalDepthsEnterDelay, 0, 600),
+            AbyssalDepthsCheckItemPower = Flag("AbyssalDepths:CheckItemPower", d.AbyssalDepthsCheckItemPower),
             TreasureSizes = Take("TreasureCoffers:Sizes") is not { } sizes ? d.TreasureSizes : Sizes(sizes),
             TreasureTestAlways = Flag("TreasureCoffers:TestAlways", d.TreasureTestAlways),
             BankShared = Flag("Bank:Shared", d.BankShared),
@@ -1414,6 +1485,7 @@ public sealed record ServerConfig
             PartyResendAfterClusterChange = Take("Party:ResendAfterClusterChange") is not { } resend ? false
                 : bool.TryParse(resend, out var rs) ? rs : throw new InvalidDataException($"Party:ResendAfterClusterChange: '{resend}' is not true or false"),
             PartyFinderEnabled = Flag("Party:Finder", true),
+            FeatureSwitchOverrides = SwitchOverrides(),
             Visibility = new VisibilityOptions
             {
                 CellSize = Int("Visibility:CellSize", 10, 1, 1000),
@@ -1425,6 +1497,7 @@ public sealed record ServerConfig
             Hellgates = LoadHellgates(values, d.Hellgates),
             Arena = ArenaOptions.Load(values, d.Arena),
             Vanity = VanityOptions.Load(values, d.Vanity),
+            GoldRewards = GoldRewardOptions.Load(values, d.GoldRewards),
             Territories = TerritoryOptions.Load(values, d.Territories),
             Hideouts = HideoutOptions.Load(values, d.Hideouts),
             FactionWarfare = FactionWarfareOptions.Load(values, d.FactionWarfare),

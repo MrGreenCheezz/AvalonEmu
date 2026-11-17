@@ -104,6 +104,8 @@ public sealed class JournalCatalog
         ["killingspree"] = ["count", "seconds", "where", "countassists", "nameloca"],
         ["die"] = ["where", "minvalue", "nameloca"],
         ["finishduel"] = ["count", "outcome", "nameloca"],
+        // StageR lore: a lore snippet claimed (the LEAD_UP_SEASON_LORE_KEEPER missions, and the leaf made for each loreachievement).
+        ["claimloresnippet"] = ["loresnippet", "nameloca"],
     };
 
     /// <summary>The filters this server can judge (any other one is false, so its mission never progresses).</summary>
@@ -198,11 +200,16 @@ public sealed class JournalCatalog
             RewardAmount = Math.Max(1, XmlAttr.Int(a, "rewardamount", 1)),
         };
         var index = 0;
-        ach.Root = new Mission
-        {
-            Achievement = ach, Kind = "all", Index = 0, Supported = true,
-            Children = [.. a.Elements().Where(IsMission).Select(e => ParseMission(ach, e, ref index))],
-        };
+        var children = a.Elements().Where(IsMission).Select(e => ParseMission(ach, e, ref index)).ToList();
+        // StageR lore (SPEC §5): a <loreachievement loresnippet="KEEPER_20"> has no missions; it is done when its snippet is claimed [infer:
+        // absoluteprogressmax 1, the window's LoreAchievementEntry shows the snippet's text and the reward's Claim button], so one leaf stands for it.
+        if (children.Count == 0 && a.Name.LocalName == "loreachievement" && (string?)a.Attribute("loresnippet") is { Length: > 0 } lore)
+            children.Add(new Mission
+            {
+                Achievement = ach, Kind = "claimloresnippet", Index = ++index, Goal = 1, Supported = true,
+                Attributes = new Dictionary<string, string>(StringComparer.Ordinal) { ["loresnippet"] = lore },
+            });
+        ach.Root = new Mission { Achievement = ach, Kind = "all", Index = 0, Supported = true, Children = children };
         return ach;
     }
 

@@ -29,6 +29,10 @@ public static class EconomyCommands
         ctx.Reply(string.Create(CultureInfo.InvariantCulture, $"'{c.Name}': {c.Silver / (double)Pricing.A7m:#,0.####} silver, {c.Gold / (double)Pricing.A7m:#,0.####} gold"));
     }
 
+    /// <summary>.goldrewards: the gold rewards of play (not official, Gold:Rewards) and where the player stands this day and week (<see cref="GoldRewards"/>).</summary>
+    [Command("goldrewards", Level = AccountLevel.Player, Help = "the gold rewards of play: what gives gold and what you got this day and week")]
+    public static void GoldRewardsInfo(CommandContext ctx) => ctx.Reply(GoldRewards.Describe(ctx.RequirePlayer()));
+
     /// <summary>An amount for "add": as it is when it carries a sign already, else with a +.</summary>
     private static string Signed(string text) => text.StartsWith('+') || text.StartsWith('-') ? text : "+" + text;
 

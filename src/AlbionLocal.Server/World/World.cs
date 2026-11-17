@@ -61,6 +61,7 @@ public sealed class World : IDisposable
         Hellgates = new Systems.Hellgates(this);
         SafePortals = new Systems.SafePortals(this);
         DragonAreas = new Systems.DragonAreas(this);
+        Abyss = new Systems.AbyssalDepths(this);
         Arenas = new Systems.Arenas(this);
         Ratings = new Systems.Ratings(this);
         Tournament = new Systems.Tournament(this);
@@ -69,6 +70,7 @@ public sealed class World : IDisposable
         Factions = new Systems.Factions(this);
         FakeCasts = new Systems.FakeSlotCasts(this);
         Shrines = new Systems.BuffShrines(this);
+        Lore = new Systems.LoreSnippets(this);
         Smugglers = new Systems.Smugglers(this);
         Carriables = new Systems.Carriables(this);
         Territories = new Systems.Territories(this, characters as ITerritoryStore);
@@ -247,6 +249,9 @@ public sealed class World : IDisposable
     /// <summary>StageR: the dragon area entrances (analysis/work/stageR/dragon-areas/SPEC.md).</summary>
     public Systems.DragonAreas DragonAreas { get; }
 
+    /// <summary>StageR abyss: the Abyssal Depths (the Hell Dens' entrances, the floors' instances).</summary>
+    public Systems.AbyssalDepths Abyss { get; }
+
     /// <summary>Stage N: the arena queues and matches (analysis/work/stageN/arena/SPEC.md, <see cref="Systems.Arenas"/>).</summary>
     public Systems.Arenas Arenas { get; }
 
@@ -271,6 +276,9 @@ public sealed class World : IDisposable
 
     /// <summary>StageN: the buff shrines of the dungeon rooms and open-world clusters (NewShrine, UseShrine; stageN shrines SPEC).</summary>
     public Systems.BuffShrines Shrines { get; }
+
+    /// <summary>StageR lore: the lore snippets of the templates (673/674), their claim (simple action 11) and states (op 542; stageR lore SPEC).</summary>
+    public Systems.LoreSnippets Lore { get; }
 
     /// <summary>StageR smugglers: the crate piles, Smuggler Stashes, the delivery and the smugglers standing.</summary>
     public Systems.Smugglers Smugglers { get; }
@@ -624,10 +632,12 @@ public sealed class World : IDisposable
         FakeCasts.Update(); // the slot-25 server casts: the corrupted dungeon and mists enter casts, the chest openings
         Corrupted.Update(); // stageL: the corrupted instances' time limits and closing
         Shrines.Update(); // stageN: the buff shrines' respawns and faction locks
+        Lore.Update(); // stageR: the lore snippet claims under way
         Smugglers.Update(); // stageR: the carried objects, the crate pickups and deliveries
         Hellgates.Update(); // stageL: the shrine channels and locks, the hellgate instances' objectives, wipes, time limits and closing
         SafePortals.Update(); // stageR: the S.A.F.E. portal bindings that ran out
         DragonAreas.Update(); // stageR: the dragon area entrances' life cycle, the uses, the instance builds, exits and shutdowns
+        Abyss.Update(); // stageR abyss: the Hell Dens' entrance cycle, the accepted uses, the floor builds and shutdowns
         Arenas.Update(); // stage N: the arena queues, ready checks, countdowns, respawns, results and closing
         Roads.Update(); // stageL: the road network's build, its expiries, charge-ups, rescue links and batched saves
         Mists.Update(); // stageL: the zone builds, return portals, treasures, warnings, shutdowns and empty zones
@@ -672,7 +682,7 @@ public sealed class World : IDisposable
             // And an open-world map holding a dungeon map's portal, until the portal goes (dungeon-maps SPEC §4).
             foreach (var map in Maps.Maps.Where(m => m.EmptySince is { } since && now - since >= Config.MapIdleUnload && !Dungeons.IsLive(m.Cluster)
                          && !Expeditions.IsLive(m.Cluster) && !Corrupted.IsLive(m.Cluster) && !Hellgates.IsLive(m.Cluster) && !Arenas.IsLive(m.Cluster) && !Mists.IsLive(m.Cluster)
-                         && !DragonAreas.IsLive(m.Cluster) && !Dungeons.HoldsMapExit(m)).ToList())
+                         && !DragonAreas.IsLive(m.Cluster) && !Abyss.IsLive(m.Cluster) && !Dungeons.HoldsMapExit(m)).ToList())
             {
                 Bots.Unloaded(map); // stage I: its bots go first (the unload counts humans only)
                 if (Maps.Unload(map))
@@ -737,6 +747,16 @@ public sealed class World : IDisposable
             }
             return;
         }
+        // StageR abyss: an Abyssal Depths floor too.
+        if (Data.HellDungeonIds.IsInstance(map.Cluster))
+        {
+            if (Abyss.Find(map.Cluster) is { } floor)
+            {
+                map.TemplateRequested = true;
+                Populate(map, floor.Template);
+            }
+            return;
+        }
         // StageH: an expedition instance is a copy of its world.xml cluster (SPEC §2.6).
         var id = TemplateOf(map.Cluster);
         if (LoadCluster is null && Clusters is { } store && store.IsLoaded(id))
@@ -769,7 +789,7 @@ public sealed class World : IDisposable
     {
         cluster = TemplateOf(cluster);
         if (LoadCluster is not null || Clusters is not { } store || store.IsLoaded(cluster) || Data.DungeonLayout.IsInstance(cluster) || Data.MistsIds.IsInstance(cluster)
-            || Data.DragonAreaIds.IsInstance(cluster)) return;
+            || Data.DragonAreaIds.IsInstance(cluster) || Data.HellDungeonIds.IsInstance(cluster)) return;
         store.LoadAsync(cluster).ContinueWith(task => _ = task.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
@@ -782,6 +802,7 @@ public sealed class World : IDisposable
         Data.DungeonLayout.IsInstance(cluster) ? Dungeons.Floor(cluster)?.Template
         : Data.MistsIds.IsInstance(cluster) ? Mists.Find(cluster)?.Template
         : Data.DragonAreaIds.IsInstance(cluster) ? DragonAreas.Find(cluster)?.Template
+        : Data.HellDungeonIds.IsInstance(cluster) ? Abyss.Find(cluster)?.Template
         : LoadCluster is null && Clusters is { } store && store.IsLoaded(TemplateOf(cluster)) ? store.Get(TemplateOf(cluster)) : null;
 
     /// <summary>Resolves <paramref name="cluster"/> off the world thread (<see cref="LoadCluster"/>, else the store on a pool thread); null without cluster data.</summary>
@@ -789,6 +810,7 @@ public sealed class World : IDisposable
         Data.DungeonLayout.IsInstance(cluster) ? Dungeons.Floor(cluster) is { } floor ? Task.FromResult(floor.Template) : null
         : Data.MistsIds.IsInstance(cluster) ? Mists.Find(cluster) is { } zone ? Task.FromResult(zone.Template) : null
         : Data.DragonAreaIds.IsInstance(cluster) ? DragonAreas.Find(cluster) is { } dragon ? Task.FromResult(dragon.Template) : null
+        : Data.HellDungeonIds.IsInstance(cluster) ? Abyss.Find(cluster) is { } abyss ? Task.FromResult(abyss.Template) : null
         : LoadCluster is { } load ? load(TemplateOf(cluster)) : Clusters?.LoadAsync(TemplateOf(cluster));
 
     /// <summary>

@@ -161,7 +161,7 @@ public sealed class RandomDungeons(World world)
     internal IEnumerable<RandomDungeonExit> Populate(Map map, ClusterTemplate template)
     {
         if (!Settings.Enabled || template.DungeonMarkers.Count == 0 || DungeonLayout.IsInstance(map.Cluster) || ExpeditionData.IsInstance(map.Cluster) || CorruptedData.IsInstance(map.Cluster) || HellgateData.IsInstance(map.Cluster)
-            || MistsIds.IsInstance(map.Cluster) || DragonAreaIds.IsInstance(map.Cluster) || world.Clusters?.DungeonsIfLoaded is not { } data) return [];
+            || MistsIds.IsInstance(map.Cluster) || DragonAreaIds.IsInstance(map.Cluster) || HellDungeonIds.IsInstance(map.Cluster) || world.Clusters?.DungeonsIfLoaded is not { } data) return [];
         var field = new Field(map, template, data);
         // StageL roads (SPEC §7.1): Roads:FixedDungeons opens the fixed exits of a road map's camps alone, whatever Dungeons:FixedExits says.
         var fixedExits = Settings.FixedExits || world.Config.Roads.FixedDungeons && template.Info.Type.StartsWith("TUNNEL_", StringComparison.Ordinal);

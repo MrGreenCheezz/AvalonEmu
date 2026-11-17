@@ -21,13 +21,39 @@ public static class LoginWorld
     public static string[] Flags => [];
 
     /// <summary>
-    /// Login key 99, the feature switch table (<see cref="FeatureSwitches"/>): the client defaults ([112] DynamicTemplates on), with
-    /// [171] PartyFinder on as in the official table (Party:Finder, default true; false = the client default, off).
+    /// The feature switch table (<see cref="FeatureSwitches"/>) of Login key 99 and FeatureSwitchInfo (event 503) key 0: the official
+    /// table (stageR switches SPEC §2) with [151] off (<see cref="FeatureSwitches.ServerDefaultOff"/>), then [171] PartyFinder from
+    /// Party:Finder (default true, as official), then Client:FeatureSwitches (<paramref name="overrides"/>), which win over Party:Finder.
+    /// [112] DynamicTemplates stays on whatever the config says (the config refuses it): <see cref="Data.LayoutSession.Login"/> reads it.
     /// </summary>
-    public static bool[] Features(bool partyFinder = true)
+    public static bool[] Features(bool partyFinder = true, IReadOnlyDictionary<int, bool>? overrides = null)
     {
-        var flags = FeatureSwitches.Defaults();
+        var flags = FeatureSwitches.ServerDefaults();
         flags[FeatureSwitches.PartyFinder] = partyFinder;
+        if (overrides is not null)
+            foreach (var (i, on) in overrides) flags[i] = on;
         return flags;
+    }
+
+    /// <summary>The table this config sends (<see cref="Features(bool, IReadOnlyDictionary{int, bool}?)"/>).</summary>
+    public static bool[] Features(ServerConfig config) => Features(config.PartyFinderEnabled, config.FeatureSwitchOverrides);
+
+    /// <summary>
+    /// FeatureSwitchInfo (event 503) as the official server sends it after every Join response: key 0 the table, key 4 the VFX
+    /// limit overrides (<see cref="FeatureSwitches.OfficialVfxLimits"/>); keys 1-3 and 5 left out (none in the captures).
+    /// </summary>
+    public static FeatureSwitchInfoEvent FeatureSwitchInfo(ServerConfig config) => new()
+    {
+        b91 = Features(config),
+        b95 = FeatureSwitches.OfficialVfxLimits,
+    };
+
+    /// <summary>For the log: where this config's table differs from the official one ("" when it does not).</summary>
+    public static string Describe(ServerConfig config)
+    {
+        var official = FeatureSwitches.Official();
+        var mine = Features(config);
+        return string.Join(", ", Enumerable.Range(0, FeatureSwitches.Count).Where(i => mine[i] != official[i])
+            .Select(i => $"[{i}] {FeatureSwitches.Names[i]} {(mine[i] ? "on" : "off")}"));
     }
 }

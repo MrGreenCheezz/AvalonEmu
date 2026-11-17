@@ -103,7 +103,7 @@ public sealed class WorldBosses(World world)
     {
         var made = new List<Mob>();
         if (!Settings.Enabled || DungeonLayout.IsInstance(map.Cluster) || ExpeditionData.IsInstance(map.Cluster) || CorruptedData.IsInstance(map.Cluster) || HellgateData.IsInstance(map.Cluster)
-            || MistsIds.IsInstance(map.Cluster) || DragonAreaIds.IsInstance(map.Cluster)) return made;
+            || MistsIds.IsInstance(map.Cluster) || DragonAreaIds.IsInstance(map.Cluster) || HellDungeonIds.IsInstance(map.Cluster)) return made;
         if (!_clusters.TryGetValue(map.Cluster, out var slots))
         {
             slots = MakeSlots(map.Cluster, template);

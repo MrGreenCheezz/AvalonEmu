@@ -463,6 +463,15 @@ public sealed class GoalLog
     /// <summary>StageR stats: the personal might and the Conqueror's Challenge's week (Systems.Conqueror).</summary>
     public ConquerorLog? Conqueror { get; set; }
 
+    /// <summary>StageR gold: the caps of the gold rewards of play (Systems.GoldRewards; in this JSON column, so they survive a restart).</summary>
+    public GoldLog? Gold { get; set; }
+
+    /// <summary>
+    /// StageR lore: the lore.xml uniquenames of the lore snippets this character claimed (Systems.LoreSnippets; per character [infer]: the
+    /// client asks its states with the character's journal, op 542). Kept in the goals' JSON, so no schema step.
+    /// </summary>
+    public HashSet<string> Lore { get; set; } = new(StringComparer.Ordinal);
+
     public GoalLog Clone() => new()
     {
         Journal = new(Journal, StringComparer.Ordinal), Done = new(Done, StringComparer.Ordinal), Claimed = new(Claimed, StringComparer.Ordinal),
@@ -474,7 +483,35 @@ public sealed class GoalLog
         PvpDay = PvpDay, PvpDayPoints = PvpDayPoints, PvpRefused = new(PvpRefused, StringComparer.Ordinal), JournalVersion = JournalVersion,
         FactionCampaign = FactionCampaign?.Clone(),
         Conqueror = Conqueror?.Clone(),
+        Gold = Gold?.Clone(),
+        Lore = new(Lore ?? [], StringComparer.Ordinal),
     };
+}
+
+/// <summary>
+/// StageR gold (analysis/work/stageR/gold/SPEC.md §3): the periods of the gold rewards of play and what they gave in them. <see cref="Day"/> and
+/// <see cref="Week"/> are the bounties' daily and weekly period starts (UTC ticks), <see cref="FactionDay"/> the faction campaign's UTC day.
+/// </summary>
+public sealed class GoldLog
+{
+    public long Day { get; set; }
+
+    /// <summary>The fame (a7m raw) of <see cref="Day"/> so far, and whether its daily gold was given.</summary>
+    public long DayFame { get; set; }
+
+    public bool DailyGiven { get; set; }
+
+    public long Week { get; set; }
+
+    /// <summary>The gold (whole) the journal claims gave in <see cref="Week"/>, and whether the Conqueror's weekly gold was given.</summary>
+    public long JournalGold { get; set; }
+
+    public bool ConquerorGiven { get; set; }
+
+    /// <summary>The faction campaign day whose daily gold was given last.</summary>
+    public int FactionDay { get; set; }
+
+    public GoldLog Clone() => (GoldLog)MemberwiseClone();
 }
 
 /// <summary>

@@ -228,6 +228,8 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         }
         if (code != OperationCodes.Join || resp is not JoinResponse { ReturnCode: 0 } jr) return;
         SendChatTabs();
+        // FeatureSwitchInfo (503) right after the chat tabs on every Join, as in captures 103829, 114814 and 002835 (stageR switches SPEC §1).
+        SendEvent(LoginWorld.FeatureSwitchInfo(world.Config));
         Player?.Visibility.SendClusterWide();
         if (Player is { } joined)
         {
@@ -275,6 +277,7 @@ public sealed partial class WorldSession(IPeer peer, World world) : AlbionSessio
         world.Arenas.Joined(player); // stage N: in an arena match its arrival (the countdown once all are in)
         world.Smugglers.Joined(player); // stageR: the smugglers standing (87), a stale carry buff off
         world.DragonAreas.Joined(player); // stageR: in a dragon area instance counted inside, the chat line
+        world.Abyss.Joined(player); // stageR abyss: in an Abyssal Depths floor counted inside, 622, the chat line
         world.Mists.Joined(player); // stageL: in a mists zone 521 (the return portal, the border exits' target, the shutdown), the chat line
         world.StaticDungeons.Joined(player); // stageN: 499, the events and values of the dungeon here and of those entered from here
         world.Roads.Joined(player); // stageL roads phase B: the thrown-out line

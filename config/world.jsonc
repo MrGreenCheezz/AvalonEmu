@@ -47,6 +47,9 @@
   // "Consumables": { "BatchInterval": 0.5 }, // seconds between two uses of a "use all" from the inventory (captured 0.5)
   // "Party": { "MaxSize": 20, "ResendAfterClusterChange": false, "Finder": true }, // members per party (with open invitations); true = PartyJoined again after every cluster change (if the client loses the party frame there);
   //   Finder: the party finder window (feature switch 171 on, as official); false = the client's default (off, "feature disabled")
+  // "Client": { "FeatureSwitches": { "PartyFinder": false, "151": true } }, // the client's feature switch table (Login key 99, event 503) is the
+  //   official one with 151 DestinyBoardShowBuyLPButtonAndCTA off (it opens the Albion Store; no shop here); set any switch by its Features name
+  //   (src/AlbionLocal.Protocol/FeatureSwitches.cs, any case) or index 0..226; 112 DynamicTemplates cannot be changed; wins over Party:Finder for 171
   // "Guilds": { "Enabled": true, "CreateCost": 1000000, "MaxMembers": 300, "InviteSeconds": 70, "JoinRole": "Recruit", "RejoinCooldownMinutes": 4320, "CreateCooldownMinutes": 0, // guilds (pve: CreateCost 100000, JoinRole "Member", RejoinCooldownMinutes 0)
   //   "LogoChangeGold": 3000, "LogoChangeCooldownMinutes": 2880, // a crest change (guild window): its gold price and cooldown (gamedata values)
   //   the PvE guild (README Guilds), off officially (pve: NoFriendlyFire true, XpShare 0.1, ClearXp 2000, ShareWithoutParty true, SilverTax 0.05, Contracts true):
@@ -118,6 +121,12 @@
   // "Trade": { "Enabled": true, "InviteRange": 7, "KeepRange": 9, "InviteSeconds": 15, "AcceptDelaySeconds": 1.5, "Slots": 11, "ClusterRules": true, "AllowGold": false, "AllowInCombat": false }, // player trade (both presets)
   // "Economy": { "SilverPickupFactor": 1, "SilverPickupTax": 0 }, // a taken silver pile pays amount × cluster factor × this, less this share (the captured official pickups: 1.5 premium, 0.15 guild tax)
   //   "GoldPriceIndex": 5000, // the gold price the client's "Global discount" weighs against 5000: below it NPC services cost index / 5000 (2500 = 50 % off); official 5000, none
+  // "Gold": { "Rewards": { "Enabled": true, "DailyFame": 100, "DailyFameRequired": 10000, "ConquerorWeekly": 250, "JournalClaim": 10, "JournalWeeklyCap": 200, "FactionDaily": 50 } },
+  //   gold earned in play (README "Gold rewards"). NOT official (the official game gives no gold in play: it sells gold and has a gold market,
+  //   neither of which this server has); on under every preset at the user's request of 2026-11-17, false = gold only through .money.
+  //   Amounts are whole gold, 0 = that source off: DailyFame once per character and daily period at DailyFameRequired fame that day;
+  //   ConquerorWeekly once a week at the Conqueror's Challenge chest's might; JournalClaim per Albion Journal reward claimed, at most
+  //   JournalWeeklyCap a week (0 = no cap); FactionDaily once a campaign day at the faction campaign's last daily reward. About 1150-1500 a week.
   // "Chests": { "PoiLimit": -1 }, // POI chests at once per cluster: -1 = the data's (1), 0 = every spot (pve: 0), n = at most n
   // "TreasureCoffers": { "RespawnMinutes": 0, "Sizes": ["coffer", "solo", "veteran", "elite"], "TestAlways": false }, // the open world's coffers and treasure chests
   //   (World:TreasureCoffers true, both presets; README "Open-world treasures"): RespawnMinutes 0 = a free slot draws again after treasuredistribution's
@@ -125,6 +134,11 @@
   // "DragonAreas": { "Enabled": true, "NaturalSpawn": true, "RedrawMinutes": 0 }, // the Ancient Lands (README "Dragon areas"), both presets: Enabled false = the
   //   entrances refuse ("disabled"); NaturalSpawn false = only the GM's entrances (.dragon entrance), true = treasuredistribution's DRAGONAREA_ENTRANCE events on the
   //   tracking spots; RedrawMinutes 0 = each event draws once per map fill (the data's neverreschedule), n = again n minutes after its entrance is gone (a server choice)
+  // "LoreSnippets": { "Enabled": true }, // the lore snippets in the world (README "Lore snippets"), both presets: false = none placed, claims refused, all unclaimed
+  // "AbyssalDepths": { "Enabled": true, "SharedInstances": true, "EnterDelaySeconds": 3, "CheckItemPower": true }, // the Abyssal Depths (README "Abyssal Depths"), both presets: Enabled
+  //   false = the Hell Dens' entrances refuse ("disabled"); SharedInstances true = teams of one mode and floor share an open instance (up to the map's soft limit),
+  //   false = each team its own; EnterDelaySeconds = the wait between the accepted use and the way in (the official matchmaking time is not known);
+  //   CheckItemPower false = no item power requirement (official: the mode's 900)
   // "Bank": { "Shared": false }, // false = one bank vault per city (both presets); true = one for every city, the other vaults' items move in when a bank opens
   // "Smugglers": { "Crates": true, "NetworkMarket": true }, // README "Smuggler's dens and crates": Crates = the Outlands' crate piles and Smuggler Stashes
   //   (pickup, carrying, delivery for the smugglers standing; false = none); NetworkMarket true = every den's Smuggler's Market is one order book (the

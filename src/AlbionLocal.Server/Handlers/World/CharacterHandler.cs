@@ -44,6 +44,8 @@ public sealed partial class WorldSession
             Log.Warn(Name, $"join into a mists zone that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.DragonAreas.ReturnIfClosed(c)) // stageR: the same for a dragon area instance that is gone
             Log.Warn(Name, $"join into a dragon area that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
+        if (world.Abyss.ReturnIfClosed(c)) // stageR abyss: the same for an Abyssal Depths floor that is gone
+            Log.Warn(Name, $"join into an Abyssal Depths floor that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.Roads.ThrowOutIfStale(c, atJoin: true)) // stageL roads phase B: offline in a road too long (Roads:ThrowOutAfterMinutes), a Join without a SelectCharacter
             Log.Warn(Name, $"join into a road left too long ago: '{c.Name}' is thrown out to {c.Cluster}; the client will log out to the character selection");
         // One of the account's open connections now: a newer Login of the account closes it (LoginSession.Login).

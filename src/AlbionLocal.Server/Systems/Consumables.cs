@@ -41,6 +41,8 @@ public static class Consumables
         "adddestinyboardgatheringfame", "adddestinyboardfishingfame", "repairequipment",
         // StageR kill-vanity: the victory emote charge items (T1_KILL_EMOTE_*_CHARGES_*).
         "addvanityconsumablecharges",
+        // StageR lore: the UNIQUE_UNLOCK_LORE_KEEPER_* scrolls (claimloresnippet name, Systems.LoreSnippets.Claim).
+        "claimloresnippet",
     };
 
     /// <summary>The ReturnCode of a dungeon map with no place for its exit (enum ll 14965, @RANDOMDUNGEONMAP_NO_DUNGEON_FOUND; SPEC §3).</summary>
@@ -160,6 +162,10 @@ public static class Consumables
                 if ((string?)node.Attribute("type") is "KillEmote" or null && p.World.Vanity.KillEmotes.Data.Emote((string?)node.Attribute("uniquename") ?? "") is { } emote)
                     p.World.Vanity.KillEmotes.AddCharges(p, emote, Math.Max(1, (int)Math.Round(amount)), c.Item?.Name ?? c.Root.Name);
                 else Combat.LogOnce("killemote:" + (string?)node.Attribute("uniquename"), $"{c.Root.Name}: victory emote {(string?)node.Attribute("uniquename")} not found: no charges");
+                break;
+            case "claimloresnippet": // stageR lore: an unlock scroll claims its snippet (nothing when claimed already or LoreSnippets:Enabled false)
+                if (p.World.Config.LoreSnippetsEnabled && p.World.Lore.Data?.Find((string?)node.Attribute("name")) is { } snippet) p.World.Lore.Claim(p, snippet);
+                else Combat.LogOnce("lore:" + (string?)node.Attribute("name"), $"{c.Root.Name}: lore snippet {(string?)node.Attribute("name")} not claimed (unknown or lore off)");
                 break;
         }
     }

@@ -44,6 +44,7 @@ internal sealed class TemplateLayout
         "warcamp", // stage N arena: an arena team's camp and its spawn positions (SPEC §3)
         "orb", // stageP league-pvp: an arena's orb ("runestone") tile with its orbtypes.xml type (SPEC §3.2)
         "spellzone", // a ground emblem's zone spell (the Roads' and the cities' speed buffs, Systems/SpellZones)
+        "helldungeonupwardexit", "helldungeondownwardexit", "helldungeosoulexit", "resurrectionshrine", // stageR abyss: an Abyssal Depths floor's exits and shrines
     };
 
     public required string Reference { get; init; }

@@ -53,6 +53,9 @@ public sealed record JournalEvent(string Kind, long Amount)
 
     /// <summary>gotguildmemberreward: the guild's bracket of the reward (iron … crystal).</summary>
     public string? Bracket { get; init; }
+
+    /// <summary>StageR lore: claimloresnippet's lore.xml uniquename.</summary>
+    public string? LoreSnippet { get; init; }
 }
 
 /// <summary>
@@ -212,6 +215,9 @@ public static class AlbionJournal
     public static void InfamyChanged(Player p, long total) =>
         Count(p, new JournalEvent("haveinfamy", total) { Set = true, Map = p.Map, InfamyType = "CorruptedDungeon" });
 
+    /// <summary>StageR lore (SPEC §5): lore snippet <paramref name="name"/> claimed by <paramref name="p"/>: claimloresnippet loresnippet=name.</summary>
+    public static void LoreClaimed(Player p, string name) => Count(p, new JournalEvent("claimloresnippet", 1) { Map = p.Map, LoreSnippet = name });
+
     // ---- progress
 
     /// <summary>
@@ -322,6 +328,9 @@ public static class AlbionJournal
                 break;
             case "haveinfamy":
                 if (!string.Equals(leaf.Attr("infamytype"), e.InfamyType, StringComparison.OrdinalIgnoreCase)) return false;
+                break;
+            case "claimloresnippet":
+                if (!string.Equals(leaf.Attr("loresnippet"), e.LoreSnippet, StringComparison.OrdinalIgnoreCase)) return false;
                 break;
         }
         return leaf.Filters.All(f => Holds(world, f, e));
@@ -498,6 +507,7 @@ public static class AlbionJournal
                 world.Saves.MarkChanged(p.Character);
                 p.Session.Send(new JournalClaimableRewardUpdateEvent { cmh = Claimable(world, p.Character, journal).Count });
                 Log.Info("journal", $"'{p.Character.Name}' claimed {id}: {type.Name} x{amount}");
+                GoldRewards.JournalClaimed(p, id); // stageR gold (not official, Gold:Rewards): a little gold, a weekly cap
             }
         }
         return results;

@@ -48,7 +48,7 @@ public static class AlbionTests
         OpcodeTable.Build(typeof(LoginSession), typeof(WorldSession), typeof(ChatSession));
         var login = OpcodeTable.For(typeof(LoginSession));
         var game = OpcodeTable.For(typeof(WorldSession));
-        Check(login.Handlers.Count == 8 && game.Handlers.Count == 344 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+        Check(login.Handlers.Count == 8 && game.Handlers.Count == 348 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.QuestGiverRequest) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.SetNextTutorialState) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.UseFunction) is { Status: SessionStatus.InWorld }
@@ -267,7 +267,7 @@ public static class AlbionTests
         var jr = Join(first);
         int Code(EventData e) => Convert.ToInt32(e.Parameters.GetValueOrDefault(ReservedKeys.EventCode));
         Check(jr.a8b == hero.Id && first.Events.Select(Code).ToArray() is
-                  [(int)EventCodes.NewEquipmentItem, (int)EventCodes.NewSimpleItem, (int)EventCodes.UpdateChatSettings, (int)EventCodes.MountCooldownUpdate,
+                  [(int)EventCodes.NewEquipmentItem, (int)EventCodes.NewSimpleItem, (int)EventCodes.UpdateChatSettings, (int)EventCodes.FeatureSwitchInfo, (int)EventCodes.MountCooldownUpdate,
                    (int)EventCodes.LocalTreasuresUpdate, (int)EventCodes.OverChargeStatus, (int)EventCodes.JoinFinished, (int)EventCodes.NewUnreadMails, (int)EventCodes.MailOperationPossible, (int)EventCodes.MutePlayerUpdate,
                    (int)EventCodes.FriendRequestInfos, (int)EventCodes.FriendRequestInfos, (int)EventCodes.FriendInfos]
               && jr.a9q?[0] == Convert.ToInt64(first.Events[0].Parameters[0]) && jr.a9t?[0] == Convert.ToInt64(first.Events[1].Parameters[0]),
@@ -1002,19 +1002,21 @@ public static class AlbionTests
         Check(jr.a9h?.Length == 5 && jr.ba7?.Length == 6 && jr.bba?.Length == 7 && jr.a8g?.Length == 5 && jr.a8h?.Length == 5,
               "join sends the fixed-size arrays with the lengths the official server uses");
         Check(!join.Parameters.ContainsKey(112) && !join.Parameters.ContainsKey(116), "join leaves out arrays the official server never sends");
-        // Items go out before the Join response (as on the official server), then the chat tabs and JoinFinished.
+        // Items go out before the Join response (as on the official server), then the chat tabs, the feature switches and JoinFinished.
         var events = new List<Dictionary<byte, object?>>();
-        while (events.Count < 7 && gameClient.Events.TryTake(out var ie, 5000)) events.Add(ie.Parameters);
+        while (events.Count < 8 && gameClient.Events.TryTake(out var ie, 5000)) events.Add(ie.Parameters);
         SkipLoginLists(gameClient);
         int Code(int i) => Convert.ToInt32(events[i].GetValueOrDefault(ReservedKeys.EventCode));
-        Check(events.Count == 7
+        Check(events.Count == 8
               && Code(0) == (int)EventCodes.NewEquipmentItem && Convert.ToInt32(events[0][1]) == 8610
               && Convert.ToInt64(events[0][8]) == 135_000_000 && events[0].GetValueOrDefault((byte)9) is short[] && events[0].GetValueOrDefault((byte)10) is short[]
               && Code(1) == (int)EventCodes.NewSimpleItem && Convert.ToInt32(events[1][2]) == 10
               && Code(2) == (int)EventCodes.UpdateChatSettings && events[2][0] is string[] { Length: 7 } && events[2][1] is int[][] { Length: 7 }
-              && Code(3) == (int)EventCodes.MountCooldownUpdate && Code(4) == (int)EventCodes.LocalTreasuresUpdate && Code(5) == (int)EventCodes.OverChargeStatus
-              && Code(6) == (int)EventCodes.JoinFinished,
-              "items are created, then the chat tabs (without them the client shows no chat line), MountCooldownUpdate (every Join), LocalTreasuresUpdate (issue #23), OverChargeStatus and JoinFinished follow the join response");
+              && Code(3) == (int)EventCodes.FeatureSwitchInfo && events[3][0] is bool[] { Length: FeatureSwitches.Count } table && table.SequenceEqual(lr.bfv!)
+              && events[3].GetValueOrDefault((byte)4) as string == FeatureSwitches.OfficialVfxLimits
+              && Code(4) == (int)EventCodes.MountCooldownUpdate && Code(5) == (int)EventCodes.LocalTreasuresUpdate && Code(6) == (int)EventCodes.OverChargeStatus
+              && Code(7) == (int)EventCodes.JoinFinished,
+              "items are created, then the chat tabs (without them the client shows no chat line), FeatureSwitchInfo (503: the Login's table and the VFX limits), MountCooldownUpdate (every Join), LocalTreasuresUpdate (issue #23), OverChargeStatus and JoinFinished follow the join response");
         Check(jr.a9p == second.EquipmentContainer && jr.a9s == second.InventoryContainer
               && jr.a9q?.Length == 10 && jr.a9q[0] == Convert.ToInt64(events[0][0])
               && jr.a9t?.Length == 48 && jr.a9t[0] == Convert.ToInt64(events[1][0]),

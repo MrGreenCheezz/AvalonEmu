@@ -955,7 +955,8 @@ public static partial class SpellCasts
                         if (UnitOf(c, target) is var unit && !Blocked(plan, c, spell, unit)) RemoveEffects(c, node, unit);
                     break;
                 case "adddestinyboardpvefame" or "awardcraftingfocus" or "awardsilver" or "generateloot" or "awardlearningpoints"
-                    or "adddestinyboardgatheringfame" or "adddestinyboardfishingfame" or "repairequipment" or "addvanityconsumablecharges":
+                    or "adddestinyboardgatheringfame" or "adddestinyboardfishingfame" or "repairequipment" or "addvanityconsumablecharges"
+                    or "claimloresnippet": // stageR lore: an unlock scroll
                     Consumables.Award(c, node);
                     break;
                 case "activaterandomdungeon": // stageG dungeons SPEC §10: a dungeon map

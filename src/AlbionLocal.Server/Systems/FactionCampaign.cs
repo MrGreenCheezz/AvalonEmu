@@ -80,6 +80,8 @@ public static class FactionCampaign
         unlocked.AddRange(Unlock(p, log, data));
         p.World.Saves.MarkChanged(p.Character);
         if (unlocked.Count > 0) p.Session.Send(new FactionWarfareCampaignRewardsUnlockedEvent { b68 = [.. unlocked] });
+        // StageR gold (not official, Gold:Rewards): the day's last daily reward reached gives a little gold, once a campaign day.
+        if (data.Campaign.Daily.Count > 0 && data.Campaign.Daily.All(t => log.DayRewards.Contains(t.Reward.Id))) GoldRewards.FactionDaily(p, log.Day);
     }
 
     /// <summary>The campaign rewards reached since the last look (points and unlockday), now UNLOCKED; their ids.</summary>

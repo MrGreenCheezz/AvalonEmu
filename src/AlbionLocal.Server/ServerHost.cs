@@ -131,6 +131,8 @@ public sealed class ServerHost : IDisposable
         World.ApplyRates(Config.Rates);
         if (World.Rates != new Game.Rates())
             Log.Info("config", $"rates: {World.Rates.Describe(changedOnly: true)}");
+        if (Game.LoginWorld.Describe(Config) is { Length: > 0 } switches)
+            Log.Info("config", $"feature switches other than official: {switches}");
         World.Bots.LoadNames(); // stage I: the names bots never take, read here rather than in a tick
         // The C# modules (Modules:Enabled; docs/modules/README.md): found, built when their sources changed, loaded. A module that fails
         // is logged and left out; the server starts anyway.

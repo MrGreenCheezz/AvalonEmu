@@ -91,6 +91,7 @@ public static class Conqueror
         }
         if (log.Chest == Locked && weekly.Might > 0 && log.WeekMight >= weekly.Might)
             p.Session.Send(new WeeklyPvpChallengeRewardStateUpdateEvent { d6s = StateOf(p, log, weekly) });
+        if (weekly.Might > 0 && log.WeekMight >= weekly.Might) GoldRewards.ConquerorWeekly(p); // stageR gold (not official): once a week
     }
 
     /// <summary>
