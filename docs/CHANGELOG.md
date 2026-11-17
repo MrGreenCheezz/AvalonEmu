@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-17 — A dismounted mount keeps its skin
+
+- **Mount skins** (PR #37): a selected mount skin showed while riding and was gone at the dismount: the mount standing beside the character had its plain look. `NewMountObject` carried the skin's selection number (the one `SetMountSkin` and `ChangeMountSkin` use), but the client looks that field up in its item table, as it does for the mount itself. The server now sends the index of the skin's `mountskin` item, which is also what a captured official `NewMountObject` carries.
+- Checked in the client by the contributor: the mount on the ground keeps the selected skin.
+
+Thanks to JumpingY for the pull request.
+
 ## 2026-11-16 — Mists resources, silver during a chest cast, grown island animals, the melding key
 
 - **Mists resources** (issue #35): a Mists zone had the scenery of its resource nodes but nothing to harvest, and none of the roaming mobs, camps and critters of its prefabs. The server now runs the client's resource placement for a Mists zone as it does for a world cluster: the nodes of the zone's preset for its tier and rarity, enchanted by the rarity's `rareresourcedistribution` (MISTS_E0..E4), and the mob spawn points of the placed prefabs. A T5 solo zone that had 0 nodes now has 518. Random dungeon floors are unchanged: the game data has no resource preset for them.
