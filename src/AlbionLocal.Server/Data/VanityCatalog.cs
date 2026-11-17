@@ -11,7 +11,7 @@ namespace AlbionLocal.Server.Data;
 /// every &lt;Emote&gt; with uniquename and command) and avatars.xml (bbg.db: &lt;peraccountavatars&gt;, then &lt;peraccountavatarrings&gt;).
 /// Checked against the official GetVanityUnlocks of capture 002835 (ids 239/349/439/522/608 = the Duelist cougar, hood, armor, shoes, cape).
 /// Besides the id, a mount skin has its own number (bed.b +0x58: every &lt;mountskin&gt; of the file counts) that GetMountSkins, SetMountSkin and
-/// the mount's skin keys carry, with its category's index (bed.a +0x20); a wardrobe skin its number (bgm.b +0x58: every &lt;item&gt;) that the
+/// ChangeMountSkin carry, with its category's index (bed.a +0x20; NewMountObject and Mounted carry the skin's item index instead); a wardrobe skin its number (bgm.b +0x58: every &lt;item&gt;) that the
 /// wardrobe arrays (Join 108, NewCharacter 55, SetWardrobe, UpdateWardrobe) carry, at the EquipmentSlot of its category (MAIN_HAND 0 … CAPE 6).
 /// </summary>
 public sealed class VanityCatalog
@@ -84,7 +84,7 @@ public sealed class VanityCatalog
 
     public Unlock? Find(string name) => _byName.GetValueOrDefault(name.Trim());
 
-    /// <summary>The mount skin of number <paramref name="number"/> (GetMountSkins / SetMountSkin / NewMountObject key 2).</summary>
+    /// <summary>The mount skin of number <paramref name="number"/> (GetMountSkins / SetMountSkin / ChangeMountSkin).</summary>
     public Unlock? MountSkin(int number) => _mountSkins.GetValueOrDefault(number);
 
     /// <summary>The wardrobe skin of number <paramref name="number"/> (the wardrobe arrays).</summary>

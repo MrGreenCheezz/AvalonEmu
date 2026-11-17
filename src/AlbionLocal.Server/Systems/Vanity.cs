@@ -308,6 +308,15 @@ public sealed class Vanity(World world)
         return category >= 0 && log.MountSkins.TryGetValue(category, out var skin) ? skin : -1;
     }
 
+    /// <summary>
+    /// The index of the mountskin item <paramref name="c"/> chose for the category of <paramref name="mount"/>; -1 = none. NewMountObject
+    /// key 2 and Mounted key 3 carry it, not the skin number: the client looks both up in its item table, as it does the mount item
+    /// beside them (clo.af, csg.aft).
+    /// </summary>
+    public int MountSkinItemFor(Character c, ItemTemplate? mount) =>
+        MountSkinFor(c, mount) is var number and >= 0 && Catalog.MountSkin(number) is { } skin && world.Items.Find(skin.Name) is { } item
+            ? item.Index : -1;
+
     // ---- the portrait avatar and the body customization (public issue #22) ----
 
     /// <summary>

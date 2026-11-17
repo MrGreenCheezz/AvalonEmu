@@ -36,22 +36,17 @@ public sealed class MountObject(long id, ClusterObject spawn, Player owner, Item
     /// </summary>
     public override IEnumerable<AlbionEvent> BuildCreate(Player viewer)
     {
-        var skinNumber = Owner.World.Vanity.MountSkinFor(Owner.Character, Item);
-        var skin = skinNumber >= 0 ? Owner.World.Vanity.Catalog.MountSkin(skinNumber) : null;
-        var skinItem = skin is null ? null : Owner.World.Items.Find(skin.Name);
-        var skinIndex = skinItem?.Index ?? -1;
         yield return new NewMountObjectEvent
         {
             c69 = Id,                        // [0]
             c7a = Item.Index,                // [1]
-            c7b = skinIndex,                 // [2] the mount-skin item's index, -1 = none (0 goes through Extra)
+            c7b = Owner.World.Vanity.MountSkinItemFor(Owner.Character, Item), // [2] the mount-skin item's index (item indices start at 1), -1 = none
             c7c = Position,                  // [3]
             c7d = Direction,                 // [4]
             c7e = Owner.Character.Id,        // [5]
             c7g = 3,                         // [7]
             c7k = -1, c7l = -1, c7m = -1, c7n = -1, c7o = -1, // [11-15] no guild logo
             c7q = 1f,                        // [17]
-            Extra = skinIndex == 0 ? new() { [2] = 0 } : null,
         };
     }
 }

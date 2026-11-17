@@ -234,6 +234,7 @@ public static class MountsTest
         var (_, watcher, _) = Join(arena, "SkinWatcher", ox: false);
         var skin = vanity.Pool.First(u => u.Type == AlbionLocal.Server.Data.VanityCatalog.UnlockType.Mount
             && vanity.Catalog.MountCategories[u.Slot] == "OXEN");
+        var skinItemIndex = world.Items.Find(skin.Name)!.Index;
         string? applied;
         lock (world.Sync)
         {
@@ -248,6 +249,10 @@ public static class MountsTest
         var mine = Since(peer, mark);
         var seen = Since(watcher, wmark);
         var mounted = mine.FindIndex(e => e.Code == EventCodes.Mounted);
+        var seenMounted = seen.FindIndex(e => e.Code == EventCodes.Mounted);
+        Check(mounted >= 0 && L(mine[mounted].P, 3) == skinItemIndex && seenMounted >= 0 && L(seen[seenMounted].P, 3) == skinItemIndex
+              && skinItemIndex != skin.Number,
+            $"first mount: Mounted key 3 = the skin item {skinItemIndex}, not the selection {skin.Number}, to the rider and the observer (got {Show(mine)} / {Show(seen)})");
         var changed = mine.FindIndex(e => e.Code == EventCodes.ChangeMountSkin
             && L(e.P, 0) == me.Id && L(e.P, 1) == skin.Slot && L(e.P, 2) == skin.Number);
         var observed = seen.FindIndex(e => e.Code == EventCodes.ChangeMountSkin
