@@ -42,7 +42,8 @@ the `pve` preset turns the PvE-friendly additions on. What changed lately: [docs
 - **PvE content:** open-world camps and chests, elite mobs, world bosses, journals, expeditions,
   random dungeons with the client's own layout generator and shrines, static dungeons, corrupted dungeons, hellgates,
   Roads of Avalon, the Mists, the Adventurer's Challenge, smuggler's dens with their crates, the entrances and instances
-  of the dragon areas (no boss or rewards yet); under `pve` also on-demand invasions, bounties and PvP goals.
+  of the dragon areas (no boss or rewards yet), the Abyssal Depths with their floors, exits and shrines (no souls or
+  loot yet), lore snippets; under `pve` also on-demand invasions, bounties and PvP goals.
 - **Social:** chat server (whispers, guild, party, world), friends, mail, trading, guilds with ranks, contracts and goals,
   the guild finder and applications, the party finder, ready check and join requests, emotes, loadouts, map pings.
 - **Bots (optional, off under `official`):** player bots (city walkers, gatherers, patrols, hostile bots in red and
@@ -53,7 +54,9 @@ the `pve` preset turns the PvE-friendly additions on. What changed lately: [docs
   quest chains), island construction, labourers and furniture, awakened weapons and item traits, the PvE side of
   faction warfare with camps, campaign rewards, fortresses and the bandit assault, gathering tomes and fishing bait,
   expedition bonus chests, market price history, the asset overview, item overcharge and study, the kill history and
-  personal might, victory emotes, cosmetics from content, a richer starter kit.
+  personal might, victory emotes, cosmetics from content, a richer starter kit, the official server's feature switch
+  table (`Client:FeatureSwitches` changes any switch), and a little gold for play (`Gold:Rewards`, not official: the
+  server has no store and no gold market).
 - **Server modules:** an AzerothCore-like module system. A module is a folder with C# sources that the server builds,
   loads and reloads while it runs; see [docs/modules/README.md](docs/modules/README.md) and the working examples in
   `modules/examples`.

@@ -479,17 +479,19 @@ A sixth file, `modules.jsonc`, is optional: it holds `Modules:*`, the server-wid
 | What new characters start with | `world.jsonc` | `Progression:NewCharacters` |
 | Player bots and companions | `world.jsonc` | `Bots:*`, `Companions:*` |
 | PvP rules | `world.jsonc` | `Pvp:*` |
+| Gold earned in play (not official, on by default) | `world.jsonc` | `Gold:Rewards:Enabled` and the amounts beside it |
+| The client's feature switches | `world.jsonc` | `Client:FeatureSwitches` |
 | Server modules | `modules.jsonc` (optional) | `Modules:Enabled`, `Modules:Path`, `Modules:List`, `Modules:Build` |
 
 ### Main sections of `world.jsonc`
 
 | Area | Sections |
 |---|---|
-| World | `World`, `Visibility`, `Transfer`, `Rates`, `Tutorial`, `Progression` |
+| World | `World`, `Visibility`, `Transfer`, `Rates`, `Tutorial`, `Progression`, `Client` |
 | Character | `Combat`, `Consumables`, `Crafting`, `Focus`, `LearningPoints`, `Premium`, `Vanity` |
 | Social | `Party`, `Guilds`, `Alliances`, `Social`, `Mail`, `Trade` |
-| Economy and loot | `Economy`, `Bank`, `Bm`, `Chests`, `TreasureCoffers`, `Smugglers`, `Loot` |
-| PvE content | `Events`, `Bounties`, `Season`, `Dungeons`, `Expeditions`, `WorldBosses`, `Corrupted`, `Hellgates`, `Roads`, `Mists`, `DragonAreas`, `Pve` |
+| Economy and loot | `Economy`, `Gold`, `Bank`, `Bm`, `Chests`, `TreasureCoffers`, `Smugglers`, `Loot` |
+| PvE content | `Events`, `Bounties`, `Season`, `Dungeons`, `Expeditions`, `WorldBosses`, `Corrupted`, `Hellgates`, `Roads`, `Mists`, `DragonAreas`, `AbyssalDepths`, `LoreSnippets`, `Pve` |
 | PvP content | `Pvp`, `PvpGoals`, `DeathRecap`, `Arena`, `Territories`, `Castles`, `Hideouts`, `FactionWarfare` |
 | Bots | `Bots`, `Companions` |
 | Housing | `Islands`, `RealEstate` |
