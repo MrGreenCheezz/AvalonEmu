@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-11-17 (evening) — Server modules in `main`, and a wide batch of missing features
+
+A review of the client operations the server did not answer yet led to this batch: the world server now handles 344 operations (243 before). The database schema goes from v47 to v53; the upgrade runs at the first start, so back up `data/` before it. **None of this is checked in the game client yet.** Much of it is built from the client's code and game data without a capture of the official server; each system's part of [REFERENCE.md](REFERENCE.md) says what is inferred and what is not done.
+
+- **Server modules**: the AzerothCore-like module system moves from the `modules` branch into `main`. A module is a folder with C# sources that the server builds and loads, and reloads while it runs. Start with `docs/modules/README.md`; `docs/modules/HOOKS.md` lists every hook, and `modules/examples` holds working modules. Server-wide switches are in the optional `config/modules.jsonc`. Hooks cover players, combat, spells, buffs, items, mounts, mobs, maps and any network message; a module that keeps failing is switched off without stopping the game; a contract test guards the public API (`docs/modules/api-baseline.txt`). The `modules` branch is no longer needed for it.
+- **Party**: the ready check, party navigation, requests to join a party, and the party finder (`Party:Finder`; the official server has this feature switch on, the client's own default is off): listings, applications, accept and decline, the equipment snapshot of an applicant.
+- **Guilds**: the guild finder with recruitment settings and applications, the crest change for gold (`Guilds:LogoChangeGold`, `Guilds:LogoChangeCooldownMinutes`), banner, codex, the welcome mail, the guild logs. Not done: custom access tags, the zone tax, the guild currency.
+- **Items**: studying an item, overcharge (+100 item power for Siphoned Energy, with the break roll at its end), fame credits and the re-spec, and stacks of equal equipment (a stack cannot be worn, awakened or rerolled: split one off first).
+- **S.A.F.E. portal** in the Outlands portal towns, with its return portal.
+- **Dragon areas (Ancient Lands)**: the entrances in the world, the instance with its mobs, the exits (`DragonAreas:Enabled`, `NaturalSpawn`, `RedrawMinutes`; a GM's `.dragon`). Not done: the main quest, dragon energy, teleporter keys, the boss and the rewards. Set `DragonAreas:NaturalSpawn` to false to keep the entrances out of the world until then.
+- **Faction warfare**: faction camps (`FactionWarfare:Camps`), the campaign window with its daily and monthly rewards (`CampaignRewardsWithoutPremium`), the rank on the nameplate, the group bonus, the faction fortresses with their guards and sieges (`Fortresses`, `FortressGuards`; a siege is started by a GM's `.fortress siege`, the official trigger is not built), and the bandit assault in the red zones (`RedZoneEvents`, `RedZoneRegion`; `.redzone`). Not done: guild allegiance, the faction portals, faction points for PvP kills and the zone payouts.
+- **Asset overview**: the list of your items over all cities, with tabs and search. Not done: recovering items.
+- **Smuggler's dens**: each den has its own bank, the dens share one market as the official Smuggler's Network does (`Smugglers:NetworkMarket`), and the Outlands have crate piles and stashes to carry and deliver for the smugglers' standing (`Smugglers:Crates`).
+- **Spell effects**: 95 of the 125 effect kinds of the game data run (82 before).
+- **Stations**: cancelling a running station action now stops it on the server too (the request was ignored, so the server finished and charged an action the client had already stopped). On player plots: the owner's fees and earnings, nutrition and access rights; furniture chests on islands. Not done: construction sites and building skins.
+- **Statistics**: the kill history, personal might and the Conqueror's weekly challenge. Not done: the daily might bonus and the season rewards.
+- **Kills and the market**: victory emotes as charges (`Vanity:KillEmotes`, `Vanity:KillEmoteDropShare`), kill trophies as drops (`Vanity:KillTrophies`), buying a whole loadout from the market, quick sell. Not done: placing a trophy as furniture.
+- Gold has no source on this server yet except a GM command, and the crest change and bought emote charges cost gold.
+
 ## 2026-11-17 — A dismounted mount keeps its skin
 
 - **Mount skins** (PR #37): a selected mount skin showed while riding and was gone at the dismount: the mount standing beside the character had its plain look. `NewMountObject` carried the skin's selection number (the one `SetMountSkin` and `ChangeMountSkin` use), but the client looks that field up in its item table, as it does for the mount itself. The server now sends the index of the skin's `mountskin` item, which is also what a captured official `NewMountObject` carries.

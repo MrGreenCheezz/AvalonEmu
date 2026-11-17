@@ -76,9 +76,11 @@ AlbionLocal.slnx              the solution
 config/                       the five settings files
 content/                      server-side content tables
 docs/                         this guide, configuration notes, feature reference, changelog
+modules/                      server modules, one folder per module (examples in modules/examples)
 src/AlbionLocal.Photon/       Photon UDP transport, serializer, encryption
 src/AlbionLocal.Protocol/     message classes and wire rules
 src/AlbionLocal.Server/       the server itself
+src/AlbionLocal.Modules.Api/  the public API server modules are written against
 tests/AlbionLocal.SelfTest/   offline self-test
 tools/AlbionLocal.CapDecode/  decoder for captures of your own sessions
 tools/start-server.ps1        Windows script that builds and starts the server
@@ -453,6 +455,9 @@ Further rules:
 | `chat.jsonc` | `Network:ChatPort`, `Chat:*` |
 | `persistence.jsonc` | `Persistence:Provider` (only `SQLite`), `Paths:Saves` |
 
+A sixth file, `modules.jsonc`, is optional: it holds `Modules:*`, the server-wide switches of the server modules
+(`docs/modules/README.md`). Without it the defaults apply.
+
 ### Common tasks
 
 | To change | File | Key |
@@ -474,6 +479,7 @@ Further rules:
 | What new characters start with | `world.jsonc` | `Progression:NewCharacters` |
 | Player bots and companions | `world.jsonc` | `Bots:*`, `Companions:*` |
 | PvP rules | `world.jsonc` | `Pvp:*` |
+| Server modules | `modules.jsonc` (optional) | `Modules:Enabled`, `Modules:Path`, `Modules:List`, `Modules:Build` |
 
 ### Main sections of `world.jsonc`
 
@@ -482,8 +488,8 @@ Further rules:
 | World | `World`, `Visibility`, `Transfer`, `Rates`, `Tutorial`, `Progression` |
 | Character | `Combat`, `Consumables`, `Crafting`, `Focus`, `LearningPoints`, `Premium`, `Vanity` |
 | Social | `Party`, `Guilds`, `Alliances`, `Social`, `Mail`, `Trade` |
-| Economy and loot | `Economy`, `Bank`, `Bm`, `Chests`, `TreasureCoffers`, `Loot` |
-| PvE content | `Events`, `Bounties`, `Season`, `Dungeons`, `Expeditions`, `WorldBosses`, `Corrupted`, `Hellgates`, `Roads`, `Mists`, `Pve` |
+| Economy and loot | `Economy`, `Bank`, `Bm`, `Chests`, `TreasureCoffers`, `Smugglers`, `Loot` |
+| PvE content | `Events`, `Bounties`, `Season`, `Dungeons`, `Expeditions`, `WorldBosses`, `Corrupted`, `Hellgates`, `Roads`, `Mists`, `DragonAreas`, `Pve` |
 | PvP content | `Pvp`, `PvpGoals`, `DeathRecap`, `Arena`, `Territories`, `Castles`, `Hideouts`, `FactionWarfare` |
 | Bots | `Bots`, `Companions` |
 | Housing | `Islands`, `RealEstate` |

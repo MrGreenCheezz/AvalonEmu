@@ -41,17 +41,22 @@ the `pve` preset turns the PvE-friendly additions on. What changed lately: [docs
   duels; zone-based PvP with full loot under `official`, PvP only by consent under `pve`.
 - **PvE content:** open-world camps and chests, elite mobs, world bosses, journals, expeditions,
   random dungeons with the client's own layout generator and shrines, static dungeons, corrupted dungeons, hellgates,
-  Roads of Avalon, the Mists, the Adventurer's Challenge; under `pve` also on-demand invasions, bounties and PvP goals.
+  Roads of Avalon, the Mists, the Adventurer's Challenge, smuggler's dens with their crates, the entrances and instances
+  of the dragon areas (no boss or rewards yet); under `pve` also on-demand invasions, bounties and PvP goals.
 - **Social:** chat server (whispers, guild, party, world), friends, mail, trading, guilds with ranks, contracts and goals,
-  emotes, loadouts, map pings.
+  the guild finder and applications, the party finder, ready check and join requests, emotes, loadouts, map pings.
 - **Bots (optional, off under `official`):** player bots (city walkers, gatherers, patrols, hostile bots in red and
   black zones) with a switch per kind, a stable roster of names, population by hour of day, whispers and local chat,
   and bots that accept your party invite and play along; companions you hire into the party (tank, healer, melee,
   ranged).
 - **More systems:** arena queues (1v1/2v2/5v5; bots and Elo ladders under `pve`), hunts (tracking toolkits, wild tracks, hunt
   quest chains), island construction, labourers and furniture, awakened weapons and item traits, the PvE side of
-  faction warfare, gathering tomes and fishing bait, expedition bonus chests, market price history, cosmetics from
-  content, a richer starter kit.
+  faction warfare with camps, campaign rewards, fortresses and the bandit assault, gathering tomes and fishing bait,
+  expedition bonus chests, market price history, the asset overview, item overcharge and study, the kill history and
+  personal might, victory emotes, cosmetics from content, a richer starter kit.
+- **Server modules:** an AzerothCore-like module system. A module is a folder with C# sources that the server builds,
+  loads and reloads while it runs; see [docs/modules/README.md](docs/modules/README.md) and the working examples in
+  `modules/examples`.
 - **Opening tutorial (`Tutorial:Opening`, on by default):** new characters start on the tutorial island at The Lighthouse
   and follow its quests through departure to a starter town, in a private instance per character (contributed in
   PR #1; not every branch is visually verified yet).
@@ -73,6 +78,8 @@ The detailed, per-feature reference (English) is in [docs/REFERENCE.md](docs/REF
 | `src/AlbionLocal.Photon` | Photon UDP transport, Protocol18 serializer, encryption, message layer |
 | `src/AlbionLocal.Protocol` | Message classes (generated) and wire rules |
 | `src/AlbionLocal.Server` | Login (5055), game (5056) and chat (5057) servers, world simulation, systems, persistence |
+| `src/AlbionLocal.Modules.Api` | The public API server modules are written against |
+| `modules/` | Server modules: one folder per module, with working examples in `modules/examples` |
 | `tests/AlbionLocal.SelfTest` | Offline self-test with an in-process client (no network, no real client needed to run it, but it reads the GameData files) |
 | `tools/AlbionLocal.CapDecode` | Decoder for packet captures of your own sessions |
 | `tools/start-server.ps1` | Builds the server and starts it against your client's GameData (`-GameDir`) |
