@@ -3,7 +3,8 @@
 ## 2026-11-17 — A dismounted mount keeps its skin
 
 - **Mount skins** (PR #37): a selected mount skin showed while riding and was gone at the dismount: the mount standing beside the character had its plain look. `NewMountObject` carried the skin's selection number (the one `SetMountSkin` and `ChangeMountSkin` use), but the client looks that field up in its item table, as it does for the mount itself. The server now sends the index of the skin's `mountskin` item, which is also what a captured official `NewMountObject` carries.
-- Checked in the client by the contributor: the mount on the ground keeps the selected skin.
+- **The same field of `Mounted`**: the mount event had the same mistake in its skin field, so the skin of a ridden mount came only from the `ChangeMountSkin` sent right after it. `Mounted` now carries the skin's item index too, as the captured official event does; the `ChangeMountSkin` after it stays.
+- Checked in the client by the contributor: the mount on the ground keeps the selected skin. The `Mounted` change is not checked in the client yet.
 
 Thanks to JumpingY for the pull request.
 
