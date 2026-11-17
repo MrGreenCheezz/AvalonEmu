@@ -255,8 +255,8 @@ public static class Mounts
     /// <summary>
     /// A dismount at R (dismounttime 0: instant; the request without key 2, or the server's before an action): the mount object
     /// beside the player (NewMountObject to it and its observers, <see cref="ObjectPosition"/>), the mount item's NewEquipmentItem
-    /// without key 3, CastSpell of the dismount buff (DISMOUNTED), Mounted {0, 1 R, 4, 5, 6 R, 7 true, 8 true, 10 the facing}, then
-    /// the list without the mounted buff and the speed buff and with DISMOUNTED (5 s); the halfmounted buff stays while the object
+    /// without key 3, CastSpell of the dismount buff (DISMOUNTED), Mounted {0, 1 R, 4, 5, 6 R, 7 true, 8 true, 10 the facing},
+    /// then the list without the mounted buff and the speed buff and with DISMOUNTED (5 s); the halfmounted buff stays while the object
     /// does. No MountStart to the observers (Q12: their handler would start a mount bar). Saved as dismounted.
     /// TODO (stageE pvp SPEC §3.3 [infer]): with a Hostile player within gamedata hostiledismountdetectionradius (40 m), the mount's
     /// hostiledismountbuff (DISMOUNTED_HOSTILE) and Mounted key 13 in place of dismountbuff.
