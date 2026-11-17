@@ -94,6 +94,7 @@ public sealed partial class LoginSession
         World?.Hellgates.ReturnIfClosed(c); // stageL: a hellgate that is gone (closed, or a restart) → the way back
         World?.Arenas.ReturnIfClosed(c); // stage N: an arena match that is gone → the way back
         World?.Mists.ReturnIfClosed(c); // stageL: a mists zone that is gone (closed, or a restart) → the way back
+        World?.DragonAreas.ReturnIfClosed(c); // stageR: a dragon area instance that is gone → in front of its entrance
         World?.Roads.ThrowOutIfStale(c); // stageL roads phase B: offline in a road past Roads:ThrowOutAfterMinutes → the respawn city, ThrownOutAvalonRoads
         World?.Islands.ReturnIfGone(c); // stageH islands SPEC §1.6: an island that is gone → its city's travel point
         World?.Hideouts.ReturnIfGone(c); // stageP hideouts: a hideout that is gone (or without an interior now) → in front of it
@@ -127,6 +128,8 @@ public sealed partial class LoginSession
         if (World?.Arenas.WorldOf(c.Cluster) is { } arena) r.blp = arena;
         // StageL mists (SPEC §3.4, §6.6): inside a live zone, key 4 = its a9i layout, key 5 = the mode's clustertype, key 6 = the tier.
         if (World?.Mists.Find(c.Cluster) is { } zone) (r.blr, r.bls, r.blt) = (zone.Bytes, zone.Mode.ClusterType, zone.Tier);
+        // StageR dragon areas: the same for a live instance (ciy.a_9's layout type 4 needs the clustertype as the Mists' type 2 does).
+        if (World?.DragonAreas.Find(c.Cluster) is { } dragon) (r.blr, r.bls, r.blt) = (dragon.Bytes, dragon.Mode.ClusterType, dragon.Tier);
         // StageH islands (SPEC §1.6): on an island, key 2 = the template of its level (ciy.a_9 clones it under "@ISLAND@<guid>").
         if (World?.Islands.WorldOf(c.Cluster) is { } island) r.blp = island;
         // StageP hideouts: in a hideout, key 2 = the world.xml cluster of its level (cloned under "@HIDEOUT@<guid>", as an island).

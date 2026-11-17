@@ -44,11 +44,14 @@ public sealed class ClusterStore
         public required Retrying<LootChestData> LootChests;
         public required Retrying<TreasureDistributionData> Treasures;
         public required Retrying<LocalQuestData> LocalQuests;
+        public required Retrying<FactionWarfareData> Warfare;
         public required Retrying<JournalCatalog> Journal;
         public required Retrying<PersonalSeasonData> Seasons;
         public required Retrying<ExpeditionData> Expeditions;
         public required Retrying<IslandData> Islands;
         public required Retrying<CorruptedData> Corrupted;
+        public required Retrying<SafePortalData> SafePortals;
+        public required Retrying<DragonAreaData> DragonAreas;
         public required Retrying<HellgateData> Hellgates;
         public required Retrying<RoadNetworkData> Roads;
         public required Retrying<MistsData> Mists;
@@ -94,12 +97,15 @@ public sealed class ClusterStore
             LootChests = new(() => LootChestData.Load(GameDataFile.Open(Folder, "lootchests.bin").Root())),
             Treasures = new(() => TreasureDistributionData.Load(GameDataFile.Open(Folder, "treasuredistribution.bin").Root())),
             LocalQuests = new(() => LocalQuestData.Load(GameDataFile.Open(Folder, "localquests.bin").Root())),
+            Warfare = new(() => FactionWarfareData.Load(GameDataFile.Open(Folder, "factionwarfare.bin").Root(), GameDataFile.Open(Folder, "currencies.bin").Root())),
             Journal = new(() => JournalCatalog.Load(GameDataFile.Open(Folder, "albionjournal.bin").Root())),
             Seasons = new(() => PersonalSeasonData.Load(GameDataFile.Open(Folder, "personalseasons.bin").Root())),
             Expeditions = new(() => ExpeditionData.Load(GameDataFile.Open(Folder, "expeditioncategories.bin").Root(), GameDataFile.Open(Folder, "expeditionagents.bin").Root(),
                 GameDataFile.Open(Folder, "expeditions.bin").Root())),
             Islands = new(() => IslandData.Load(GameDataFile.Open(Folder, "worldsettings.bin").Root())),
             Corrupted = new(() => CorruptedData.Load(GameDataFile.Open(Folder, "corrupteddungeons.bin").Root())),
+            SafePortals = new(() => SafePortalData.Load(GameDataFile.Open(Folder, "outlandsteleportationportals.bin").Root())),
+            DragonAreas = new(() => DragonAreaData.Load(GameDataFile.Open(Folder, "dragonarea.bin").Root(), GameDataFile.Open(Folder, "dragonareatemplatemetadata.bin").Root())),
             Hellgates = new(() => HellgateData.Load(GameDataFile.Open(Folder, "hellgate.bin").Root())),
             Roads = new(() => RoadNetworkData.Load(GameDataFile.Open(Folder, "tunnelsystem.bin").Root(), GameDataFile.Open(Folder, "gamedata.bin").Root())),
             Mists = new(() => MistsData.Load(GameDataFile.Open(Folder, "mists.bin").Root(), GameDataFile.Open(Folder, "miststemplatemetadata.bin").Root())),
@@ -200,6 +206,23 @@ public sealed class ClusterStore
     /// <summary>localquests.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
     public LocalQuestData? LocalQuestsIfLoaded => _shared.LocalQuests.IsValueCreated ? _shared.LocalQuests.Value : null;
 
+    /// <summary>factionwarfare.xml when a faction camp zone has read it already (<see cref="FactionCampZone"/>), else null (stageQ camps: the timers).</summary>
+    public FactionWarfareData? WarfareIfLoaded => _shared.Warfare.IsValueCreated ? _shared.Warfare.Value : null;
+
+    /// <summary>
+    /// StageQ camps: whether the rolled mob camps of <paramref name="cluster"/> are faction camps (their *_DYN_VAR_FWARFARE_* layers, <see cref="DynamicRoll.FeatureLayer"/>)
+    /// under <see cref="ClusterOptions.FactionCamps"/>: Conflict a warfare zone of a duchy in conflict (factionwarfare.xml initialconflict), All every warfare
+    /// zone, None never. Reads factionwarfare.xml (and currencies.xml) the first time; false when they cannot be read.
+    /// </summary>
+    public bool FactionCampZone(string cluster)
+    {
+        if (Options.FactionCamps == FactionCampRule.None) return false;
+        FactionWarfareData data;
+        try { data = _shared.Warfare.Value; }
+        catch (Exception e) when (e is InvalidDataException or IOException or UnauthorizedAccessException) { return false; }
+        return data.IsWarzone(cluster) && (Options.FactionCamps == FactionCampRule.All || data.Conflicts.ContainsKey(cluster));
+    }
+
     /// <summary>albionjournal.xml (ops-audit SPEC §3.4, the journal tracker): read alongside the first cluster (<see cref="LoadJournalAsync"/>).</summary>
     public JournalCatalog Journal => _shared.Journal.Value;
 
@@ -229,6 +252,18 @@ public sealed class ClusterStore
 
     /// <summary>corrupteddungeons.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
     public CorruptedData? CorruptedIfLoaded => _shared.Corrupted.IsValueCreated ? _shared.Corrupted.Value : null;
+
+    /// <summary>outlandsteleportationportals.xml (stageR safe-portal SPEC §1): read with the first portal town (a cluster with an outlandsteleportationportal).</summary>
+    public SafePortalData SafePortals => _shared.SafePortals.Value;
+
+    /// <summary>outlandsteleportationportals.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
+    public SafePortalData? SafePortalsIfLoaded => _shared.SafePortals.IsValueCreated ? _shared.SafePortals.Value : null;
+
+    /// <summary>dragonarea.xml (stageR dragon-areas SPEC §1): read with the first dragon area entrance.</summary>
+    public DragonAreaData DragonAreas => _shared.DragonAreas.Value;
+
+    /// <summary>dragonarea.xml when it has been read already, else null: a look-up that never reads the file (under the world lock).</summary>
+    public DragonAreaData? DragonAreasIfLoaded => _shared.DragonAreas.IsValueCreated ? _shared.DragonAreas.Value : null;
 
     /// <summary>hellgate.xml (stageL hellgates SPEC §2.1): read with the first cluster that has a hellgate shrine (a Hell Den) or is a hellgate.</summary>
     public HellgateData Hellgates => _shared.Hellgates.Value;
@@ -420,7 +455,8 @@ internal sealed class Retrying<T>(Func<T> factory)
 /// client is open (SPEC §9). <see cref="BuildingIdOffset"/>: building type id = buildings.xml index + this
 /// (ClientNumbering:BuildingIdOffset, SPEC §4). <see cref="Session"/>: the Login values the open-world layout is computed
 /// with (stage 4b: dynamic templates and resource nodes), by default what our Login sends (<see cref="LayoutSession.Login"/>);
-/// null = default templates and no resource nodes.
+/// null = default templates and no resource nodes. <see cref="FactionCamps"/>: which warfare zones' rolled mob camps are faction camps
+/// (FactionWarfare:Camps, stageQ).
 /// </summary>
 public sealed record ClusterOptions
 {
@@ -429,4 +465,6 @@ public sealed record ClusterOptions
     public int BuildingIdOffset { get; init; } = 1;
 
     public LayoutSession? Session { get; init; } = LayoutSession.Login;
+
+    public FactionCampRule FactionCamps { get; init; } = FactionCampRule.Conflict;
 }

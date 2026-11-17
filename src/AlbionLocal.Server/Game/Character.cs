@@ -221,6 +221,9 @@ public sealed class Character
     public long MistStanding { get; set; }
     public long MistFavor { get; set; }
 
+    /// <summary>StageR smugglers (SPEC §3.5): the smugglers standing (StandingType Smugglers, a7m raw: UpdateStanding 87 key 1, the den trader's gates); table character_standings.</summary>
+    public long SmugglerStanding { get; set; }
+
     /// <summary>StageN qol (SPEC §2): the saved loadouts (LoadoutCreate/Update 425/428), in no order (<see cref="Loadout.Position"/>); schema v29.</summary>
     public List<Loadout> Loadouts { get; set; } = [];
 
@@ -245,6 +248,24 @@ public sealed class Character
     /// </summary>
     public PortalBinding? PortalBinding { get; set; }
 
+    /// <summary>
+    /// The S.A.F.E. portal (analysis/work/stageR/safe-portal/SPEC.md §4): the uses that count for the repeat-use tax and the binding to the
+    /// return portal (Join keys 127-131); null = never used. Its own JSON column (schema v49).
+    /// </summary>
+    public SafePortalLog? SafePortal { get; set; }
+
+    /// <summary>
+    /// The overcharged equipment slots (stageR items SPEC §2): per slot its stack (0 = first, 1 = extended) and the GameTimeStamp it ends;
+    /// empty = none. Immutable entries; schema v50 (column overcharge).
+    /// </summary>
+    public List<OverchargeSlot> Overcharge { get; set; } = [];
+
+    /// <summary>
+    /// The fame credits per ReSpecFameType (stageR items SPEC §3; Join key 43, a7m[5]: 0 none, 1 combat, 2 crafting, 3 gathering,
+    /// 4 refining [infer the order]); schema v50 (column fame_credits).
+    /// </summary>
+    public long[] FameCredits { get; set; } = new long[5];
+
     /// <summary>A deep copy: what the repository hands out and what a save snapshot holds share nothing with the original.</summary>
     public Character Clone() => new()
     {
@@ -267,11 +288,13 @@ public sealed class Character
         Goals = Goals?.Clone(),
         BlackMarket = BlackMarket,
         Infamy = Infamy?.Clone(),
-        MistStanding = MistStanding, MistFavor = MistFavor,
+        MistStanding = MistStanding, MistFavor = MistFavor, SmugglerStanding = SmugglerStanding,
         Loadouts = [.. Loadouts],
         FactionStanding = [.. FactionStanding], FactionPoints = [.. FactionPoints], FactionChangedAt = FactionChangedAt,
         Vanity = Vanity?.Clone(),
         PortalBinding = PortalBinding,
+        SafePortal = SafePortal,
+        Overcharge = [.. Overcharge], FameCredits = [.. FameCredits],
     };
 
 }
@@ -282,6 +305,9 @@ public sealed class Character
 /// Immutable (a change makes a new one), so a character's copies may share it.
 /// </summary>
 public sealed record AutoLearnSet(int[] Ids, byte Groups, byte[]? Categories, int[][]? PerGroup);
+
+/// <summary>An overcharged equipment slot (0 main hand … 4 shoes): its stack index into gamedata OverCharge and the GameTimeStamp it ends. Immutable.</summary>
+public sealed record OverchargeSlot(int Slot, int Stack, long End);
 
 /// <summary>The Black Market sales of a character: the day (<see cref="Systems.BlackMarket.Day"/>) and the silver sold on it (a7m raw, before tax). Immutable.</summary>
 public sealed record BlackMarketLog(int Day, long Sold);
@@ -299,7 +325,20 @@ public sealed class VanityLog
     /// <summary>Mount category index → mount skin number.</summary>
     public Dictionary<int, int> MountSkins { get; set; } = new();
 
-    public VanityLog Clone() => new() { Unlocks = [.. Unlocks], Wardrobe = [.. Wardrobe], MountSkins = new(MountSkins) };
+    /// <summary>StageR kill-vanity: the victory emote charges by killemotes.xml uniquename (kept in the same JSON column, no schema step).</summary>
+    public Dictionary<string, int> KillEmoteCharges { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>The equipped victory emote's uniquename (Join key 119 carries its consumable id); null = none.</summary>
+    public string? KillEmote { get; set; }
+
+    /// <summary>ChangeKillEmotePlayOnKnockdownSetting (Join key 120): the emote plays on a knockdown too, not only on a kill.</summary>
+    public bool KillEmoteOnKnockdown { get; set; }
+
+    public VanityLog Clone() => new()
+    {
+        Unlocks = [.. Unlocks], Wardrobe = [.. Wardrobe], MountSkins = new(MountSkins), KillEmoteCharges = new(KillEmoteCharges, StringComparer.Ordinal),
+        KillEmote = KillEmote, KillEmoteOnKnockdown = KillEmoteOnKnockdown,
+    };
 }
 
 /// <summary>
@@ -328,6 +367,19 @@ public sealed record PendingTransfer(string From, string To, float X, float Y, f
 /// removal (0 = never), from which gamedata.xml PortalSettings bindingresetdays count.
 /// </summary>
 public sealed record PortalBinding(Data.PortalKind? City, long RemovedAt);
+
+/// <summary>
+/// <see cref="Character.SafePortal"/>: the GameTimeStamps of the S.A.F.E. portal uses (RequestOutlandsTeleportationUsage key 0; only those
+/// within costresettime are kept) and the binding to the return portal, null = none. Immutable.
+/// </summary>
+public sealed record SafePortalLog(long[] Uses, SafePortalBinding? Binding);
+
+/// <summary>
+/// A S.A.F.E. portal binding (Join keys 127-131, a5i on the client): the portal town it leads back to (127), the cluster of the return portal
+/// (128), until when it lasts (129, GameTimeStamp), the return portal's id string (130; NewOutlandsTeleportationReturnPortal key 3 is matched
+/// with it, cng.aqq) and its position (131).
+/// </summary>
+public sealed record SafePortalBinding(string Town, string Cluster, float X, float Y, long Until, string Id);
 
 /// <summary>
 /// A character's expedition record (stageH expeditions SPEC §5.1, §8): when each daily bonus was last taken (UTC ticks, by expedition
@@ -405,6 +457,12 @@ public sealed class GoalLog
     /// </summary>
     public int JournalVersion { get; set; }
 
+    /// <summary>StageR fw-campaign: the faction warfare campaign's day, month and week points and its rewards (Systems.FactionCampaign).</summary>
+    public FactionCampaignLog? FactionCampaign { get; set; }
+
+    /// <summary>StageR stats: the personal might and the Conqueror's Challenge's week (Systems.Conqueror).</summary>
+    public ConquerorLog? Conqueror { get; set; }
+
     public GoalLog Clone() => new()
     {
         Journal = new(Journal, StringComparer.Ordinal), Done = new(Done, StringComparer.Ordinal), Claimed = new(Claimed, StringComparer.Ordinal),
@@ -414,6 +472,28 @@ public sealed class GoalLog
         PvpVictims = PvpVictims.ToDictionary(v => v.Key, v => v.Value.ToList(), StringComparer.Ordinal),
         PvpDuels = PvpDuels.ToDictionary(v => v.Key, v => v.Value.ToList(), StringComparer.Ordinal),
         PvpDay = PvpDay, PvpDayPoints = PvpDayPoints, PvpRefused = new(PvpRefused, StringComparer.Ordinal), JournalVersion = JournalVersion,
+        FactionCampaign = FactionCampaign?.Clone(),
+        Conqueror = Conqueror?.Clone(),
+    };
+}
+
+/// <summary>
+/// StageR stats (analysis/work/stageR/stats/SPEC.md §2-3): the personal might per guild season (by the season's wire index, a client season
+/// only) and personaltype (a7m raw), and the Conqueror's Challenge's week: its start (UTC ticks), its might, the weekly favor rewards given
+/// (their count, in file order) and the chest's state (0 locked, 3 claimed; 1 / 2 are worked out from the might and the premium).
+/// </summary>
+public sealed class ConquerorLog
+{
+    public Dictionary<int, Dictionary<string, long>> Seasons { get; set; } = [];
+    public long Week { get; set; }
+    public long WeekMight { get; set; }
+    public int WeekRewards { get; set; }
+    public byte Chest { get; set; }
+
+    public ConquerorLog Clone() => new()
+    {
+        Seasons = Seasons.ToDictionary(s => s.Key, s => new Dictionary<string, long>(s.Value, StringComparer.Ordinal)),
+        Week = Week, WeekMight = WeekMight, WeekRewards = WeekRewards, Chest = Chest,
     };
 }
 

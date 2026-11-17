@@ -42,11 +42,12 @@ public sealed partial class WorldSession
     /// GetFactionWarfareCampaignData (op 436, tm {}; asked by dex.av 0x180aeaaa0, read by dex.z 0x180aeb3b0). Key 4 is the
     /// campaign month, months since 0001-01 (bcg.abu 0x1805aca60 = baseDate.AddMonths(key 4); official 24309 on 2026-10-16):
     /// the empty answer's 0 was "January of year 1". Keys 5-8 had six entries officially (one per faction, presumably): six
-    /// zeros, in case a campaign view indexes them per faction (Q4); keys 0-3 empty.
+    /// zeros, in case a campaign view indexes them per faction (Q4); keys 0-3 empty. Since stageR fw-campaign the character's campaign
+    /// (<see cref="Systems.FactionCampaign.Response"/>); this empty one only without a player.
     /// </summary>
     [Handles(OperationCodes.GetFactionWarfareCampaignData, Status = SessionStatus.InWorld)]
     private GetFactionWarfareCampaignDataResponse GetFactionWarfareCampaignData(GetFactionWarfareCampaignDataRequest req) =>
-        new GetFactionWarfareCampaignDataResponse
+        Player is { } player ? Systems.FactionCampaign.Response(player) : new GetFactionWarfareCampaignDataResponse
         {
             awe = CampaignMonth(DateTime.UtcNow),
             awf = new long[Factions], awg = new int[Factions], awh = new int[Factions], awi = new int[Factions],

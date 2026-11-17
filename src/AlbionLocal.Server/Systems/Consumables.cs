@@ -39,6 +39,8 @@ public static class Consumables
         "adddestinyboardpvefame", "awardcraftingfocus", "awardsilver", "generateloot", "activaterandomdungeon", "awardlearningpoints",
         // StageN spells-bosses: the gathering tomes, the fish food's fishing fame and the repair kits.
         "adddestinyboardgatheringfame", "adddestinyboardfishingfame", "repairequipment",
+        // StageR kill-vanity: the victory emote charge items (T1_KILL_EMOTE_*_CHARGES_*).
+        "addvanityconsumablecharges",
     };
 
     /// <summary>The ReturnCode of a dungeon map with no place for its exit (enum ll 14965, @RANDOMDUNGEONMAP_NO_DUNGEON_FOUND; SPEC §3).</summary>
@@ -75,6 +77,7 @@ public static class Consumables
         }
         p.SaveItems();
         Log.Debug("items", $"'{p.Character.Name}' used {item.Template.Name} from slot {cast.Slot}: {item.Count} left");
+        p.World.Modules.ItemUsed(p, item.Template.Name, 1, "slot"); // the modules' ItemUsed
     }
 
     /// <summary>
@@ -152,6 +155,11 @@ public static class Consumables
                 break;
             case "repairequipment": // a repair kit: every worn item at full durability, re-sent
                 Repair(p);
+                break;
+            case "addvanityconsumablecharges": // stageR: a victory emote charge item: amount charges of its emote (type KillEmote, the only one)
+                if ((string?)node.Attribute("type") is "KillEmote" or null && p.World.Vanity.KillEmotes.Data.Emote((string?)node.Attribute("uniquename") ?? "") is { } emote)
+                    p.World.Vanity.KillEmotes.AddCharges(p, emote, Math.Max(1, (int)Math.Round(amount)), c.Item?.Name ?? c.Root.Name);
+                else Combat.LogOnce("killemote:" + (string?)node.Attribute("uniquename"), $"{c.Root.Name}: victory emote {(string?)node.Attribute("uniquename")} not found: no charges");
                 break;
         }
     }
@@ -367,6 +375,7 @@ public static class Consumables
         SpellCasts.ExecuteFirst(new SpellCasts.SpellContext(p, batch.Map, spell, 0, batch.Ap, null, here, ticks) { CcAbilityPower = batch.CcAp, Item = item.Template, Loot = loot }, spell);
         item.Count--;
         batch.Done++;
+        p.World.Modules.ItemUsed(p, item.Template.Name, 1, "inventory"); // the modules' ItemUsed
         var hit = Combat.CastHit(p.Id, p.Id, spell.Id, 0);
         if (batch.Done < batch.Count && item.Count > 0)
         {

@@ -242,6 +242,7 @@ public sealed partial class WorldSession
             return null;
         }
         if (!to.Fits(moved, req.rx) || !from.Fits(other, req.ru)
+            || to == inventory.Equipment && from != to && moved.Count > 1 || from == inventory.Equipment && from != to && other is { Count: > 1 } // a stack never goes into the equipment (stageR items SPEC §4)
             || !VaultTakes(player, to, moved.Template, moved.Count, from) || other is not null && !VaultTakes(player, from, other.Template, other.Count, to))
         {
             // Put the item back where it was so the client does not keep it in the target slot.

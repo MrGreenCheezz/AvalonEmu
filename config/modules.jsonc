@@ -1,0 +1,12 @@
+// JSONC (JSON with comments), including trailing commas; not standard JSON.
+// This file is optional. Each module's own settings are in config/modules/<id>.jsonc, written from the module's defaults at its first load.
+{
+  "Modules": {
+    "Enabled": true,   // false: no module loads, whatever is in the folder
+    "Path": "modules", // the module folders, one per module
+    "List": [],        // names to load whatever their module.jsonc "enabled" says; empty = every module with "enabled": true
+    "Build": true,     // build modules from their sources when those changed (needs the .NET SDK); false = prebuilt DLLs or an earlier build only
+    "MaxErrors": 10,   // a module whose handlers threw this many times is disabled until the next start or .modules reload
+    "SlowMs": 50       // a handler that takes longer is logged as slow (once a minute per module)
+  }
+}

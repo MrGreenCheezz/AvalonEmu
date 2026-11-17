@@ -128,6 +128,35 @@ the other instanced clusters besides those and the random dungeons below; they c
 rocks have regrown, and the next visit builds it anew (new object ids). The checks are `Transfer:PositionTolerance` (2 m
 outside the exit square) and `Transfer:CheckExitCooldown` (true).
 
+**S.A.F.E. portal** (`../analysis/work/stageR/safe-portal/SPEC.md`). Each Outlands portal town (0301, 1301, 2301, 3301, 4301) has its
+S.A.F.E. portal at (-31, 76). Clicking it opens the client's window with the costs the server sends (the baggage cost of the equipment
+and bag by the client's own item-value curve, at least 10 000 silver, × 1.05 per use in the last 30 minutes); Travel pays that (after the
+global discount) and sends the character to a random destination of the town's list in `outlandsteleportationportals.xml`, at one of
+that cluster's exits. A personal return portal stands next to the arrival for 90 minutes (Join keys 127-131 show it on the world and
+region maps; the binding buff and the 30 s blocker debuff go on); clicking it goes back to the portal town. The binding ends when it
+runs out (the client's "binding has been removed" message), when the return portal is used, or when the character enters a royal
+city or a hideout. Refusals use the client's codes: 1671 blocker debuff, 1672 the cost changed (the window asks again), 1673 not enough
+silver, 1674/1675 no destination or no exit. No config keys (official behaviour).
+Not done: an item's estimated market value in the cost (the server has no market estimate; only the item-value curve counts), the
+binding's end on bank withdrawals and player trades, the solo-player rule of the tutorial text, OutlandsTeleportationReturnPortalUpdateEvent
+609 (the Join carries the same). Not checked in the client yet: the window's numbers, the return portal tile and its click.
+
+**Dragon areas (Ancient Lands)** (`../analysis/work/stageR/dragon-areas/SPEC.md`). `dragonarea.xml` and `dragonareatemplatemetadata.xml`
+are read. Entrances (NewDragonAreaEntrance 694) stand open for the type's lifetime, then closed for its despawntime, then go. They come
+from treasuredistribution.xml's DRAGONAREA_ENTRANCE events on the resource placement's tracking spots (Royal yellow T5-T6, red, Outlands
+black; each event draws once per map fill, its activationchance and weights) and from `.dragon entrance [type]`. Using one (549) channels
+3 s (UsingDragonAreaEntranceStateUpdate 699 Channeling), then waits to enter (699 WaitingToEnter: the client's matchmaking window);
+Enter (550) takes the party members waiting at the same entrance, picks the entrance type's mode by the team's size, builds the
+instance off the world thread (the a88 layout of DRAGON_001: the map's rolled mode layer, a pool template per slot, the drake islands on
+the DRAKE_ISLAND slots; the client builds exactly these templates) and pushes ChangeCluster {0 "@DRAGONAREA@guid", 3 a88, 4 the mode's
+clustertype, 5 the tier}. Inside: the templates' mobs, the exits (NewDragonAreaExit 695, ExitEnterStart 237, 2 s) back in front of the
+entrance, a relog keeps the layout, an instance that is gone sends the character back, the shutdown (clustershutdowntime, an alert
+60 s before) and an empty instance (300 s) push everyone out. A death respawns as elsewhere (the city). Keys: `DragonAreas:Enabled`,
+`DragonAreas:NaturalSpawn`, `DragonAreas:RedrawMinutes` (world.jsonc). GM: `.dragon entrance [type]`, `.dragon list`, `.dragon close`.
+Not done (no capture, no client code that defines them): the main quest (687-691), dragon energy (697), teleporter keys and runestones
+(698), the boss and the treasures, the party binding (700), DragonAreaPlayerJoinedInfo (690), the item power requirement, the exact
+error codes. Not checked in the client yet: the matchmaking window after 699, the instance as the client builds it, the exits.
+
 The character database gets new columns (schema v2: facing, previous cluster, pending transfer) the first time this
 version starts; a server build from before step 13 then refuses the file ("schema version 2 is newer").
 
@@ -432,6 +461,18 @@ around), the bosses' `<AI>` onDeath effects, the mobs' changeaggro (alarm traps 
 mammoths drop their target) and the tracking mobs' EscapeSpellSequence (`.mob escape`; the hunts that trigger it are not
 there yet). The two-step weapon spells that recast at a stored target work: AFTER_IMAGE's return, the knuckles' punch and
 counter dash, the ice sculpture's explosion, the spider thread's pull, the holy shield's second cast.
+StageR spell-effects (analysis/work/stageR/spell-effects/SPEC.md; the start report now says 95 of 125 kinds run, 82 before):
+the cloth and leather shoes' FROSTWALK, DEMONWALK and AFTER_IMAGE and the infernal staff's HUMAN_TORCH cast their follow-up
+spell every few metres moved (castspellafterdistancemoved; also every 1 s or 1.5 s standing); the bow's SPEEDARCHER_KITE
+debuffs its archer while enemy players stand within 6 m and the panther form turns invisible after 1 s with no enemy within
+9 m (targetsinarea); a used-up SHIELDFRIENDLY (arcane staff) or ent / tower guard shield takes its forced-movement immunity
+or interrupt protection with it (removeeffectoneventactive); the faction mounts' spells and the transformation tome
+dismount (with the mount blocked 15 / 5 s); the blocker debuffs of the safe portal, the dragon area entrance and the
+Brecilien static entrance now really hold (cannotuseobject was not listed, so their name checks never saw them);
+DISMOUNTED_HOSTILE's cannotlootplayers keeps a player from opening a dead player's bag for its 5 s. Not done (the SPEC has
+the reasons): the carried objects (playertracking, storage, the faction standards and power crystals), link (SOUL_LINK),
+drag (TRIPLE_KICK), the lore snippets, kill-emote charges, premium days, smugglers' standing, the fire dragon's own kinds
+(turn, teleporttohome, killmob, destroybuilding, hideharvestable) and the hideout debuffs. Not checked in the client yet.
 
 Stage 5e (SPEC §5e): mobs do not kill a player, they knock it down (the PvE knockdown of gamedata DeathSettings). At 0
 health the player falls with the "knocked down by @mob" screen (KnockedDown), out of combat; every mob drops it and
@@ -516,6 +557,33 @@ open world, as the client data distributes them (treasuredistribution.xml):
 dev aid: every open-world cluster gets treasures (a mob spawn point stands in for a missing spot) and every draw places one. GMs:
 `.coffer` lists the cluster's slots and spots, `.coffer spawn [coffer|solo|veteran|elite]` puts one in front of you, `.chest unlock` ends
 its countdown. Not done: the faction chests and the Red Zone Event.
+
+### Smuggler's dens and crates
+
+StageR (`../analysis/work/stageR/smugglers/SPEC.md`):
+
+- **The dens** are the 71 world.xml clusters `BLACKBANK-*` ("Smuggler's Den", type `PLAYERCITY_BLACK_SMUGGLERSDEN`), entered through
+  the ordinary exits of their Outlands cluster. Inside stand a bank, the Smuggler's Market, a repair shop, a meld building, the trader
+  Maggy Slade (the smugglers standing shop) and an NPC-only travel point. The bank is the den's own vault ("Store items locally", as
+  official; `Bank:Shared` still makes it the shared one). The Smuggler's Market is the Smuggler's Network: one order book for every den
+  (official, `Smugglers:NetworkMarket` true; false = each den its own book), setup fee 1.5 % (gamedata `smugglersetupfee`). The
+  cities' banks and markets are not touched.
+- **Stashes and piles** (`Smugglers:Crates`, on in both presets): every Outlands open-world cluster gets the Smuggler Stashes and the
+  pile spots its resource placement puts on the roaming-mob nodes (0307: 3 stashes, 6 spots). Piles are drawn as the data says
+  (SMALL / MEDIUM / LARGE, one slot each, 150-450 s ÷ `Rates:ChestRespawn`, chance 10 % / 6.7 % / 1.1 %); a pile is protected for
+  0 / 180 / 300 s, holds 1 / 5 / 10 crates of rolled rarity, goes 30 s after it is empty or after 24 h.
+- **A crate**: picking it from a pile takes 3 s (op 518, cancel 519); the carrier gets the crate's carry buff, cannot mount, and
+  delivers it at a stash within 5 m in 3 s (op 304, cancel 305) for the smugglers standing (common 3 250, uncommon 4 551, rare
+  6 370, legendary 8 918) and FAVOR (856 / 1 198 / 1 678 / 2 349); the standing is saved (`character_standings`) and gates the den
+  trader's goods. A carrier who dies or leaves the cluster drops the crate where it stood (30 min on the ground); anyone picks it up
+  again in 0.5 s (op 439, cancel 440).
+
+GMs: `.smuggler pile [SMALL|MEDIUM1-4|LARGE1-4]` puts a pile 3 m in front of you, `.smuggler info` shows your standing, what you
+carry and the nearest stash.
+
+Not done: the season might of a delivery, the caged smugglers, "Buy a round" (QUESTITEM_STANDING_SMUGGLER), the market's distance
+fees and paging, the den's NPC travel point and spawn buff, the carried objects of other content (they can use `Systems/Carriables.cs`).
+Not checked in the client yet: the pile and stash objects, the pickup and delivery bars, the dropped crate, the den market's window.
 
 ### World bosses
 
@@ -1028,9 +1096,58 @@ zone's towers; GMs: `.outpost owner <1-6>` (the nearest tower), `.outpost clear`
 line rule (the official one follows the campaign's duchy conflicts), the guard respawn rule, the control time. The towers are not
 saved: a restart gives every tower back to its duchy's faction.
 
-Not done: the faction camps (their layer is switched by the DynamicTemplate event, not sent yet), supplies and the campaign,
-fortresses and red-zone events, the faction points of a capture, payouts, the weekly upkeep and reports, campaign rewards, the
-faction's PvE fame bonus and group bonus, the nameplate rank (483).
+**Faction camps** (stageQ, `../analysis/work/stageQ/camps/CLIENT.md`; `FactionWarfare:Camps`). The client draws a dynamic camp's tents
+and props only after the server's DynamicTemplate event (604) names the slot's state and feature layer, so every rolled camp now gets
+one when it comes into view (Default camps too, which were drawn bare before). In a warfare zone whose duchy is in conflict
+(`factionwarfare.xml` initialconflict: YELLOW_03, 06, 09, 10, 13 and the red duchies) the rolled small and medium camps are faction camps
+instead of the usual Keeper / Morgana / Undead ones: Caerleon bandits (12 in a small camp, 60 in a medium one) that attack players
+flagged for any other faction and do not respawn, a quest for everyone listed on the minimap at the Join, and a Caerleon chest locked
+until the last bandit dies. Then it unlocks for everyone; 300 s later the camp goes inactive (ruins, the chest and quest gone), and it
+stands again 7-11 min (small) or 15-21 min (medium) later with new bandits, quest and chest. Guards with foes (these bandits, the towers'
+guards) can be hit by those players only. `.camp` lists the map's camps (Default or faction camp, active or not, guards up, next
+state). Inferred, not captured: which zones have faction camps (in the captures, 1207, at war, had them, 0204, at peace, did not; the
+official conflicts move with the campaign), that the bandits spare Caerleon players, the order of the events when a camp comes back.
+The camp's faction points and supplies are not given.
+
+**Campaign, ranks and the group bonus** (stageR, `../analysis/work/stageR/fw-campaign/SPEC.md`; no schema step, kept in the goals JSON).
+The faction points you earn count for the UTC day, the month (the campaign) and the week. The campaign window (`SHIFT+F`) shows the
+day's and the month's points: 1250 / 2500 / 5000 points in a day give 1250 / 2500 / 5000 standing at once; 25 000 / 50 000 / 75 000 /
+100 000 points in a month unlock your faction's campaign chests (from day 1 / 8 / 15 / 22), which you claim in the window. As in the
+game data, only a character with premium of more than 6 days can claim them (`Premium:Mode`); `FactionWarfare:CampaignRewardsWithoutPremium`
+(false) lets everyone. The faction overview shows the month's points of each faction (the characters this server has seen since its
+start) and the clusters each controls by colour. The weekly report shows last week's points. Other players see your faction rank on
+your nameplate (it changes live with your standing and your enlistment). PvE points get the game data's group bonus (2 players × 1.04 …
+20 × 1.40): the party members on the same map enlisted and flagged for your faction. GMs: `.faction add <points>` feeds the campaign too.
+Inferred, not captured: the meaning of the weekly report's key 10, the colours of the overview's counters, who counts for the group bonus,
+that the campaign's days and months are UTC.
+
+**Fortresses** (stageR, `../analysis/work/stageR/fw-zone/SPEC.md`; `FactionWarfare:Fortresses`, `FortressGuards`). The 20 faction
+fortresses of the warfare duchies (`world.xml` factionfortresses) show their tower, owned by the duchy's faction, with its 9 guards of
+that faction (`factionfortress.xml`: T8 swords, crossbows and staves; they attack players flagged for another faction, a dead one comes
+back after its 1350 s). A siege (`.fortress siege <1-6>`, GM: what starts one officially, the duchy supply war, is not built) runs as the
+game data says: 60 s announcement, 540 s pre-siege (the HUD counts down), then the active siege: the defenders' progress rises 1 per
+second and at 1800 they have held the fortress; the attackers must kill the tower guards and hold the capture area (10 m around the tower,
+flagged and on foot): the owner's points go in 2 s, theirs fill in 30 s, and the fortress (and for the client the duchy) is theirs. The
+fight ends (both sides' players elsewhere hear of the start and the end), 600 s later it is over and the new owner's guards stand.
+`.fortress` shows the zone's fortress; GMs: `.fortress siege <1-6>`, `.fortress next` (the next phase; an active siege ends as
+defended), `.fortress owner <1-6>`, `.fortress clear` (the tower guards go for an hour). Not saved: a restart gives every fortress back.
+
+**Bandit assault** (red-zone event; `FactionWarfare:RedZoneEvents`, `RedZoneRegion`). At the start times of
+`factionwarfareredzoneevent.xml` (an evaluation time − 15 min, each rolled with its chance; Europe and Asia have their own files) the
+assault is announced to every enlisted player, 15 min later phase 1 begins (45 min): the red duchies' towers are the bandits'
+(Caerleon), the factions take them back; phase 2 (30 min) runs in two red duchies. Each tower a faction holds in an active red duchy
+counts 0.1853 per second (× 1.5 in phase 2) for its standings (the client asks for them). At the end the factions are placed and every
+enlisted player who was flagged in a red zone during the event gets the place's bonus (496 217 faction points for the first … 165 405) /
+the number of such players of the faction (at least 20); the towers go back to their duchies. The world map, the HUD timer and the
+zone state follow the phases. `.redzone` shows the phase and standings; GMs: `.redzone start`, `.redzone next`. Inferred, not captured:
+the phase times around the captured "phase 1 until 19:45", the bandits holding the towers, the standings as supply, the reward split,
+which two duchies.
+
+Not done: supplies and the supply war, what starts a siege, the last stand, the weapon caches, the cutoff fights, the fortress and
+event chests and rewards, the phase buffs, the 900 s zone payout, the faction points of a capture or a PvP kill, the weekly report's
+other counters, its upkeep and bonus (its claim is refused), the faction's PvE fame bonus (`pvebonus`), guild faction allegiance
+(481/482), faction portals (539). Not checked in the client yet: the campaign window, the claim, the nameplate rank, the fortress
+tower, its siege HUD and capture circle, the bandit assault's popups, world map and timer.
 
 ## PvE preset
 
@@ -1417,6 +1534,14 @@ characters keep what they have; `.progress mode fair|unlockall` switches one (it
 and `.progress set` speed things up. Running a server of this version converts `albionlocal.db` to schema v6 (the fame
 inside a node's level); an older server build refuses the converted file.
 
+**Fame credits and re-spec** (SPEC §3; database v48+): a combat node (the 267 nodes with a re-spectype) at its last level turns
+its share of later fame into Combat Fame Credits (fame × lpmultiplier / famemultiplier × respecmodifier, of that 20 %; with the
+board's Auto-Respec toggle 80 % for 1 silver per credit). The Re-Spec window of a node trades levels both ways: giving levels up
+(down to level 1) turns their fame (and the progress) into credits × 0.8 for 1 silver per credit; buying levels costs their fame
+in credits (elite levels also × 0.33 silver per credit). Credits show in the board (Join key 43, event UpdateReSpecPoints).
+Not checked in the client yet: the error codes' messages, the exact silver rounding, the client's 5-second conversion delay
+(here at once).
+
 ## Economy
 
 Silver, NPC shops, repair, crafting, the bank and the marketplace (stage 6, `../analysis/work/stage6/SPEC.md` with its
@@ -1465,6 +1590,24 @@ server build refuses the converted file).
   resistance and duration, mob fame, lifesteal and item power on the weapon apply; energy cost reduction, threat, attack
   range and resilience penetration are not used by the server yet. Strain stays 1 and the soul's legendary rating, event
   history and the Black Market's awakened items are not made.
+- **Study** at a crafting station (its "Study" tab; `../analysis/work/stageR/items/SPEC.md` §1): an item the station crafts, at full
+  durability and feeding a crafting node of your board in progress, is destroyed 0.8 s later for crafting fame: its famevalue (the
+  items.xml attribute or, as the client works it out, its first recipe's resources' famevalues) × destinyandjournalcraftfamefactor ×
+  the count × gamedata StudyFame 2.75 (a T4 sword: 540 × 2.75 = 1485), × `Rates:Fame` × `Rates:CraftingFame`; premium adds its board
+  share as for a craft. Refusals use the client's StudyItemErrorCode. Not done: the focus share (+ StudyingEfficiency) and the
+  daily production bonuses the client can show, the "unlocked to craft" check, the station fee.
+- **Overcharge** (the HUD's Overcharge button; SPEC §2): every enabled combat slot (main hand, off hand, head, armour, shoes) whose
+  item may be overcharged gets +100 item power for 30 minutes for 10 Siphoned Energy (UNIQUE_GVGTOKEN_GENERIC); a second press
+  extends it to 60 minutes for nothing. The power counts in health, energy, armour and damage. When it ends (its time, the
+  slot's end button, or the item leaving the slot) the item breaks with 15 % (30 % after the extension) — it is deleted — or
+  else loses 30 % (60 %) of its full durability [inferred meaning of gamedata durabilityloss]. Kept over relogs (database v48+).
+  Not done: the HUD buff icon (spell OVER_CHARGED) and the activation animation are the client's own or not sent.
+- **Equipment stacks** (SPEC §4): equal weapons and armour pieces stack up to 999 (the client's default) when you stack them
+  ("stack all", a split onto a stack, a loot item dropped onto a stack): same item and enchantment, quality, exact durability and
+  spell choice, neither awakened nor overcharged — stricter than the client, which merges durability in percent steps. New items
+  (crafts, loot, purchases) never join an existing stack by themselves; a stack never goes into the equipment (split one off),
+  cannot be awakened, and splits keep quality, durability and spells. Mounts, tracking toolkits and transformation weapons stay
+  single. Not done: a split straight out of a loot container.
 - **Shops:** buying at an NPC shop is a craft at it (the client's "buy"): FARMING_MERCHANT sells seeds, baby animals and
   the like for silver (furniture cannot be created yet). Shops that take tokens or other currencies refuse for now, unless
   the price is items in the inventory. Thetford has no farming merchant; `content/spawns/0000.json` can add one.
@@ -1474,8 +1617,8 @@ server build refuses the converted file).
   (`1000.json`), Bridgewatch (`2000.json`), Martlock (`3004.json`), Fort Sterling (`4000.json`), Caerleon (`3003.json`)
   and Brecilien (`5000.json`), on real-estate plots near the bank; each city refines and crafts with its own bonus
   (Martlock hide, Lymhurst fiber, Bridgewatch rock, Fort Sterling wood +40 %, plus its weapon and armour lines). The recipe's silver and
-  resources are taken at the start, one craft takes 0.4 s, moving or casting cancels the rest (its silver and resources
-  come back). Part of the resources come back by the city's bonus (Thetford ore 36.7 %; `Crafting:Returns` false turns it
+  resources are taken at the start, one craft takes 0.4 s, moving, casting or the client's own cancel button (op 56; before,
+  the server ignored it and finished the batch) cancels the rest (its silver and resources come back). Part of the resources come back by the city's bonus (Thetford ore 36.7 %; `Crafting:Returns` false turns it
   off). Crafted equipment gets a random quality (normal 68.9 % … masterpiece 0.1 %). Each craft gives crafting fame
   (item value × count × 1.5^(tier + enchantment − 2): a T3 plank 12, a T4 sword 864) to the total and the destiny board;
   shop purchases give none. With the craft window's "use focus" on, a craft spends crafting focus for more resources back
@@ -1490,13 +1633,32 @@ server build refuses the converted file).
   when a bank opens, the items of the character's vaults of the other kind (its city vaults of before, or the shared
   vault after switching it off; that one only at a city's bank) move into the free slots of the vault it opens, in city
   order; what does not fit stays where it was and moves at a later opening.
+- **Asset Overview** (the window that lists what a character owns, `../analysis/work/stageR/assets/SPEC.md`): every bank
+  location that holds something, under its city (a hideout's own vault under Hideouts, at the hideout's zone), with the
+  number of stacks and an estimated value; a location opens to its tab (the bank's default tab) and the tab to its items
+  in their slots. The search (text, category, tier, enchantment, quality) lists only the locations and tabs with a match
+  and the matching items. It is a read-only view: it is built fresh from the vaults on every request and moves nothing.
+  The estimated value is the items' itemvalue in silver (this server has no market estimate). Shown under the character's
+  last city (Thetford when it has none): the shared vault of `Bank:Shared` and the vault of a hideout that is gone.
+  Not done: recovering vaults (the Recover button, InventoryRecoverItem, InventoryRecoverAllItems, RecoverVaultFromHideout):
+  no recovery vault exists on this server, so the client never shows one; a gone hideout's vault stays listed but can
+  not be emptied. Not checked in the client yet.
 - **Marketplace:** sell orders and buy orders of the players, per city; buying from a sell order pays the seller at once
   (an offline seller at its next login), the bought items wait in the "Finished" tab to be collected; selling into a buy
   order pays from the order's escrow. Fees as the client shows them (gamedata.xml): a new order pays a 2.5 % setup fee (at
   least 1 silver, not given back), the seller of a sale gets the total less 8 % sales tax (4 % while premium, as the window shows).
   Orders last the duration the client sends (30 days); aborting gives the items (to collect) or the escrow back. The lists
   filter by category, tier, enchantment, quality and the search text, sort by price, time or item, and page by 50.
-  The inventory's quick sell lists, per selected item, the best buy order it can fill (highest price, quality reached).
+  The inventory's quick sell lists, per selected item, the best buy order it can fill (highest price, quality reached), and
+  *Sell Selected* sells each row into its order as a normal sale (a row whose item, order or amount changed meanwhile is
+  skipped and the client says not all could be sold).
+  **Quick Purchase Loadouts** (the market's Loadouts tab, stageR `../analysis/work/stageR/kill-vanity/SPEC.md` §4): for one of
+  your saved loadouts × the amount chosen, the cheapest sell orders of this city for every piece (each equipment slot, the
+  potion/food stacks, each inventory entry; no off-hand beside a two-handed weapon) — the whole loadout, the client does not say
+  what you already have. *Purchase* buys all chosen orders at once or nothing: if any of them was bought by someone else or
+  changed its price meanwhile, nothing is bought and no silver taken, and the window shows the updated offers to confirm again.
+  *Buy and Equip* puts the items straight into the inventory when they all fit (else they wait in "Completed Transactions",
+  as every normal purchase). Not checked in the client yet.
   A filled, expired or cancelled order mails its owner the client's market notice (see Mail).
   **Price history:** every sale is recorded per city (item, quality, amount, price, time; kept 29 days, table `market_sales`)
   and the item window's chart (24 hours / 7 days / 4 weeks) shows that city's sales by hour, quarter day or day, with the
@@ -1543,7 +1705,18 @@ the client's real-estate window. `RealEstate:Enabled` (true in both presets) tur
 - **Giving up** a plot frees it; its stations come down and open bids on it come back. A deleted character's plots become free.
 - **The city's plots.** The plots under the public stations of `content/spawns` (README Crafting and refining, Stables) stay with
   the city: they show the city as owner and cannot be claimed, bought or bid on.
-- Upkeep and city tax: gamedata's upkeep prices are all 0, so there is none. No usage fee goes to the station's owner yet.
+- Upkeep and city tax: gamedata's upkeep prices are all 0, so there is none.
+- **The owner's station** (`../analysis/work/stageR/buildings/SPEC.md`). A station on a plot has its owner's settings, kept in
+  `albionlocal.db` (table `building_states`): in its window the owner sets a usage fee for associates (the owner's guild) and for
+  users (everyone else), in silver per 100 nutrition a craft eats (up to 1000, gamedata), and who may use it (closed: nobody but
+  the owner; private: the guild; public: everyone, the default). A craft of an item above tier 2 eats its item value × 0.1125
+  nutrition (T4 bar: a few points) and costs the recipe's silver plus the user's fee on that nutrition; the fee is collected
+  in the building and the owner takes it ("Collect"). A new station holds buildings.xml's initialnutrition share of its storage
+  (T4: 11 %); food (any item with a nutrition value: crops 48, meals more, the building's favourite dish counts double) fills it
+  from the Feed tab; an empty station refuses crafts ("does not have sufficient nutrition"). The owner can deposit silver as a
+  feeding reward and set the reward per nutrition point: other players who feed it are paid from that pool. When the station
+  comes down (the plot given up or lost), its collected fees and reward pool go to the plot's owner. The city's own stations stay
+  free and unlimited.
 - Commands: `.plot list` (the plots of the city with owners, prices, open bids and the auction's times), GM `.plot auction start`
   (the auction begins now) and `.plot auction end` (it ends now and is settled; both shift the schedule until the next restart),
   GM `.plot free` (the nearest owned plot within 30 m becomes free).
@@ -1551,7 +1724,11 @@ the client's real-estate window. `RealEstate:Enabled` (true in both presets) tur
   real_estate_buildings; an older server build refuses the converted file).
 
 Not checked in the client yet: the claim, bid, sell and buy windows, the plot's colours and outline, building from the build menu
-in a city (SPEC §5).
+in a city (SPEC §5); the owner's fee and feed windows, the administration window's earned silver and reward pool, the closed
+station refusing (stageR buildings SPEC §6). Not done: construction sites (a station stands at once), coowners and custom roles,
+fees and nutrition for studying, repair stations of players.
+Running a server of this version adds the table `building_states` to `albionlocal.db` (one more schema step; an older server
+build refuses the converted file).
 
 ## Premium, focus and learning points
 
@@ -1682,8 +1859,8 @@ Official` (the client data's Adventurer's Challenge; only `Season.Enabled` is re
   `KnockdownIsKill`), and a third player's execute of a credited knockdown gives nothing. `.bounty` shows
   today's PvP points and the refused credits. `KnockdownFameFactor` (0) gives that share of the kill fame on a credited
   knockdown (UpdateFame only, no kill message; only to sharers whose own credit is not refused). Without the section the official rules apply (no points, a journal kill only
-  for a death). Under the pve preset PvP is between two Red players (and duels) only. The Conqueror's Challenge window (op 451)
-  stays the stub.
+  for a death). Under the pve preset PvP is between two Red players (and duels) only. The Conqueror's Challenge window (op 451):
+  see "Kill history, personal might and the Conqueror's Challenge".
 
 Not checked in the client yet: the season window's bars and claim buttons for a character without premium (C-C1), the
 points popup (C-C2), the journal window's finished and claimable entries (C-B1) and the tracker's progress (C-B2).
@@ -1868,6 +2045,44 @@ A **second PC** on the LAN:
 3. The second PC's client must reach the host's login server; how a client is pointed at a server is outside this
    repository. The game server address comes from the server itself.
 
+### Party: ready check, party navigation, join requests
+
+Stage R (`../analysis/work/stageR/party/SPEC.md`; `Systems/PartyExtras.cs`), on top of invite, leave, kick, roles, loot mode
+and marks. No config keys; times from gamedata `PartySettings`.
+
+- **Ready check** (party window or `/readycheck`, leader only): every member gets the Yes/No box, the party frames show each
+  answer, the leader starts as ready and so do companions. It runs `PartyReadyCheckDuration` (60 s); the next one can start
+  `PartyReadyCheckTimeout` (60 s) after its end. The client's own error lines (no party, not leader, running, in timeout) come
+  from the server too.
+- **Party navigation**: the route the leader sets on the world map is shown to every member, also to one who joins later; the
+  leader clearing it, or a new leader, ends it for all.
+- **Join requests** ("request to join" on a player): go to the leader of that player's party, or to the player when it is solo
+  (accepting makes a new party it leads). Decline, accept and the 65 s expiry answer the requester as the client expects. A
+  requester who is in a party is refused (no party merge).
+- **FW reinforcements** toggle of the leader: stored and shown to all members (there are no reinforcement requests).
+- **Not done**: party merge by a join request; the join cooldown.
+- **Not checked in the client yet**: all of the above (self-test `party ready check`, `party navigation`, `party join requests`).
+
+### Party finder
+
+Stage R (`../analysis/work/stageR/party/SPEC.md` §5; `Systems/PartyFinder.cs`, `Handlers/World/PartyFinderHandler.cs`). A
+world-wide list kept in memory (not saved).
+
+- **Switch**: the Login feature table has switch 171 PartyFinder on, as the official server sends it (the client's own default is
+  off: "feature disabled"). Config `Party:Finder` (default true; false = the client default).
+- **Listing** (leader or solo player, "create"): activity, min item power, max group size, auto accept, title, details,
+  visibility (all / guild / alliance). Players watching the activity see it at once and every change after (members, their item
+  power and roles). Changing it, deleting it ("leave") and switching to "find parties" work.
+- **Applying**: "Apply" puts the player on the leader's applicant list (with its roles and item power); "Join" on an auto-accept
+  listing joins at once. Errors as the client knows them (own search, full, item power too low, already pending, in a party).
+- **Answering**: the leader accepts (the applicant joins the party, or a new one the leader leads) or declines (the applicant's
+  chat says so). The listing goes when the party is full, disbands, or the leader deletes it or logs out; pending applicants are
+  then declined automatically.
+- **Find parties** registration with roles (HUD toggles), the search box, and a member's equipment window.
+- **Not done**: party merge (a party leader applying with its party is refused); a limit of open applications; blacklist;
+  avatars, flagging and one unknown byte per member are sent as 0; the snapshot's crafter names.
+- **Not checked in the client yet**: all of it (self-test `party finder`).
+
 ### Quality of life: emotes, loadouts, /stuck, map pings
 
 StageN qol (`../analysis/work/stageN/qol/SPEC.md`).
@@ -1925,6 +2140,20 @@ colours, free of charge (the client sends no price, so none is taken); hair and 
 vanity unlock. Others see both changes at once; they are saved (the ring in schema v46, `avatar_ring`) and shown again in the
 character list, after a login and to players who meet you later. Running a server of this version converts `albionlocal.db` to
 schema v46 (one column; an older server build refuses the converted file).
+
+**Victory emotes ("kill emotes")** (stageR `../analysis/work/stageR/kill-vanity/SPEC.md` §1). The 10 emotes of killemotes.xml are
+owned as charges: the charge items (`T1_KILL_EMOTE_*_CHARGES_*`, used from the inventory: one charge each), a share of the
+cosmetic drops above (`Vanity:KillEmoteDropShare`, 20 %: a bundle of 100 charges of a random emote instead of a skin), and the
+vanity store's charge bundles, sold for **gold** at the client's price (200-600 gold per 100 charges; gold is an in-game currency
+here, nothing is sold for money). Equip one in the vanity window; it plays at your player kills (and, with the window's
+"play on knockdown" setting, at your PvP knockdowns) within 25 m: everyone who sees the victim sees it for its few seconds, and
+it uses one charge. Saved with the character (in the vanity JSON, no schema change). `Vanity:KillEmotes` (true) turns the play off.
+The store's *Reclaim* of a skin answers "cannot reclaim" (only skins unlocked with a reclaimable store item are reclaimable).
+**Kill trophies** (§2): a lethal player kill in the outlands/roads (KILLTROPHY_BLACK) or a corrupted dungeon/hellgate
+(KILLTROPHY_HELL) may give the killer a Memento furniture item, by the victim's gear value (killtrophy.xml: from 6912 item value,
+chance = value / quotient × (1 + 0.2 per assist), larger tiers for richer victims). `Vanity:KillTrophies` (true).
+Not done: the trophy's kill details, placing it (outdoor furniture), *Preserve* (ImmortalizeKillTrophy), its 3-day expiry.
+Not checked in the client yet: the emote's visual at a kill, the charges in the store, the trophy item.
 
 ## Player bots
 
@@ -2407,8 +2636,7 @@ Guilds work through the game's own guild window (`../analysis/work/stageH/guilds
   line `[Guild] name: text` to the members without a chat connection.
 - Guilds, members, roles and crests are saved in `albionlocal.db` (schema v17); open invitations are not.
   `Guilds:Enabled false` turns guilds off (saved ones stay; a deleted character still leaves its guild, and a guild
-  left empty is removed at startup). Not there: the guild bank window and the official tax setting, territories and GvG, the guild finder,
-  guild mail, custom access tags, crest change; the guild keys of other messages (party invite key 6, Died 3/11, the
+  left empty is removed at startup). Not there: the guild bank window, GvG, custom access tags (below); the guild keys of other messages (party invite key 6, Died 3/11, the
   player loot bag 20/21, a mob's owner guild, NewMountObject 9-17) stay empty for now.
 - Known limit: a member whose connection drops in the middle of a cluster change stays "online" for its guild mates
   until its next login or disconnect (the same holds for party members).
@@ -2437,8 +2665,8 @@ The PvE guild (SPEC §10, PVE-DESIGN step 13 part 2; every part behind its own k
   official (public issue #20): **Deposit** moves silver from the member to the account and **Withdraw** (Master of Coin,
   The Right Hand or the guild master: the client's WITHDRAWAL_FROM_SILVER_ACCOUNT right) moves it back; both are saved
   at once, the player gets its new silver and every member the new account balance. A deposit counts in the member logs'
-  silver balance (a withdrawal or payout counts against it). The guild has no gold account (gold is refused), and the
-  account log (`GetGuildAccountLogs`) stays empty. A guild that is deleted (its last member leaves, or `.guild disband`) pays its
+  silver balance (a withdrawal or payout counts against it). The guild has no gold account (gold is refused); deposits,
+  withdrawals and payouts are in the account log (below). A guild that is deleted (its last member leaves, or `.guild disband`) pays its
   account to that last member or to its guild master (at once, or at the next login when offline).
 - **Contracts** (`Guilds:Contracts`, pve true): every `Guilds:ContractPeriod` (`Weekly` from Monday 10:00 UTC, or
   `Daily`) a guild gets `Guilds:ContractCount` (3, at most 4) goals out of: kill 500 mobs, clear 5 dungeons, gather
@@ -2448,6 +2676,30 @@ The PvE guild (SPEC §10, PVE-DESIGN step 13 part 2; every part behind its own k
   experience and `Guilds:ContractSilver` (100000) silver into the account (× tier / 4). `.guild contracts` shows them;
   a login tells the open ones.
 - The account, the experience and the contracts are saved every 30 s and at shutdown (schema v18).
+
+The guild window's other tabs (`../analysis/work/stageR/guild/SPEC.md`; saved in `albionlocal.db`, the stageR schema step):
+
+- **Guild finder**: the recruitment settings of the guild management tab (join mode, languages, home, active hours,
+  activities, beginner flag, discord, description, requirements; the guild master and The Right Hand) are kept and shown
+  in the finder's search by name, its filtered list (language, home, member range, activities) and its recommendations.
+  An **open** guild takes a player at once with "Join" (`Guilds:JoinRole`); an **application** guild gets the "Apply" as
+  a guild-application mail in its guild mailbox (the guild master and The Right Hand see it), whose Accept adds the
+  applicant (in game or not) and whose Decline sends the applicant the "Application Declined" mail. A guild set to
+  "invite only" takes no applications. The applicant's total fame shows in the mail when it chose to show it.
+- **Welcome mail**: the text of the guild management's new-member mail goes to every new member (invited, accepted or
+  joined) as a guild mail "Welcome to <guild>".
+- **Codex** and **banner**: saved and shown to every member (the guild window's codex with its editor and time).
+- **Crest change**: costs `Guilds:LogoChangeGold` gold (3000) from the member who changes it (guild master only, the
+  CHANGE_GUILD_LOGO right), once per `Guilds:LogoChangeCooldownMinutes` (2880); everyone sees the new crest.
+- **Optional stats** of the guild details: the choice is saved; guild age is shown, the hellgate, crystal and faction
+  values are 0 here.
+- **Tax** and **pay upkeep** settings: saved and shown to the members; neither is charged (only `Guilds:SilverTax` takes
+  silver into the account, and there is no guild upkeep here).
+- **Logs**: the account log lists deposits, withdrawals and payouts; the member log lists invitations accepted,
+  applications accepted, instant joins, leaves, kicks and rank changes (with the client's filters and text search, the
+  last 60 days, and its "copy all"). The chest and access-right logs are empty (no guild chests or access lists here).
+- Not done: custom access tags (create / rename / delete / permissions / public tags), guild currency (GvG tokens),
+  cluster tax of territories, the gold and siphoned-energy logs. Not checked in the client yet: all of the above.
 
 
 Commands (Player unless noted): `.g <text>`, `.guild info [name]`, `.guild create <name>` (default crest),
@@ -2737,8 +2989,8 @@ animals (v28) merged in, the conversion goes on to v28.
   the tab (castles, hellgates, power cores …) have no source here and stay 0. The tab shows each category's level from the
   client's own table (PVE level 1 at 20 000 might, 2 at 60 000 …) and, on a click, the members by might. Each level gives
   the guild its season points (PVE and GATHERING 200, CORRUPTED 50; not × `SeasonPointsFactor`: the client's popup shows
-  the table's value), a guild line and the client's might level popup. The personal Conqueror's Challenge window (op 451)
-  is still not served: the might exists only on the guild.
+  the table's value), a guild line and the client's might level popup. The personal might and the Conqueror's Challenge window
+  (op 451) are in the next section.
 - Commands: `.guild season` (season, level, points, bracket, rank, points by activity, contributions, might),
   `.guild goals`, `.guild ranking`; GameMaster `.guildgoal challenge <points> [guild]`, `.guildgoal points <n> [guild]`,
   `.guildgoal might <category> <might> [guild]`, `.guildgoal done <n> [guild]` (with its reward), `.guildgoal roll [guild]`,
@@ -2750,6 +3002,35 @@ Not checked in the client yet: the Guild Challenge tab's bar and list, the level
 values, the journal's GUILD progress display, the Rankings tab and its crests, the Overview's activity rows, the boss kill's
 "+N Season Points" and chat line (whether the boss name resolves), the Guild Might tab, its member list and the might popup,
 the season-end lines and the journal's bracket rewards (`.guildgoal season end`).
+
+### Kill history, personal might and the Conqueror's Challenge
+
+The statistics windows that had no answer (`../analysis/work/stageR/stats/SPEC.md`). Running a server of this version adds the table
+`kill_history` to `albionlocal.db` (one schema step; an older server build refuses the converted file).
+
+- **Kill history** (player menu → Stats): every PvP death and PvP knockdown between two players (not bots) is kept with both
+  loadouts, guilds, item powers, the killer's fame and the cluster. Asking a character's stats (GetCharacterStats, before an empty
+  "ack") sends its kills, deaths, knockdowns and times knocked down (the newest 50 each); a row opens the kill details window
+  (GetKillHistoryDetails). The stats totals themselves (event 142) are not sent, so the window's numbers stay empty. `.kills` shows
+  the counts.
+- **Personal might**: the might the client data gives (PvE kill fame × 0.0016, a third in a random dungeon without a party;
+  gathering and fishing fame × 0.017; a corrupted dungeon's objective; nothing in orange-warning zones), with or without a guild and
+  without `Guild:MightFactor`. It counts for the running client guild season by the client's personal types (PVE, GATHERING,
+  FISHING, CORRUPTED_…: the Might Gain window, op 453) and for the week. After SEASON_34 (the last season in the client data) only
+  the week counts.
+- **Conqueror's Challenge** (activity hub): op 451 shows the season and weekly might and the weekly chest. The weekly might resets
+  at `Bounties:ResetUtc` on Mondays. At 5 000, 10 000 and 15 000 weekly might the client's 2 000 FAVOR each (the FAVOR balance
+  the Brecilien trader takes); at 20 000 the chest UNIQUE_LOOTCHEST_CONQUEROR_WEEKLY_REWARD, claimable once a week with
+  premium (without, the client's claim button opens the premium store, as official). `.might` shows the state; GameMaster
+  `.might add <might>` adds PvE might for a test.
+- Answered empty with the right shape: the daily might bonus (no territory might rule known; nothing to claim), the season reward
+  history (the seasons with personal might, no rewards: the season rewards are not made), item kill history ("not available"),
+  the Armory's builds and usage, a legendary item's history, GetRank (0), the activity chest estimates (0). GetPlayerInfoForStalk
+  answers the character's id by name.
+
+Not done: the stats totals (142), PvE deaths in the list, item kill history, the daily might bonus, the season rewards (454-457),
+favor per might and event 496, TrackAchievements. Not checked in the client yet: the kill lists and the details window (the JSON
+layout is read from the client code, not captured), the weekly bar, favor and chest claim, the empty windows.
 
 ## Personal islands
 
@@ -2843,7 +3124,12 @@ Commands (GameMaster): `.island give [city] [level]`, `.island level <0-5> [city
 building, its centre at x z or here), `.island unbuild` (the nearest one within 15 m, with its crops), `.island farms [city]`
 (buildings and crop growth), `.island ripen [city]` (every crop grown now).
 
-Not done: construction sites (materials are taken at once), house repairs and skins, decorative furniture use (chests), the
+- **Chests.** A furniture chest (`T2_FURNITUREITEM_CHEST` … T8, the unique chests: items.xml `<container>`, 64 or 32 slots) placed
+  in the house opens like a bank vault when clicked; its items are saved with the owner (they survive a restart). It cannot be
+  picked up, nor its house given up or `.island unbuild` remove it, while it holds anything. Beds and tables have no use of their
+  own (only the labourers' happiness); no furniture of this client's data has a usable effect.
+
+Not done: construction sites (materials are taken at once), house repairs and skins, the
 labourers' loot container window (the loot goes straight into the inventory), the rabbits of the island templates (world.xml `<mobcounts>`; the server spawns no mobcounts, so the SPEC's
 `Islands:ExtraMobCounts` would need that first), guests on islands, guild
 islands. Not yet checked with the client (SPEC §1.8 C1-C6, §2.6 C7-C11, §3.5 C12-C15): "Visit" / "Buy" in the merchant
@@ -2898,6 +3184,8 @@ Commands start with a `.` and are typed either into the game's chat or into the 
 | `.bounty` | Player | the daily and weekly bounties with your progress, your Adventurer's Challenge points, today's PvP challenge points (of `Pvp:DailyPointsCap`) and the PvP credits refused today by reason |
 | `.guild season`, `.guild goals`, `.guild ranking` | Player | your guild's season (Guild Challenge level and points, season points, bracket, rank, might), its weekly goals with the blessing and the guilds by season points (see Guild goals) |
 | `.guildgoal challenge <points> [guild]`, `.guildgoal points <n> [guild]`, `.guildgoal might <category> <might> [guild]`, `.guildgoal done <n> [guild]`, `.guildgoal roll [guild]`, `.guildgoal season end` | GameMaster | Guild Challenge points, guild season points, guild might of a category, a weekly goal finished with its reward, the week's goals rolled again, the current guild season ended and paid now |
+| `.might`, `.kills` | Player | your Conqueror's Challenge (weekly might, chest, season might) and the counts of your kill history (see Kill history, personal might and the Conqueror's Challenge) |
+| `.might add <might>` | GameMaster | personal PvE might with its weekly favor rewards and chest (a test of the window) |
 | `.exp list` | GameMaster | the expedition registrations (state) and the live instances (members, step and task counts, time left) |
 | `.exp start <index\|uniquename> [level] [players]` | GameMaster | sends the player into a new instance of that expedition (`.exp start 3` = T3_EXP_STD_HERETIC_MINE; `.exp start 20 5 2` = a hardcore level 5 scaled for 2), the way back where it stands |
 | `.exp finish` | GameMaster | completes the player's expedition now (the rewards and the finish exit) |

@@ -150,15 +150,20 @@ public sealed partial class WorldSession
 
     /// <summary>
     /// AccessRightsChangeSettings (op 198, od {0 object, 1 bool, 2 Guid, 3 preset, 4 groups, 5 roles}): on a hideout's surface object or
-    /// management the preset (<see cref="Systems.Hideouts.SetAccess"/>), RC 0, refused RC 1 with a line. Other objects: no answer, as before (no
-    /// other access rights are kept).
+    /// management the preset (<see cref="Systems.Hideouts.SetAccess"/>), on a player's station its preset (<see cref="Systems.OwnedBuildings.SetAccess"/>),
+    /// RC 0, refused RC 1 with a line. Other objects: no answer, as before (no other access rights are kept).
     /// </summary>
     [Handles(OperationCodes.AccessRightsChangeSettings, Status = SessionStatus.InWorld)]
     private AlbionResponse? AccessRightsChangeSettings(AccessRightsChangeSettingsRequest req)
     {
         if (Player is not { } p) return null;
         var why = world.Hideouts.SetAccess(p, req.d, req.g, req.h, req.i, out var mine);
-        if (!mine) return null;
+        if (!mine)
+        {
+            // StageR buildings SPEC §2: a player's station (who may use it: the preset).
+            why = world.OwnedBuildings.SetAccess(p, req.d, req.g, req.h, req.i, out mine);
+            if (!mine) return null;
+        }
         if (why is null) return new GenericResponse();
         Log.Info(Name, $"'{p.Character.Name}' access change of object {req.d} refused: {why}");
         TellHideout(why);

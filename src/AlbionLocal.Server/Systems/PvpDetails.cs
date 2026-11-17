@@ -72,6 +72,16 @@ public static class PvpDetails
         foreach (var old in c.FocusAttackers.Where(h => h.Value < from).Select(h => h.Key).ToList()) c.FocusAttackers.Remove(old);
         c.FocusAttackers[attacker.Id] = ticks;
         if (c.FocusAttackers.Count >= 2) c.FocusFire = (c.FocusAttackers.Count, ticks + SpellCasts.Seconds(s.FocusFireSeconds));
+        return ResilienceInForce(attacker, target, ticks);
+    }
+
+    /// <summary>The resilience factor as it stands, with nothing noted (<see cref="Resilience"/> goes on here; a module's look at a hit about to land).</summary>
+    public static double ResilienceInForce(Player attacker, Player target, long ticks)
+    {
+        var world = target.World;
+        if (attacker == target || !world.Config.PvpResilience) return 1;
+        var s = Settings(world);
+        var c = target.Combat;
         if (c.FocusFire.Until <= ticks || s.FocusFireRowOf(c.FocusFire.Level) is not { } row) return 1;
         var m = target.IsMounted ? row.Mounted : Combat.WeaponOf(attacker).Type == "melee" ? row.Melee : row.Ranged;
         var penetration = Math.Clamp((attacker.Effects.Idle ? 0 : attacker.Effects.Sum("focusfireprotectionpenetration", world.GameNow))

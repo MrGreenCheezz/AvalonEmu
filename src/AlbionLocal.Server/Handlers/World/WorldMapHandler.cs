@@ -42,6 +42,7 @@ public sealed partial class WorldSession
                 SendEvent(ev);
                 sent++;
             }
+        if (sent > 0 && world.RedZone.Phase != Systems.RedZoneEvents.None) SendEvent(world.RedZone.WorldMapEvent()); // stageR fw-zone: as captured, after the batch
         Log.Debug(Name, $"SubscribeToCluster: {sent} of {ids.Length} cluster(s) answered{(ids.Length > MaxMapIds ? $" (only the first {MaxMapIds} looked at)" : "")}");
         return null;
     }

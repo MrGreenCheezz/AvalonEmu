@@ -87,7 +87,7 @@ public sealed partial class LoginSession
             bep = LoginWorld.Key57,     // [57] server session; compared on reconnect ("server was restarted"); seeds the open-world layout
             bfb = LoginWorld.Flags,     // [79] event flags of the layout (none: an empty array, as FillEmpty sent it before)
             bfh = true,                 // [85] when false during a reconnect the client auto-selects a character
-            bfv = LoginWorld.Features(), // [99] dew.a feature table, one entry per Features value
+            bfv = LoginWorld.Features(config.PartyFinderEnabled), // [99] dew.a feature table, one entry per Features value
         };
         FillCharacterList(r, characters.List(_account.Id), World?.Guilds, Systems.Premium.ListDays(config), World);
         r.FillEmpty();

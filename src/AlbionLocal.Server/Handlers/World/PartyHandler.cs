@@ -7,7 +7,8 @@ namespace AlbionLocal.Server.Network;
 /// <summary>
 /// Parties (analysis/work/stageD/party/SPEC.md §1, §7; the rules in <see cref="Parties"/>): invite, answer, leave, kick, leader,
 /// loot mode, marks, roles and a member's cluster. All but PartySetRole carry a request id, so each gets a response (rc 0 or
-/// the client's error code). Join requests (226/228), ready checks and the party finder are not covered (SPEC §8).
+/// the client's error code). Join requests, ready checks, navigation and the FW flag are in PartyExtrasHandler.cs (stageR);
+/// the party finder is not covered.
 /// </summary>
 public sealed partial class WorldSession
 {

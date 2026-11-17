@@ -10,7 +10,7 @@ using AlbionLocal.Server.Systems;
 namespace AlbionLocal.Server.Network;
 
 /// <summary>ActionComponentType (op 55 key 2): what a station action is.</summary>
-public enum StationAction : byte { CraftItem = 1, RepairItem = 2, SalvageItem = 3, MeldItem = 5, RerollQuality = 6, UpgradeEnchantment = 7, Awaken = 8 }
+public enum StationAction : byte { CraftItem = 1, RepairItem = 2, SalvageItem = 3, StudyItem = 4, MeldItem = 5, RerollQuality = 6, UpgradeEnchantment = 7, Awaken = 8 }
 
 /// <summary>RepairItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 2).</summary>
 public enum RepairError : byte
@@ -29,7 +29,7 @@ public enum MeldError : byte
 }
 
 /// <summary>CraftItemErrorCode (key 3 of a failed op 55 with RC 2202 for ACT 1).</summary>
-public enum CraftError : byte { NotEnoughSilver = 6, NotEnoughResources = 8, InventoryFull = 14, PriceChanged = 23 }
+public enum CraftError : byte { NotEnoughSilver = 6, NotEnoughResources = 8, InventoryFull = 14, InvalidRights = 16, NutritionLow = 21, PriceChanged = 23 }
 
 /// <summary>
 /// Op 55 ActionOnBuildingStart, the station actions (stage 6 SPEC §6a.1, §6a.3, §6c with the verifier's corrections): the
@@ -75,7 +75,7 @@ public sealed partial class WorldSession
             return Generic($"another station action runs at building {busy.Building.Id}");
         if (Systems.OpeningTutorial.ForgeLocked(player, building)) return Generic("tutorial forge is locked until its quest is accepted");
         var far = Vector2.Distance(player.PositionAt(DateTime.UtcNow), building.Position) > StationRange;
-        return (StationAction)req.p switch
+        var answer = (StationAction)req.p switch
         {
             StationAction.RepairItem when !building.Template.Repairs => Generic($"{building.Template.Name} does not repair"),
             StationAction.RepairItem when far => StationRefused(player, req, StationComponentError, (byte)RepairError.OutOfRange, "out of range"),
@@ -83,6 +83,9 @@ public sealed partial class WorldSession
             StationAction.SalvageItem when !building.Template.Salvages => Generic($"{building.Template.Name} does not salvage"),
             StationAction.SalvageItem when far => StationRefused(player, req, StationComponentError, (byte)SalvageError.OutOfRange, "out of range"),
             StationAction.SalvageItem => StartSalvage(player, building, req),
+            StationAction.StudyItem when !Studies(building.Template) => Generic($"{building.Template.Name} does not study"),
+            StationAction.StudyItem when far => StationRefused(player, req, StationComponentError, (byte)StudyError.OutOfRange, "out of range"),
+            StationAction.StudyItem => StartStudy(player, building, req),
             StationAction.CraftItem when building.Template.CraftItems.Count == 0 => Generic($"{building.Template.Name} crafts nothing"),
             StationAction.CraftItem when far => Generic("out of range"),
             StationAction.CraftItem => StartCraft(player, building, req),
@@ -100,6 +103,9 @@ public sealed partial class WorldSession
             StationAction.Awaken => StartLegendary(player, building, req),
             _ => Generic($"ACT {req.p} is not made yet"),
         };
+        // The modules' BuildingAction: a started action gets no response (a refusal does).
+        world.Modules.BuildingAction(player, building.Template.Name, ((StationAction)req.p).ToString(), answer is null);
+        return answer;
     }
 
     /// <summary>The failure response of op 55 (see the class), logged with why.</summary>
@@ -451,6 +457,20 @@ public sealed partial class WorldSession
         if (world.Mists.TraderRefusal(player, recipe, crafts) is { } gated) return Refuse(CraftError.NotEnoughResources, gated);
         if (world.Factions.ShopRefusal(player, recipe, crafts, building.Template) is { } faction) return Refuse(CraftError.NotEnoughResources, faction); // stageN faction SPEC §3
         var price = Pricing.CraftPrice(recipe, crafts);
+        // StageR buildings SPEC §2: at a player's station the role decides (noaccess: InvalidRights), each craft eats the item's nutrition
+        // (NutritionLow when the building lacks it) and the role's fee per 100 nutrition is added to the price (cl3.al_6 0x180B4E070).
+        long nutrition = 0, fee = 0;
+        if (building.State is not null)
+        {
+            var owners = world.OwnedBuildings;
+            if (owners.Role(building, player) == "noaccess") return Refuse(CraftError.InvalidRights, $"{building.Template.Name} is not open to the player");
+            var perCraft = owners.NutritionPerCraft(item);
+            nutrition = checked(perCraft * crafts);
+            fee = checked(OwnedBuildings.Fee(perCraft, owners.FeeOf(building, player)) * crafts);
+            if (!owners.HasNutrition(building, nutrition))
+                return Refuse(CraftError.NutritionLow, $"{building.Template.Name} has {building.State.Nutrition / (double)Pricing.A7m:0.##} nutrition, the crafts need {nutrition / (double)Pricing.A7m:0.##}");
+            price += fee;
+        }
         if (!Pricing.Accepts(req.r, price, world.Config.GoldPriceIndex))
             return Refuse(CraftError.PriceChanged, string.Create(CultureInfo.InvariantCulture, $"the client's price {req.r / 10000.0:0.####} is not the server's {price / 10000.0:0.####}"));
         if (player.Character.Silver < req.r) return Refuse(CraftError.NotEnoughSilver, $"{player.Character.Silver / 10000} silver of {req.r / 10000}");
@@ -478,6 +498,7 @@ public sealed partial class WorldSession
         Wallet.TrySpend(player, req.r, $"{crafts} x {item.Name} at {building.Template.Name}"); // 2. UpdateMoney
         world.Mists.PayFavor(player, recipe, crafts); // stageL mists phase B: the City Trader's FAVOR
         world.Factions.Pay(player, recipe, crafts);   // stageN faction SPEC §3: the faction trader's FACTION_* points
+        world.OwnedBuildings.Used(building, nutrition, fee, inUse: !instant); // stageR buildings SPEC §2: the nutrition eaten, the fee to the owner's earnings
 
         double focusUsed = 0, focusShare = 0;
         if (!building.Template.IsShop)
@@ -511,6 +532,7 @@ public sealed partial class WorldSession
                     item.IsEquipment ? RollQuality(world.CraftRandom, world.Economy.QualityWeights, qualityBonus) : 1));
             if (returns > 0) GiveReturns(player, recipe, done, returns);
             if (fames) AwardCraftFame(player, item, checked(done * recipe.AmountCrafted));
+            world.Modules.ItemCrafted(player, item.Name, checked(done * recipe.AmountCrafted), building.Template.Name); // the modules' ItemCrafted
             var finished = new CraftItemFinishedEvent { ddn = player.Id, b1d = building.Id, b1e = [.. made.Select(i => i.Id).Distinct()], b1f = [], b1g = [] };
             SendEvent(finished);
             if (!instant) player.SendToObservers(finished);
@@ -523,6 +545,7 @@ public sealed partial class WorldSession
             foreach (var r in recipe.Resources)
                 if (world.Items.Find(r.Name) is { } type && Fits(player.Inventory.Bag, [(type, r.Count * left)])) GiveItem(player, type, r.Count * left);
             Wallet.Credit(player, req.r * left / crafts, $"{left} craft(s) of {item.Name} cancelled");
+            world.OwnedBuildings.Used(building, -nutrition * left / crafts, -fee * left / crafts);
             Focus.Refund(player, focusUsed * left / crafts, world.GameNow);
         };
         void Craft()

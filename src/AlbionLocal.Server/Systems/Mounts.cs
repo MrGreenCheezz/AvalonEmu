@@ -122,9 +122,10 @@ public static class Mounts
     /// whose archetype has allowmounts false (dungeons, expeditions, arenas: <see cref="ClusterPvp.AllowMounts"/>). Returns why it is
     /// refused; null = accepted.
     /// </summary>
-    public static string? Check(Player p, long itemId)
+    public static string? Check(Player p, long itemId, bool remount = false)
     {
         if (p.Map is null || p.Combat.Down is not null) return "knocked down";
+        if (p.World.Carriables.Of(p) is { } carried) return $"carrying {carried.Type.Name} (no mount while transporting)"; // stageR smugglers
         if (!Pvp.RulesOf(p.World, p.Map).AllowMounts) return "no mounts in this cluster (allowmounts false)";
         if (p.Mount.State != MountState.None) return $"already {p.Mount.State}";
         if (ItemOf(p) is not { } item) return "no mount in slot 7";
@@ -134,7 +135,7 @@ public static class Mounts
         if (now < p.Character.MountCooldownUntil) return $"on cooldown for {(p.Character.MountCooldownUntil - now) / (double)TimeSpan.TicksPerSecond:0.#} s";
         if (p.Harvest is not null || p.Combat.Cast is not null || p.Action is { Over: false }) return "a harvest, cast or station action is under way";
         if (Spell(p, item.Template.Mount!.MountedBuff) is null) return $"no mounted buff {item.Template.Mount.MountedBuff} in spells.xml";
-        return null;
+        return p.World.Modules.MountCheck(p, item, remount); // the modules' Mounts.OnBeforeMount
     }
 
     /// <summary>
@@ -161,6 +162,7 @@ public static class Mounts
         p.Session.Send(Network.WorldSession.ItemObject(item, inUse: true));
         p.SendToObservers(new MountStartEvent { ddn = p.Id, csu = now, csv = item.Template.Index, csw = near });
         Log.Debug("mount", $"'{p.Character.Name}' mounts {item.Template.Name}{(near ? " (remount)" : "")}: {(pending.End - now) / TimeSpan.TicksPerMillisecond} ms");
+        world.Modules.MountEvent(world.Modules.Hooks.MountStart, p, item.Template, near ? "remount" : "mount"); // Mounts.OnMountStart
         SpellCasts.At(world, map, pending.End, () =>
         {
             if (p.Mount.Pending == pending && p.Map == map) Complete(p, pending);
@@ -209,6 +211,15 @@ public static class Mounts
         p.Character.MountedSince = t;
         world.Saves.MarkChanged(p.Character);
         Log.Info("mount", $"'{p.Character.Name}' is mounted on {item.Template.Name}");
+        if (world.Modules.Hooks.Mounted.Any) // the modules' Mounts.OnMounted: the gallop buff may be another spell, or none
+        {
+            var gallop = p.Mount.Speed?.Spell.Name;
+            var chosen = world.Modules.Mounted(p, item.Template, gallop);
+            if (chosen != gallop)
+                p.Mount.Speed = chosen is null ? null : Spell(p, chosen) is not { } faster ? p.Mount.Speed
+                    : p.Mount.Speed is { } old ? old with { Spell = faster }
+                    : new MountSpeedBuff(faster, 5, SpellCasts.Seconds(4), SpellCasts.Seconds(4), SpellCasts.Seconds(2));
+        }
     }
 
     /// <summary>
@@ -223,6 +234,7 @@ public static class Mounts
         p.SendAround(new MountCancelEvent { ddn = p.Id });
         p.Session.Send(Network.WorldSession.ItemObject(pending.Item, inUse: false));
         Log.Debug("mount", $"'{p.Character.Name}' mount cancelled: {why}");
+        p.World.Modules.MountEvent(p.World.Modules.Hooks.MountCancel, p, pending.Item.Template, why); // Mounts.OnMountCancel
     }
 
     /// <summary>
@@ -286,6 +298,7 @@ public static class Mounts
         SpellEffects.Send(world, p);
         SpellEffects.Refresh(world, p);
         Log.Info("mount", $"'{p.Character.Name}' dismounts");
+        world.Modules.MountEvent(world.Modules.Hooks.Dismount, p, item?.Template, "dismount"); // Mounts.OnDismount
     }
 
     /// <summary>
@@ -394,6 +407,7 @@ public static class Mounts
     /// </summary>
     public static void Damage(Player p, long attacker, float damage, EffectType type, HitOrigin origin, short spell, long ticks, bool hostile = false)
     {
+        damage = (float)p.World.Modules.MountDamage(p, p.Mount.Ridden ?? ItemOf(p)?.Template, attacker, damage, origin, spell); // Mounts.OnCalcMountDamage
         var left = Math.Max(0, p.MountHealth.At(ticks) - damage);
         p.MountHealth.Set(left, Math.Max(ticks, p.MountHealth.Stamp));
         p.SendAround(new MountHealthUpdateEvent
@@ -444,6 +458,7 @@ public static class Mounts
             SpellCasts.Execute(new SpellCasts.SpellContext(p, map, forced, 0, Combat.AbilityPowerOf(p, item), null, at, t)
                 { CcAbilityPower = Combat.CcAbilityPowerOf(p, item) }, forced);
         Log.Info("mount", $"'{c.Name}''s mount died{(hostile ? " (hostile)" : "")}: no mount for {data?.ForcedDismountCooldown ?? 30} s");
+        world.Modules.MountEvent(world.Modules.Hooks.Dismount, p, item?.Template, "died"); // Mounts.OnDismount
     }
 
     /// <summary>
@@ -469,6 +484,7 @@ public static class Mounts
         Cancel(p, "knocked down");
         if (p.IsMounted)
         {
+            p.World.Modules.MountEvent(p.World.Modules.Hooks.Dismount, p, p.Mount.Ridden, "knockdown"); // Mounts.OnDismount
             Unride(p);
             p.Character.MountedSince = 0;
             p.World.Saves.MarkChanged(p.Character);

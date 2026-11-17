@@ -45,7 +45,7 @@ namespace AlbionLocal.Server.Systems;
 /// Pvp:LethalDeath false (the pve preset, PVE-DESIGN.md §1): no death at all, <see cref="Pvp.Lethal"/> is false everywhere (the hit
 /// knocks down, no execute, no die button, no death on leaving while down).
 /// An arena (ARENA_*) or an unnamed archetype (<see cref="ClusterPvp.NoDeathLoss"/>) kills without item loss [infer: their teams
-/// and matches are not modelled]. Not modelled (TODO): the guild keys (3/11, guilds part 2) and the kill feed's item power (Died 7/15), kill trophies, might/favor, the bleed-out state of
+/// and matches are not modelled]. Not modelled (TODO): the guild keys (3/11, guilds part 2) and the kill feed's item power (Died 7/15), might/favor, the bleed-out state of
 /// enterbleedoutstateondeath, resurrection by party members, the effect category 30 that forbids an execute. Touched only under
 /// <see cref="World.Sync"/>.
 /// </summary>
@@ -152,11 +152,14 @@ public static class Death
         else if (killer is not null)
         {
             var shares = Reward(killer, victim, fame, attackers, crime, ticks);
+            world.KillHistory.Record(killer, victim, knockdown: false, shares.FirstOrDefault(s => s.Player == killer).Fame, ticks); // stageR stats, before the drop
             // Stage I (pvp-goals SPEC §2.1): the PvP goals of the kill, the victim's journal death.
             PvpGoals.OnPvpKill(world, new PvpKill(PvpActor.Of(killer), PvpActor.Of(victim), [.. attackers.Select(a => (PvpActor.Of(a.Player), a.Damage))], map,
                 PvpOutcome.Death, crime, fame, ticks, Math.Max(1, attackers.Count)) { FameShares = shares });
             PvpGoals.OnPvpDeath(victim, map, byBot: false);
             world.Corrupted.Defeated(killer, victim); // stageL corrupted: one side of an invasion killed the other (the official preset's lethal ranks)
+            world.Vanity.KillEmotes.Played(killer, victim, knockdown: false); // stageR kill-vanity: the killer's victory emote
+            world.Vanity.KillTrophies.Killed(killer, victim, Math.Max(1, attackers.Count)); // stageR kill-vanity: a kill trophy where the zone has one
         }
         if (cause != Cause.NoLoss && rules.NoDeathLoss)
         {
@@ -273,7 +276,11 @@ public static class Death
             for (var slot = 0; slot < container.Size; slot++)
             {
                 if (container[slot] is not { } item) continue;
-                if (wear is not null && Wear(item, wear, multiplier, random)) worn.Add(item);
+                if (wear is not null && Wear(item, wear, multiplier, random))
+                {
+                    worn.Add(item);
+                    if (item.DurabilityRaw <= 0) world.Modules.Broke(victim, item, "death"); // Items.OnBreak
+                }
                 if (stack is null) continue;
                 container.Take(slot);
                 var lost = RandomRound(item.Count * stack.For(item.Template.Kind), random);

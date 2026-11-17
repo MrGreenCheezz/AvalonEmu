@@ -22,14 +22,13 @@
 // GetPersonalSeasonPastRewardData, GetFactionWarfareCampaignData, TrackAlbionJournalAchievements, QuickSellAuctionQueryAction; since the
 // goals (PVE-DESIGN step 11): GetPersonalSeasonTrackerData, GetCharacterSteamAchievements, ClaimAlbionJournalReward; since the
 // island farms (PVE-DESIGN step 14 phase 3): PlaceableObjectPlace, BoostFarmable; since the mail (stageJ mail SPEC): ReadMail.
-// Since the vanity (stageN vanity SPEC): GetVanityUnlocks.
+// Since the vanity (stageN vanity SPEC): GetVanityUnlocks; since the victory emotes (stageR kill-vanity SPEC): GetVanityConsumables.
 {
   // ---- login server
   "AccountSubscriptionInfo": {},      // c3d.j.c: key 0 (character Guids), keys 1/2 per entry; none = no flags
   "GetSurveyLogs": {},                // c3d.cl: rows up to the shortest of keys 0-2; none = no surveys
 
   // ---- game server
-  "GetVanityConsumables": {},         // cjk.c.c → bh(bcm, ajg): keys 0/1 parallel; none = no consumables
   "ArmoryItemUsageStatistics": {},    // ItemDetailsPopularBuildsView.OnSearchResult: empty key 0 = view stays hidden
   "GoldMarketGetInfos": {},           // del.x: thirteen numbers kept as they are
   "GoldMarketGetAverageInfo": {},     // del.a.c: keys 0/1 parallel price history; none = no history
@@ -45,10 +44,14 @@
   // QueryGuildPlayerStats and GetGuildEnergyDrainInfo did with the guilds, Handlers/World/GuildHandler; GetGvgSeasonRank,
   // GetGuildChallengePoints, GetGvgSeasonRankings, GetGvgSeasonContributionByActivity and GetGuildMightCategoryOverview with the
   // guild goals of stage I, Handlers/World/GuildSeasonHandler)
-  "GetPvpChallengeData": {},
   "GetShopTilesForCategory": {},
-  "GetGuildAccountLogs": {},
-  // (GvGSeasonPlayerGuildParticipationDetails since the territories' phase P2, Handlers/World/GuildSeasonHandler; GetMyTerritories since
+  // (GetPvpChallengeData since the stageR stats, Handlers/World/StatsHandler)
+  // stageR stats SPEC §4: windows whose numbers come from the official population or rankings this server does not have; the empty
+  // answer of the right shape, as the unhandled default sent, without its warning:
+  "GetRank": {},                          // 150: key 0 the rank, 0 = unranked (GetRankings has no rows here either)
+  "ArmorySearch": {},                     // 529: the official players' popular builds: none
+  "GetClusterActivityChestEstimates": {}, // 511: three a7m estimates of a cluster's activity chests: 0 [assume: no estimate shown]
+  // (GetGuildAccountLogs since the stageR guild logs, Handlers/World/GuildLogHandler; GvGSeasonPlayerGuildParticipationDetails since the territories' phase P2, Handlers/World/GuildSeasonHandler; GetMyTerritories since
   // phase P3, Handlers/World/TerritoryHandler)
 
   // PremiumStoreGui.d.d: rc 0 = bought ("@PREMIUM_STORE_BUY_SILVER_RESULT_*" from key 0, though nothing was), 10521 =
@@ -67,9 +70,9 @@
 
   // ---- answered with a bare rc-0 response by the official server, although the client has no response class
   // (002835; the unhandled default sent nothing): {253, 255} as official
-  "GetCharacterStats": "ack",                              // rc 0 with the request id, then a stats event (not sent here)
-  "PartyFinderRegisterApplicants": "ack",                  // 2 x rc 0 with the request id
-  "PartyFinderUnregisterApplicants": "ack-no-request-id",  // rc 0 without key 255, although the request had one
+  // (GetCharacterStats "ack" was here: since the stageR stats a handler with the kill history lists, Handlers/World/StatsHandler.
+  // PartyFinderRegisterApplicants "ack" and PartyFinderUnregisterApplicants "ack-no-request-id" were here: since stageR the
+  // party finder's handlers answer them the same way, PartyFinderHandler. No "ack" entry is left; the kinds stay for new ones.)
 
   // ---- no response class and never answered officially (0 responses in all captures; ops-audit SPEC §1, §6): the
   // unhandled default's silence without its warning
@@ -78,8 +81,7 @@
   "ClientFrametimeSpike": "ignore",                // telemetry, 4
   "ProductShopUserEvent": "ignore",                // shop telemetry, 2
   "EventBasedPopupAddSeen": "ignore",              // store/marketing pop-up seen, 3
-  "PartyFinderRegisterForUpdates": "ignore",       // answered only by PartyFinder update events (no Party Finder here)
-  "PartyFinderUnregisterForUpdates": "ignore",
-  "PartyFinderRequestEquipmentSnapshot": "ignore",
+  // (PartyFinderRegisterForUpdates / UnregisterForUpdates / RequestEquipmentSnapshot were here: since stageR PartyFinderHandler
+  // answers them with the finder's events only, as official)
   "RequestEstimatedMarketValue": "ignore"          // its event EstimatedMarketValueUpdate was never seen, 5 requests
 }

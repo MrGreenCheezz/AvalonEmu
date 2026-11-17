@@ -102,6 +102,9 @@ public class BehaviourAI : AggressiveAI, IMobCaster
         base.Update(world, map);
     }
 
+    /// <summary>A module's cast (IMob.CastSpell) is its cast under way: it stands for it, and an interrupt, a reset or its death ends it.</summary>
+    internal void Adopt(MobCast cast, World world) { Cast = cast; RestartLeash(world); }
+
     // ---- escape (stageN spells2: mobs.xml EscapeSpellSequence) ----
 
     /// <summary>The escape spells still to cast (null: not fleeing), and the point its escapeposition spells aim at.</summary>

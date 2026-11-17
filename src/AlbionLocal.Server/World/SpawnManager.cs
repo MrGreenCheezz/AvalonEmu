@@ -25,6 +25,12 @@ public sealed class MobSpawnSlot(MobSpawnPoint point)
     /// <summary>StageL roads (SPEC §5.5): the level of the road chest the point guards (an allowUpgradeByChest block); null = its lowest (no chest in reach).</summary>
     public int? ChestLevel { get; internal set; }
 
+    /// <summary>StageQ camps: the players its mobs fight although they are npchostility guards (a faction camp's point, <see cref="Systems.FactionCamps.FoesAt"/>); null = none.</summary>
+    public Func<Player, bool>? Foes { get; init; }
+
+    /// <summary>StageQ camps: an inactive faction camp's point: it waits for its camp, not for a respawn time (a despawn sets none).</summary>
+    public bool Held { get; internal set; }
+
     public override string ToString() => $"{Point.Key} {Point.MobName}{(Point.SpawnBehavior is { } b ? $" ({b})" : "")}";
 }
 
@@ -64,7 +70,8 @@ public static class SpawnManager
             }
             // StageL corrupted (SPEC §1.2): the demon, the shards and the anti-reset imps never spawn by timer; the instance places them.
             if (point.SpawnBehavior is { } behaviour && map.ScriptedSpawns.Contains(behaviour)) continue;
-            var slot = new MobSpawnSlot(point) { ChestLevel = world.WorldChests.PlannedLevel(map, point) }; // stageL roads: the camp guards the chest's level
+            // stageL roads: the camp guards the chest's level; stageQ camps: a faction camp's guards fight the flagged players
+            var slot = new MobSpawnSlot(point) { ChestLevel = world.WorldChests.PlannedLevel(map, point), Foes = Systems.FactionCamps.FoesAt(template, point) };
             map.MobSlots.Add(slot);
             if (Spawn(map, slot, world, template.Name) is { } mob) mobs.Add(mob);
             else
@@ -87,6 +94,7 @@ public static class SpawnManager
             slot.RespawnAt = null;
             if (Spawn(map, slot, world) is { } mob)
             {
+                if (world.Modules.BeforeRespawn(map, slot, mob, now)) continue; // the modules' Mobs.OnBeforeRespawn
                 map.AddObject(mob);
                 world.WorldChests.MobSpawned(map, mob); // stageH: a protecting mob back locks its POI chest again
             }
@@ -109,6 +117,7 @@ public static class SpawnManager
         var mob = new Mob(world.ObjectIds.Next(), point, template, Mob.FlaggingOf(template, point.Tile, cluster ?? map.Template?.Name), world.GameNow, world.Now)
         {
             Slot = slot, World = world, HealthFactor = map.MobHealthFactor, DamageFactor = map.MobDamageFactor, // stageH: an expedition's group scaling
+            Foes = slot.Foes,
         };
         slot.Mob = mob;
         LevelBuff(map, mob, world);
@@ -182,7 +191,7 @@ public static class SpawnManager
         if (map is not null && mob.Template.Category is "boss" or "miniboss") world.Dungeons.BossChecks(map); // stageH: a boss chest it guarded unlocks
         if (mob.Slot is not { } slot || slot.Mob != mob) return;
         slot.Mob = null;
-        slot.RespawnAt = respawn && map is { NoRespawn: false } ? world.Now + RespawnDelay(map, slot, mob.Template, world) : null;
+        slot.RespawnAt = respawn && map is { NoRespawn: false } && !slot.Held ? world.Now + RespawnDelay(map, slot, mob.Template, world) : null;
     }
 
     /// <summary>

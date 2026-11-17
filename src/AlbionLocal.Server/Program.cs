@@ -48,6 +48,7 @@ if (args.Contains("--check-content"))
         return 1;
     }
 }
+if (AlbionLocal.Server.Modules.ModuleCli.Run(args, config) is { } moduleExit) return moduleExit; // --new-module, --check-modules, --modules-build (docs/modules/README.md)
 // Here, not in ServerHost: the self-test builds its servers with the default config and must not write into data/.
 if (config.LogFile is { } logFile) Log.SetFile(logFile);
 

@@ -522,7 +522,7 @@ public sealed class RealEstates
     // ---- money and mail ----
 
     /// <summary>Silver to a character: into its wallet when it plays, else owed to it at its next Join (the market's credits).</summary>
-    private void Pay(Guid character, long raw, string why)
+    internal void Pay(Guid character, long raw, string why)
     {
         if (raw <= 0 || character == Guid.Empty) return;
         if (world.Parties.Online(character) is { } p)
@@ -559,7 +559,12 @@ public sealed class RealEstates
             Key = new SpawnKey(cluster, "plot", (int)(b.Built % int.MaxValue)), Tile = template.Name, Position = new Vector2(b.X, b.Z), Direction = b.Rotation,
             Component = new XElement("building", new XAttribute("name", template.Name)), Guid = b.Id, Template = template,
         };
-        return new Building(world.ObjectIds.Next(), spawn, b.Built, loadTime) { Owner = OwnerOf(plot), PlotBuilding = b };
+        // StageR buildings SPEC §2: the owner's fees, earnings, nutrition and access preset (OwnedBuildings).
+        var dish = OwnedBuildings.FavouriteDish(template) is { } d && world.Items.Find(d.Item) is { } food ? food.Index : -1;
+        return new Building(world.ObjectIds.Next(), spawn, b.Built, loadTime)
+        {
+            Owner = OwnerOf(plot), PlotBuilding = b, State = world.OwnedBuildings.For(b.Id, template), Owners = world.OwnedBuildings, DishIndex = dish,
+        };
     }
 
     /// <summary>
@@ -621,11 +626,16 @@ public sealed class RealEstates
         return (building, "");
     }
 
-    /// <summary>A station on a plot comes down (given up, the plot freed or lost at auction): out of the store and off the map; nothing comes back.</summary>
+    /// <summary>
+    /// A station on a plot comes down (given up, the plot freed or lost at auction): out of the store and off the map; nothing of its cost
+    /// comes back, but the silver it held (fees not taken, the feeding reward pool; stageR buildings SPEC §2) goes to the plot's owner.
+    /// </summary>
     public void Demolish(RealEstatePlot plot, RealEstateBuilding b)
     {
         _buildings.Remove(b.Id);
         store?.DeleteRealEstateBuilding(b.Id);
+        if (world.OwnedBuildings.Remove(b.Id) is { } state)
+            Pay(plot.Owner, state.Earned + state.RewardStorage, $"the silver held by {b.Name} on {plot}");
         if (world.Maps.Find(plot.Cluster) is { } map && map.Objects.Values.OfType<Building>().FirstOrDefault(o => o.PlotBuilding?.Id == b.Id) is { } o)
             map.RemoveObject(o);
     }
@@ -635,7 +645,11 @@ public sealed class RealEstates
     {
         foreach (var plot in _plots.Values.Where(p => p.Owner == character).ToList())
         {
-            foreach (var b in BuildingsOn(plot.Id).ToList()) _buildings.Remove(b.Id);
+            foreach (var b in BuildingsOn(plot.Id).ToList())
+            {
+                _buildings.Remove(b.Id);
+                world.OwnedBuildings.Remove(b.Id);
+            }
             _plots.Remove(plot.Id);
             plot.Owner = Guid.Empty;
             Changed(plot, plot.Id);

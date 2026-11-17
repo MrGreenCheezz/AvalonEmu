@@ -54,8 +54,13 @@ public sealed partial class WorldSession
         if (world.Market is null || player.Map is not { } map) return null;
         if (building == 0) return map.TutorialOwner is null ? map.Cluster : map.InstanceKey;
         if (!map.Objects.TryGetValue(building, out var o) || o is not Building b) return null;
-        return b.Template.Kind switch { "marketplacebuilding" => map.TutorialOwner is null ? map.Cluster : map.InstanceKey, "blackmarketbuilding" => BlackMarket.Location(map.Cluster), _ => null };
+        return b.Template.Kind switch { "marketplacebuilding" => map.TutorialOwner is null ? map.Cluster : map.InstanceKey, "blackmarketbuilding" => BlackMarket.Location(map.Cluster),
+            "smugglermarketbuilding" => world.Smugglers.MarketLocation(map.Cluster), _ => null }; // stageR: a den's Smuggler's Market
     }
+
+    /// <summary>The fees of <paramref name="location"/>: a smugglers' market sets up at gamedata's smugglersetupfee (1.5 %), every other at setupfee (2.5 %).</summary>
+    private EconomySettings FeesAt(string location) =>
+        Smugglers.IsMarket(location) ? world.Economy with { MarketSetupFee = world.Economy.SmugglerSetupFee } : world.Economy;
 
     private AlbionResponse? RefuseMarket(Player player, OperationCodes op, string why, AlbionResponse? answer = null)
     {
@@ -231,7 +236,7 @@ public sealed partial class WorldSession
         var amount = req.bn5 <= 0 ? item.Count : req.bn5;
         if (amount > item.Count || req.bn7 <= 0)
             return RefuseMarket(player, OperationCodes.AuctionCreateOffer, $"{amount} of {item.Count} x {item.Template.Name} at {req.bn7}");
-        var fee = Pricing.MarketSetupFee(checked(req.bn7 * amount), world.Economy);
+        var fee = Pricing.MarketSetupFee(checked(req.bn7 * amount), FeesAt(location));
         if (player.Character.Silver < fee) return RefuseMarket(player, OperationCodes.AuctionCreateOffer, $"not enough silver for the setup fee {fee}");
         var record = item.ToRecord(id => world.Spells?.Name(id)) with { Count = amount };
         var now = DateTime.UtcNow;
@@ -273,7 +278,7 @@ public sealed partial class WorldSession
         if (world.Items[req.bob] is not { } type || amount <= 0 || req.bod <= 0)
             return RefuseMarket(player, OperationCodes.AuctionCreateRequest, $"item type {req.bob}, amount {amount}, price {req.bod}");
         var escrow = checked(req.bod * amount);
-        var fee = Pricing.MarketSetupFee(escrow, world.Economy);
+        var fee = Pricing.MarketSetupFee(escrow, FeesAt(location));
         if (!Wallet.TrySpend(player, checked(escrow + fee), string.Create(CultureInfo.InvariantCulture, $"buy order for {amount} x {type.Name}, setup fee {fee / 10000.0:0.####}")))
             return RefuseMarket(player, OperationCodes.AuctionCreateRequest, "not enough silver for the escrow and the setup fee");
         var now = DateTime.UtcNow;
@@ -349,41 +354,63 @@ public sealed partial class WorldSession
         if (req.bqh <= 0 || req.bqh > item.Count || req.bqh > request.Amount)
             return RefuseMarket(player, op, $"{req.bqh} of {item.Count} held, {request.Amount} wanted");
         if (request.Owner == player.Character.Id) return RefuseMarket(player, op, "the player's own buy order");
-        var price = checked(request.UnitPrice * req.bqh);
+        if (SellIntoRequestRefusal(player, request, req.bqh) is { } why) return RefuseMarket(player, op, why);
+        var (price, tax) = SellIntoRequest(player, location, request, req.bqg, item, req.bqh);
+        SendResponse(op, new GenericResponse(), RequestId, RequestEncrypted);
+        PaySale(player, request, price, tax, req.bqh);
+        return null;
+    }
+
+    /// <summary>Why <paramref name="amount"/> may not be sold into <paramref name="request"/> beyond the item checks (the Black Market's daily limit); null = it may.</summary>
+    private string? SellIntoRequestRefusal(Player player, MarketOrder request, int amount) =>
+        BlackMarket.Owns(request) && checked(request.UnitPrice * amount) > BlackMarket.Left(world, player.Character, DateTime.UtcNow)
+            ? "over the Black Market's daily limit (Bm:DailyLimit)" : null;
+
+    /// <summary>
+    /// The market side of selling <paramref name="amount"/> of <paramref name="item"/> (inventory slot <paramref name="slot"/>, checked by the
+    /// caller) into <paramref name="request"/>: the order and the buyer's finished entry (not for the merchants' and the Black Market's
+    /// standing orders), the price history, then the items leave the inventory (InventoryDeleteItem or the count left), saved. Returns the
+    /// price and the sales tax; <see cref="PaySale"/> pays it after the caller's response (AuctionSellSpecificItemRequest, quick sell).
+    /// </summary>
+    private (long Price, long Tax) SellIntoRequest(Player player, string location, MarketOrder request, int slot, Item item, int amount)
+    {
+        var bag = player.Inventory.Bag;
+        var price = checked(request.UnitPrice * amount);
         var npcBuyer = BlackMarket.Owns(request);
-        if (npcBuyer && price > BlackMarket.Left(world, player.Character, DateTime.UtcNow))
-            return RefuseMarket(player, op, "over the Black Market's daily limit (Bm:DailyLimit)");
-        var record = item.ToRecord(id => world.Spells?.Name(id)) with { Count = req.bqh };
+        var record = item.ToRecord(id => world.Spells?.Name(id)) with { Count = amount };
         // The merchant's and the Black Market's buy orders keep nothing: the items are gone (and the order stays as it was).
-        world.Market.Batch(b =>
+        world.Market!.Batch(b =>
         {
             if (!JournalMerchant.Owns(request) && !npcBuyer)
             {
-                b.SetAmount(request.Id, request.Amount - req.bqh);
-                b.AddFinished(new MarketFinished(0, request.Owner, request.Id, MarketOrder.Request, location, request.ItemName, item.Quality, req.bqh,
+                b.SetAmount(request.Id, request.Amount - amount);
+                b.AddFinished(new MarketFinished(0, request.Owner, request.Id, MarketOrder.Request, location, request.ItemName, item.Quality, amount,
                     request.UnitPrice, 0, DateTime.UtcNow, request.Expires, request.Reference, record));
             }
-            b.AddSale(new MarketSale(location, request.ItemName, item.Quality, req.bqh, request.UnitPrice, DateTime.UtcNow)); // the price history (econ SPEC §1)
+            b.AddSale(new MarketSale(location, request.ItemName, item.Quality, amount, request.UnitPrice, DateTime.UtcNow)); // the price history (econ SPEC §1)
         });
-        if (req.bqh == item.Count)
+        if (amount == item.Count)
         {
-            bag.Take(req.bqg);
+            bag.Take(slot);
             SendEvent(new InventoryDeleteItemEvent { ckr = item.Id });
         }
         else
         {
-            item.Count -= req.bqh;
+            item.Count -= amount;
             SendCount(item);
         }
         player.SaveItems();
-        if (!JournalMerchant.Owns(request) && !npcBuyer && req.bqh == request.Amount)
+        if (!JournalMerchant.Owns(request) && !npcBuyer && amount == request.Amount)
             Mailer.MarketNotice(world, request with { Amount = 0 }, finished: true); // stageJ mail SPEC §3: the buyer's order is filled
-        SendResponse(op, new GenericResponse(), RequestId, RequestEncrypted);
-        if (npcBuyer) BlackMarket.Record(player.Character, price, DateTime.UtcNow);
-        var tax = Pricing.MarketTax(price, world.Economy, Premium.TaxFactor(world, player.Character.Id));
-        Wallet.Credit(player, price - tax, string.Create(CultureInfo.InvariantCulture, $"{req.bqh} x {request.ItemName} sold into a buy order, {tax / 10000.0:0.####} tax"));
+        return (price, Pricing.MarketTax(price, world.Economy, Premium.TaxFactor(world, player.Character.Id)));
+    }
+
+    /// <summary>The seller's pay of <see cref="SellIntoRequest"/>: the Black Market's daily record, then UpdateMoney with the price less the tax; saved.</summary>
+    private void PaySale(Player player, MarketOrder request, long price, long tax, int amount)
+    {
+        if (BlackMarket.Owns(request)) BlackMarket.Record(player.Character, price, DateTime.UtcNow);
+        Wallet.Credit(player, price - tax, string.Create(CultureInfo.InvariantCulture, $"{amount} x {request.ItemName} sold into a buy order, {tax / 10000.0:0.####} tax"));
         world.Saves.SaveNow(player.Character);
-        return null;
     }
 
     /// <summary>

@@ -17,8 +17,16 @@ namespace AlbionLocal.Server.Network;
 /// </summary>
 public sealed partial class WorldSession
 {
-    /// <summary>The stack limit of <paramref name="type"/>: items.xml maxstacksize, 999 without it; 1 for equipment.</summary>
-    internal static int MaxStack(ItemTemplate type) => type.IsEquipment ? 1 : type.MaxStackSize > 0 ? type.MaxStackSize : Harvesting.DefaultMaxStack;
+    /// <summary>
+    /// The stack limit of <paramref name="type"/>: items.xml maxstacksize, 999 without it (the client's bdi+0x62 default, bdi ctor 0x1805F10A0).
+    /// Equipment stacks too (stageR items SPEC §4: weapons and equipmentitems, by the strict <see cref="Item.StacksWith"/>); mounts,
+    /// tracking toolkits and transformation weapons stay single [assume].
+    /// </summary>
+    internal static int MaxStack(ItemTemplate type) =>
+        type.IsEquipment && !StackableEquipment(type) ? 1 : type.MaxStackSize > 0 ? type.MaxStackSize : Harvesting.DefaultMaxStack;
+
+    /// <summary>The equipment kinds that stack (stageR items SPEC §4): weapon and equipmentitem.</summary>
+    internal static bool StackableEquipment(ItemTemplate type) => type.Kind is "weapon" or "equipmentitem";
 
     /// <summary>items.xml weight of one <paramref name="type"/> (0 without it).</summary>
     internal static double Weight(ItemTemplate type) =>
@@ -46,7 +54,8 @@ public sealed partial class WorldSession
             var max = MaxStack(type);
             var journalFame = type.IsJournal ? fame ?? Item.DefaultFame(type) : 0;
             var alone = type.Journal is { } j && journalFame > 0 && journalFame < j.MaxFame;
-            if (max > 1 && !alone && room.FirstOrDefault(r => r.Key.Template == type && r.Key.JournalFame == journalFame && !r.Key.PartlyFilled && r.Value >= count).Key is { } stack)
+            // Equipment never joins an existing stack by itself (stageR items SPEC §4 [assume]): only a player's merge stacks it.
+            if (max > 1 && !alone && !type.IsEquipment && room.FirstOrDefault(r => r.Key.Template == type && r.Key.JournalFame == journalFame && !r.Key.PartlyFilled && r.Value >= count).Key is { } stack)
             {
                 room[stack] -= count;
                 continue;
@@ -72,7 +81,7 @@ public sealed partial class WorldSession
         var max = MaxStack(type);
         // A journal goes onto a stack of the same fame only, and a partly filled one onto none (Item.StacksWith).
         var fame = type.IsJournal ? saved?.Fame ?? Item.DefaultFame(type) : 0;
-        if (max > 1 && bag.Items.FirstOrDefault(i => i.Template == type && i.JournalFame == fame && !i.PartlyFilled && i.Count + count <= max) is { } stack
+        if (max > 1 && !type.IsEquipment && bag.Items.FirstOrDefault(i => i.Template == type && i.JournalFame == fame && !i.PartlyFilled && i.Count + count <= max) is { } stack
             && !(type.Journal is { } j && fame > 0 && fame < j.MaxFame))
         {
             stack.Count += count;
@@ -128,6 +137,14 @@ public sealed partial class WorldSession
         return emptied;
     }
 
+    /// <summary>
+    /// The saved form of <paramref name="count"/> split off <paramref name="source"/>: a simple stack as before (its loaded record, the
+    /// quality); equipment with its quality, durability and spell choices (stageR items SPEC §4: the parts of a stack are equal).
+    /// </summary>
+    private InventoryItem PartOf(Item source, int count) => source.Template.IsEquipment
+        ? source.ToRecord(id => world.Spells?.Name(id)) with { Count = count, Soul = null }
+        : (source.Source ?? new InventoryItem(source.Template.Name)) with { Count = count, Quality = source.Quality };
+
     /// <summary>The count of a stack to the client: NewSimpleItem {0 id, 1 type, 2 count} again (as UseConsumableFromInventory), a journal's NewJournalItem.</summary>
     private void SendCount(Item stack) => SendEvent(CountEvent(stack));
 
@@ -173,15 +190,14 @@ public sealed partial class WorldSession
     {
         if (Player is not { } player) return null;
         if (player.FindContainer(req.se) is not { } c || req.sd < 0 || req.sd >= c.Size || c[req.sd] is not { } source
-            || source.Template.IsEquipment || req.sg <= 0 || req.sg >= source.Count || c.FreeSlot() is var slot && slot < 0)
+            || c == player.Inventory.Equipment || req.sg <= 0 || req.sg >= source.Count || c.FreeSlot() is var slot && slot < 0)
         {
             Log.Info(Name, $"split of {req.se}#{req.sd} into {req.sg} refused");
             return null;
         }
         source.Count -= req.sg;
         SendCount(source);
-        var part = CreateItem(source.Template, (source.Source ?? new InventoryItem(source.Template.Name)) with { Count = req.sg, Quality = source.Quality },
-            SpellUsable(player.Progression));
+        var part = CreateItem(source.Template, PartOf(source, req.sg), SpellUsable(player.Progression));
         c.Put(slot, part);
         SendEvent(new InventoryPutItemEvent { ckw = part.Id, ckx = slot, cky = c.Id, ckz = req.sf });
         player.SaveItems();
@@ -202,7 +218,7 @@ public sealed partial class WorldSession
         if (from is null && LootSource(player, req.si) is { } loot) return SplitFromLoot(player, loot, req); // stageM: a split drag out of the loot
         var to = player.FindContainer(req.sj);
         if (from is null || to is null || req.sh < 0 || req.sh >= from.Size || req.sk < 0 || req.sk >= to.Size || from[req.sh] is not { } source
-            || source.Template.IsEquipment || req.sn <= 0 || req.sn >= source.Count || to == player.Inventory.Equipment
+            || req.sn <= 0 || req.sn >= source.Count || to == player.Inventory.Equipment
             || to[req.sk] is { } target && (!target.StacksWith(source) || target.Count + req.sn > MaxStack(target.Template))
             || to[req.sk] is null && to.Unloaded[req.sk] is not null || !VaultTakes(player, to, source.Template, req.sn, from))
         {
@@ -219,8 +235,7 @@ public sealed partial class WorldSession
         }
         else
         {
-            var part = CreateItem(source.Template, (source.Source ?? new InventoryItem(source.Template.Name)) with { Count = req.sn, Quality = source.Quality },
-                SpellUsable(player.Progression));
+            var part = CreateItem(source.Template, PartOf(source, req.sn), SpellUsable(player.Progression));
             to.Put(req.sk, part);
             SendEvent(new InventoryPutItemEvent { ckw = part.Id, ckx = req.sk, cky = to.Id, ckz = req.sm });
         }

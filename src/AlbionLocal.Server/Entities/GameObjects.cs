@@ -45,6 +45,18 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
 
     /// <summary>The city plot it stands on (<see cref="RealEstateBuilding.Plot"/>); null for the NPC buildings.</summary>
     public Game.RealEstateBuilding? PlotBuilding { get; init; }
+
+    /// <summary>
+    /// The owner's side of a player's station (<see cref="Systems.OwnedBuildings"/>: fees, earnings, nutrition, access preset); null for the NPC
+    /// buildings, which keep their unlimited nutrition and free use.
+    /// </summary>
+    public Game.BuildingState? State { get; init; }
+
+    /// <summary>The system that keeps <see cref="State"/> (set with it).</summary>
+    public Systems.OwnedBuildings? Owners { get; init; }
+
+    /// <summary>The items.xml index of the favourite dish (NewBuilding key 19) of an owned station; -1 without.</summary>
+    public int DishIndex { get; init; } = -1;
     public override bool LeaveOnRange => true;
 
     private XElement? InitialBehaviourState => Template.Kind == "simplebehaviourbuilding"
@@ -76,7 +88,7 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     /// [infer: not captured]), key 8 for every other NPC building (repair shop, vanity store,
     /// meld building, arena, faction trader, farming merchant; SPEC §3, verify-code nb*.py).
     /// </summary>
-    public long CraftCapacityStamp => Template.Kind is "bankbuilding" or "marketplacebuilding" or "blackmarketbuilding" ? LoadTime : DurabilityStamp;
+    public long CraftCapacityStamp => Template.Kind is "bankbuilding" or "marketplacebuilding" or "blackmarketbuilding" or "smugglermarketbuilding" ? LoadTime : DurabilityStamp; // stageR: the den market as the others [infer]
 
     /// <summary>A buildings.xml number as a7m raw (fixed point × 10000), as keys 7, 18 and 21 carry it.</summary>
     private static long Raw(double value) => (long)Math.Round(value * 10000);
@@ -94,6 +106,8 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     {
         if (!IsInitiallyVisible) yield break;
         yield return NewBuilding();
+        // StageR buildings SPEC §2: an owned station's fees and earnings (cox.ajv reads CraftBuildingInfo into its fee fields).
+        if (State is not null && Owners is not null) yield return Owners.Info(this);
         // cpm starts with an empty state; SimpleBehaviourObjectView requires event 645 even
         // for the authored default. Initialize each viewer on every announcement, without
         // storing per-character state on the shared map's building. Journal transitions are separate.
@@ -126,12 +140,12 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     /// bank, the marketplace and the faction trader owner/noaccess/noaccess; every other NPC building (repair shop, meld
     /// building, vanity store, arena agency, crafting stations) owner/friend/user.
     /// </summary>
-    public AccessStatusEvent AccessStatus() => new()
+    public AccessStatusEvent AccessStatus() => State is not null && Owners is not null ? Owners.AccessStatus(this) : new()
     {
         ddn = Id,
         bq5 = 2, // [1] Preset 2 on every captured NPC building
         bq8 = AccessGroups,
-        bq9 = Template.Kind is "bankbuilding" or "marketplacebuilding" or "blackmarketbuilding" or "factionbuilding" || IsQuestGiver
+        bq9 = Template.Kind is "bankbuilding" or "marketplacebuilding" or "blackmarketbuilding" or "smugglermarketbuilding" or "factionbuilding" || IsQuestGiver
             ? ["owner", "noaccess", "noaccess"] : ["owner", "friend", "user"],
         bra = ["", Owner?.GuildName ?? "", ""],
     };
@@ -140,7 +154,21 @@ public sealed class Building(long id, BuildingSpawn spawn, long durabilityStamp,
     /// The NewBuilding of <see cref="BuildCreate"/>; <paramref name="inUse"/> sets key 16, which the official server toggles
     /// while a station action runs (stage 6 SPEC §6c.3: re-sent with key 16 = true at the start, without it at the end).
     /// </summary>
-    public NewBuildingEvent NewBuilding(bool inUse = false) =>
+    public NewBuildingEvent NewBuilding(bool inUse = false)
+    {
+        var e = PlainNewBuilding(inUse);
+        if (State is not { } s) return e;
+        // StageR buildings SPEC §2-§3 (cou.abv 0x182005880): an owned station's own nutrition (18; key 27 false: the client checks it,
+        // cou.aw), its feeding reward pool (23) and reward per nutrition (24), its favourite dish (19, the item index; cou+0x108).
+        e.Nutrition = s.Nutrition;
+        e.ct6 = false;
+        e.ct2 = s.RewardStorage;
+        e.ct3 = s.RewardPerNutrition;
+        e.ItemTypeId = DishIndex;
+        return e;
+    }
+
+    private NewBuildingEvent PlainNewBuilding(bool inUse) =>
         new()
         {
             ObjectId = Id,                              // [0]

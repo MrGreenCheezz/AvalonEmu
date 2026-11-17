@@ -11,6 +11,8 @@ namespace AlbionLocal.Server;
 public sealed class MapManager
 {
     private readonly Dictionary<string, Map> _maps = new();
+    /// <summary>The world's modules (it sets this): <see cref="Unload"/> has no world of its own to reach them by.</summary>
+    internal Modules.ModuleHost? Modules { get; set; }
 
     public IReadOnlyCollection<Map> Maps => _maps.Values;
 
@@ -48,6 +50,7 @@ public sealed class MapManager
         if (map.Players.Count > 0 || map.Regrowing.Count > 0 && !force || !_maps.TryGetValue(map.InstanceKey, out var registered) || registered != map) return false;
         _maps.Remove(map.InstanceKey);
         map.Unloaded = true;
+        Modules?.MapUnloaded(map); // the modules' Maps.OnUnloaded
         return true;
     }
 }

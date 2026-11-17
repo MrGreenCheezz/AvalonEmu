@@ -47,6 +47,7 @@ public sealed class World : IDisposable
         GuildGoals = new Systems.GuildGoals(this);
         Duels = new Systems.Duels(this);
         Recaps = new Systems.DeathRecaps(this);
+        KillHistory = new Systems.KillHistory(this);
         Trades = new Systems.Trades(this);
         Dungeons = new Systems.RandomDungeons(this);
         WorldChests = new Systems.WorldChests(this);
@@ -58,6 +59,8 @@ public sealed class World : IDisposable
         Expeditions = new Systems.Expeditions(this);
         Corrupted = new Systems.CorruptedDungeons(this);
         Hellgates = new Systems.Hellgates(this);
+        SafePortals = new Systems.SafePortals(this);
+        DragonAreas = new Systems.DragonAreas(this);
         Arenas = new Systems.Arenas(this);
         Ratings = new Systems.Ratings(this);
         Tournament = new Systems.Tournament(this);
@@ -66,20 +69,30 @@ public sealed class World : IDisposable
         Factions = new Systems.Factions(this);
         FakeCasts = new Systems.FakeSlotCasts(this);
         Shrines = new Systems.BuffShrines(this);
+        Smugglers = new Systems.Smugglers(this);
+        Carriables = new Systems.Carriables(this);
         Territories = new Systems.Territories(this, characters as ITerritoryStore);
         Outposts = new Systems.Outposts(this);
+        Fortresses = new Systems.FactionFortresses(this);
+        RedZone = new Systems.RedZoneEvents(this);
         SpellZones = new Systems.SpellZones(this);
+        FactionCamps = new Systems.FactionCamps(this);
         Bounties = new Systems.Bounties(this);
         Hunts = new Systems.Hunts(this);
         Vanity = new Systems.Vanity(this);
         Islands = new Systems.Islands(this, characters as IIslandStore);
         Hideouts = new Systems.Hideouts(this, characters as IHideoutStore);
+        OwnedBuildings = new Systems.OwnedBuildings(this, characters as IBuildingStateStore);
         RealEstates = new Systems.RealEstates(this, characters as IRealEstateStore);
         Chat = new Systems.ChatHub(this);
         Social = new Systems.Social(this, characters as ISocialStore);
         Bots = new Bots.BotManager(this);
         Companions = new Bots.Companions(this);
+        Modules = new Modules.ModuleHost(this);
     }
+
+    /// <summary>The C# modules (Modules:*, docs/modules/README.md): loaded by ServerHost with Modules:Enabled; none in a bare World.</summary>
+    public Modules.ModuleHost Modules { get; }
 
     public ServerConfig Config { get; }
 
@@ -178,6 +191,9 @@ public sealed class World : IDisposable
     /// <summary>The players' last death recaps (stageP SPEC §2.1, <see cref="Systems.DeathRecaps"/>).</summary>
     public Systems.DeathRecaps Recaps { get; }
 
+    /// <summary>StageR stats: the PvP kills and knockdowns of the stats window (<see cref="Systems.KillHistory"/>, table kill_history).</summary>
+    public Systems.KillHistory KillHistory { get; }
+
     /// <summary>The player trades, invited or open (stageJ trade SPEC, <see cref="Systems.Trades"/>).</summary>
     public Systems.Trades Trades { get; }
 
@@ -206,6 +222,7 @@ public sealed class World : IDisposable
     /// <summary>The static dungeons: their events and value on the world map and in 499 (stageN static-dungeons SPEC).</summary>
     public Systems.StaticDungeons StaticDungeons { get; }
 
+
     /// <summary>The world bosses: the WORLDBOSS spawn points' and content/bosses.json's, their schedule, announcements and loot (stageH bosses SPEC §4.1, §6.1).</summary>
     public Systems.WorldBosses Bosses { get; }
 
@@ -223,6 +240,12 @@ public sealed class World : IDisposable
 
     /// <summary>StageL: the hellgates: the Hell Den shrines, the channels and locks, the instances, their objectives, enemy teams and chests (stageL hellgates SPEC).</summary>
     public Systems.Hellgates Hellgates { get; }
+
+    /// <summary>StageR: the S.A.F.E. portals of the Outlands portal towns and their return portals (analysis/work/stageR/safe-portal/SPEC.md).</summary>
+    public Systems.SafePortals SafePortals { get; }
+
+    /// <summary>StageR: the dragon area entrances (analysis/work/stageR/dragon-areas/SPEC.md).</summary>
+    public Systems.DragonAreas DragonAreas { get; }
 
     /// <summary>Stage N: the arena queues and matches (analysis/work/stageN/arena/SPEC.md, <see cref="Systems.Arenas"/>).</summary>
     public Systems.Arenas Arenas { get; }
@@ -245,8 +268,15 @@ public sealed class World : IDisposable
     /// <summary>The server casts of CharacterSpellSlot.FakeSpell (25): the corrupted dungeon entrance, the mists entrance, the loot chest opening (stageM chest-slot25 NOTES).</summary>
     public Systems.FakeSlotCasts FakeCasts { get; }
 
+
     /// <summary>StageN: the buff shrines of the dungeon rooms and open-world clusters (NewShrine, UseShrine; stageN shrines SPEC).</summary>
     public Systems.BuffShrines Shrines { get; }
+
+    /// <summary>StageR smugglers: the crate piles, Smuggler Stashes, the delivery and the smugglers standing.</summary>
+    public Systems.Smugglers Smugglers { get; }
+
+    /// <summary>StageR smugglers: what the players carry (the carry buffs), dropped and picked up again.</summary>
+    public Systems.Carriables Carriables { get; }
 
     /// <summary>StageP: the guild territories and castles (world.xml territories, monoliths, castles, the territory window; stageP territories SPEC).</summary>
     public Systems.Territories Territories { get; }
@@ -254,8 +284,17 @@ public sealed class World : IDisposable
     /// <summary>StageQ: the faction warfare towers, their guards, captures and zone control (FactionWarfare:*).</summary>
     public Systems.Outposts Outposts { get; }
 
+    /// <summary>StageR fw-zone: the faction fortresses and their sieges.</summary>
+    public Systems.FactionFortresses Fortresses { get; }
+
+    /// <summary>StageR fw-zone: the bandit assault (red-zone event).</summary>
+    public Systems.RedZoneEvents RedZone { get; }
+
     /// <summary>The ground emblems' zone spells: the Roads' and the cities' speed buffs (<see cref="Systems.SpellZones"/>).</summary>
     public Systems.SpellZones SpellZones { get; }
+
+    /// <summary>StageQ: the dynamic templates' DynamicTemplate 604 and the faction camps' cycle (FactionWarfare:Camps).</summary>
+    public Systems.FactionCamps FactionCamps { get; }
 
     /// <summary>The owned islands, their instances and journeys (stageH islands SPEC phase 1), loaded from the character database's island table.</summary>
     public Systems.Islands Islands { get; }
@@ -265,6 +304,9 @@ public sealed class World : IDisposable
 
     /// <summary>The city plots (public issue #18): their owners, auctions, sales and buildings.</summary>
     public Systems.RealEstates RealEstates { get; }
+
+    /// <summary>The owner's side of the players' stations (stageR buildings SPEC): fees, earnings, nutrition, access.</summary>
+    public Systems.OwnedBuildings OwnedBuildings { get; }
 
     /// <summary>The chat server's channels, its connections and their lines and whispers (stageJ chat SPEC §2.3).</summary>
     public Systems.ChatHub Chat { get; }
@@ -289,6 +331,7 @@ public sealed class World : IDisposable
 
     /// <summary>The world boss settings (content/bosses.json; the built-in ones without it).</summary>
     public BossSettings BossSettings { get; init; } = BossSettings.Default;
+
 
     /// <summary>worldbosses.xml (or its regional variant, BossSettings.DataFile), read at the start; null = no world bosses (hand-made test worlds).</summary>
     public WorldBossData? BossData { get; init; }
@@ -564,6 +607,8 @@ public sealed class World : IDisposable
         Bosses.Update(); // stageH: world bosses due, despawned ones
         Territories.Update(); // stageP P5: the castle fights, capture zones, chests and castle season points
         Outposts.Update(); // stageQ: the faction warfare towers' guards, contests, captures and zone control
+        Fortresses.Update(); // stageR fw-zone: the fortress towers' guards, sieges and capture areas
+        RedZone.Update(); // stageR fw-zone: the bandit assault's schedule, phases and standings
         Hideouts.Update(); // stageP hideouts: construction phases, upgrades, the daily food and tribute
         RealEstates.Update(); // issue #18: the city plot auctions that ended
         Events.Update(); // PVE-DESIGN step 7: world events due, their waves, ends and rewards
@@ -579,7 +624,10 @@ public sealed class World : IDisposable
         FakeCasts.Update(); // the slot-25 server casts: the corrupted dungeon and mists enter casts, the chest openings
         Corrupted.Update(); // stageL: the corrupted instances' time limits and closing
         Shrines.Update(); // stageN: the buff shrines' respawns and faction locks
+        Smugglers.Update(); // stageR: the carried objects, the crate pickups and deliveries
         Hellgates.Update(); // stageL: the shrine channels and locks, the hellgate instances' objectives, wipes, time limits and closing
+        SafePortals.Update(); // stageR: the S.A.F.E. portal bindings that ran out
+        DragonAreas.Update(); // stageR: the dragon area entrances' life cycle, the uses, the instance builds, exits and shutdowns
         Arenas.Update(); // stage N: the arena queues, ready checks, countdowns, respawns, results and closing
         Roads.Update(); // stageL: the road network's build, its expiries, charge-ups, rescue links and batched saves
         Mists.Update(); // stageL: the zone builds, return portals, treasures, warnings, shutdowns and empty zones
@@ -613,6 +661,10 @@ public sealed class World : IDisposable
         Profile.Mark("random dungeons");
         Saves.Update(now);
         Profile.Mark("saves");
+        // The modules' timers, Tick and storage writes (each call guarded: a module's fault never costs the tick).
+        try { Modules.Update(now); }
+        catch (Exception e) { Log.Error("modules", $"module update failed: {e}"); }
+        Profile.Mark("modules");
         if (Config.MapIdleUnload > TimeSpan.Zero)
             // A floor of a live random dungeon stays until the dungeon closes (its own empty lifetime, RandomDungeons.Close).
             // So does an expedition instance's map (Expeditions.Close), a corrupted dungeon's (CorruptedDungeons.Close), a hellgate's (Hellgates.Close)
@@ -620,7 +672,7 @@ public sealed class World : IDisposable
             // And an open-world map holding a dungeon map's portal, until the portal goes (dungeon-maps SPEC §4).
             foreach (var map in Maps.Maps.Where(m => m.EmptySince is { } since && now - since >= Config.MapIdleUnload && !Dungeons.IsLive(m.Cluster)
                          && !Expeditions.IsLive(m.Cluster) && !Corrupted.IsLive(m.Cluster) && !Hellgates.IsLive(m.Cluster) && !Arenas.IsLive(m.Cluster) && !Mists.IsLive(m.Cluster)
-                         && !Dungeons.HoldsMapExit(m)).ToList())
+                         && !DragonAreas.IsLive(m.Cluster) && !Dungeons.HoldsMapExit(m)).ToList())
             {
                 Bots.Unloaded(map); // stage I: its bots go first (the unload counts humans only)
                 if (Maps.Unload(map))
@@ -638,6 +690,7 @@ public sealed class World : IDisposable
         Systems.Flagging.Update(player); // a flag cast that is due ends (stageE pvp SPEC §3.1)
         Systems.Death.UpdateExecute(player); // an execute that is due kills (stageE pvp SPEC §4.2)
         Systems.Revive.Update(player); // a revive that is due raises its ally (stageN revive)
+        Systems.Overcharge.Update(player); // an overcharge that is over ends with its break roll (stageR items SPEC §2)
     }
 
     /// <summary>
@@ -674,6 +727,16 @@ public sealed class World : IDisposable
             }
             return;
         }
+        // StageR: a dragon area instance too (built before anyone is sent in).
+        if (Data.DragonAreaIds.IsInstance(map.Cluster))
+        {
+            if (DragonAreas.Find(map.Cluster) is { } dragon)
+            {
+                map.TemplateRequested = true;
+                Populate(map, dragon.Template);
+            }
+            return;
+        }
         // StageH: an expedition instance is a copy of its world.xml cluster (SPEC §2.6).
         var id = TemplateOf(map.Cluster);
         if (LoadCluster is null && Clusters is { } store && store.IsLoaded(id))
@@ -705,7 +768,8 @@ public sealed class World : IDisposable
     public void PrefetchCluster(string cluster)
     {
         cluster = TemplateOf(cluster);
-        if (LoadCluster is not null || Clusters is not { } store || store.IsLoaded(cluster) || Data.DungeonLayout.IsInstance(cluster) || Data.MistsIds.IsInstance(cluster)) return;
+        if (LoadCluster is not null || Clusters is not { } store || store.IsLoaded(cluster) || Data.DungeonLayout.IsInstance(cluster) || Data.MistsIds.IsInstance(cluster)
+            || Data.DragonAreaIds.IsInstance(cluster)) return;
         store.LoadAsync(cluster).ContinueWith(task => _ = task.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
@@ -717,12 +781,14 @@ public sealed class World : IDisposable
     public ClusterTemplate? CachedCluster(string cluster) =>
         Data.DungeonLayout.IsInstance(cluster) ? Dungeons.Floor(cluster)?.Template
         : Data.MistsIds.IsInstance(cluster) ? Mists.Find(cluster)?.Template
+        : Data.DragonAreaIds.IsInstance(cluster) ? DragonAreas.Find(cluster)?.Template
         : LoadCluster is null && Clusters is { } store && store.IsLoaded(TemplateOf(cluster)) ? store.Get(TemplateOf(cluster)) : null;
 
     /// <summary>Resolves <paramref name="cluster"/> off the world thread (<see cref="LoadCluster"/>, else the store on a pool thread); null without cluster data.</summary>
     public Task<ClusterTemplate>? ResolveCluster(string cluster) =>
         Data.DungeonLayout.IsInstance(cluster) ? Dungeons.Floor(cluster) is { } floor ? Task.FromResult(floor.Template) : null
         : Data.MistsIds.IsInstance(cluster) ? Mists.Find(cluster) is { } zone ? Task.FromResult(zone.Template) : null
+        : Data.DragonAreaIds.IsInstance(cluster) ? DragonAreas.Find(cluster) is { } dragon ? Task.FromResult(dragon.Template) : null
         : LoadCluster is { } load ? load(TemplateOf(cluster)) : Clusters?.LoadAsync(TemplateOf(cluster));
 
     /// <summary>

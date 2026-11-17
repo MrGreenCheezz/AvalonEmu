@@ -184,7 +184,9 @@ public sealed partial class WorldSession
         Harvesting.SendState(map, node);                                            // 1. HarvestableChangeState
         if (h.Tool is { } tool)
         {
+            var toolBefore = tool.DurabilityRaw;
             tool.DurabilityRaw = Math.Max(0, tool.DurabilityRaw - Harvesting.DurabilityLoss(world.GameData, tier.Tier, item, baseAmount));
+            if (toolBefore > 0 && tool.DurabilityRaw <= 0) world.Modules.Broke(player, tool, "gathering"); // Items.OnBreak
             SendItemObject(tool);                                                   // 2. the tool, key 8 = the new durability
         }
         // 3. The fame (T2+; T1 has famevalue 0 and gets none): the destiny board's 151/152 of the resource's nodes, then
@@ -198,6 +200,7 @@ public sealed partial class WorldSession
         // PVE-DESIGN step 11: the journal's gather missions (600 before the fame, as captured) and the gather bounties count the items received.
         Systems.AlbionJournal.Gathered(player, item, total);
         world.Bounties.Gathered(player, item, total);
+        world.Modules.Harvested(player, item.Name, total, "gather"); // the modules' Harvested
         world.Guilds.Gathered(player, item, total); // guilds SPEC §10.6: the gather contracts
         world.GuildGoals.OnGather(player, item, total); // stage I: the weekly guild goals
         if (fame > 0) Systems.Destiny.Award(player, fame, Systems.Destiny.Harvest(item), source: item);

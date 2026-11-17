@@ -96,6 +96,8 @@ public sealed partial class WorldSession
         if (MistsChange(player, req, out var mists)) return mists;
         // The portal of an Outlands portal town, back into its city's hall (Handlers/World/PortalHandler).
         if (PortalChange(player, req, out var portal)) return portal;
+        // StageR: a portal town's S.A.F.E. portal and the personal return portal (Handlers/World/SafePortalHandler).
+        if (SafePortalChange(player, req, out var safe)) return safe;
         return Change(player, req.ee, null, RequestId, RequestEncrypted);
     }
 

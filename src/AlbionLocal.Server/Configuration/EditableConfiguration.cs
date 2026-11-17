@@ -70,8 +70,12 @@ public static class ConfigurationOptions
 
     public static IReadOnlyList<string> FileNames { get; } = Array.AsReadOnly(new[] { "common.jsonc", "login.jsonc", "world.jsonc", "chat.jsonc", "persistence.jsonc" });
 
+    /// <summary>Configuration files that may be missing: a config folder made before they existed still works.</summary>
+    public static IReadOnlyList<string> OptionalFileNames { get; } = Array.AsReadOnly(new[] { "modules.jsonc" });
+
     public static string Owner(string key)
     {
+        if (key.StartsWith("Modules:", StringComparison.OrdinalIgnoreCase)) return "modules.jsonc";
         if (key.Equals("Preset", StringComparison.OrdinalIgnoreCase) || key.Equals("Network:BindAddress", StringComparison.OrdinalIgnoreCase)
             || key.Equals("Network:PublicAddress", StringComparison.OrdinalIgnoreCase) || key.Equals("Paths:ClientGameData", StringComparison.OrdinalIgnoreCase)
             || key.Equals("Paths:Content", StringComparison.OrdinalIgnoreCase) || key.StartsWith("Log:", StringComparison.OrdinalIgnoreCase)

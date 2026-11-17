@@ -349,6 +349,24 @@ public sealed record ServerConfig
     public double TreasureRespawnMinutes { get; init; }
 
     /// <summary>
+    /// DragonAreas:Enabled (true in both presets; stageR dragon-areas SPEC part two): a dragon area entrance can be entered (its instance built). False:
+    /// the use is refused with the entrance window's "disabled by feature switch" (21968 [infer]).
+    /// </summary>
+    public bool DragonAreasEnabled { get; init; } = true;
+
+    /// <summary>
+    /// DragonAreas:NaturalSpawn (true in both presets): the open world's entrances drawn by treasuredistribution.xml's DRAGONAREA_ENTRANCE events on the
+    /// resource placement's TreasureSpawnpointTracking prefabs (Royal yellow T5-T6 and red T6-T7, Outlands black). False: only the GM's (.dragon entrance).
+    /// </summary>
+    public bool DragonAreaNaturalSpawn { get; init; } = true;
+
+    /// <summary>
+    /// DragonAreas:RedrawMinutes (0 in both presets): 0 = an entrance event draws once per map fill (the data's neverreschedule [infer]); n = an event whose
+    /// entrance is gone (or that drew nothing) draws again n minutes later (a server choice).
+    /// </summary>
+    public double DragonAreaRedrawMinutes { get; init; }
+
+    /// <summary>
     /// TreasureCoffers:Sizes (all four in both presets): which treasures may be placed, by the lootchests.xml chesttype of their chests: coffer
     /// (treasurecoffer), solo (treasurechestsmall), veteran (treasurechestmedium), elite (treasurechestlarge). A draw of a size left out places nothing.
     /// </summary>
@@ -744,6 +762,12 @@ public sealed record ServerConfig
     public bool PartyResendAfterClusterChange { get; init; }
 
     /// <summary>
+    /// Party:Finder (true): feature switch 171 PartyFinder on in the Login table, as the official server sends it (stageR party SPEC §5.1);
+    /// false = the client's default (off: the party finder window says the feature is disabled).
+    /// </summary>
+    public bool PartyFinderEnabled { get; init; } = true;
+
+    /// <summary>
     /// Guilds:Enabled (true): guilds (stageH guilds SPEC, <see cref="Systems.Guilds"/>). False: every guild request is refused and
     /// no guild key is sent; saved guilds stay, but a deleted character still leaves its guild and a guild left empty at startup goes.
     /// </summary>
@@ -769,6 +793,15 @@ public sealed record ServerConfig
 
     /// <summary>Guilds:CreateCooldownMinutes (0): after creating a guild the character can create no other for this long (4206; not saved over a restart).</summary>
     public double GuildCreateCooldownMinutes { get; init; }
+
+    /// <summary>
+    /// Guilds:LogoChangeGold (3000, gamedata guildlogochangegoldcosts): the gold ChangeGuildLogo takes from the member who changes the crest
+    /// (the client's pay dialog shows the gamedata price); 0 = free.
+    /// </summary>
+    public long GuildLogoChangeGold { get; init; } = 3000;
+
+    /// <summary>Guilds:LogoChangeCooldownMinutes (2880, gamedata guildlogochangecooldownminutes): the time between two crest changes of a guild; 0 = none.</summary>
+    public double GuildLogoChangeCooldownMinutes { get; init; } = 2880;
 
     /// <summary>
     /// Guilds:NoFriendlyFire (false; the pve preset true): guild members are never Hostile to each other outside a duel (SPEC §10.2):
@@ -1059,6 +1092,9 @@ public sealed record ServerConfig
     /// <summary>StageN companions: the hired companion bots (Companions:*, <see cref="CompanionOptions"/>; off under Preset official, on under pve).</summary>
     public CompanionOptions Companions { get; init; } = new();
 
+    /// <summary>The server modules (Modules:*, <see cref="ModuleOptions"/>, config/modules.jsonc).</summary>
+    public ModuleOptions Modules { get; init; } = new();
+
     /// <summary>
     /// How long a map stays loaded without players (World:MapIdleUnloadMinutes, 5; 0 = never): then it is dropped with its
     /// objects, and the next Join into the cluster builds it anew with new object ids (SPEC stage 3 §5).
@@ -1068,8 +1104,14 @@ public sealed record ServerConfig
     /// <summary>The checks of ChangeCluster (Transfer:PositionTolerance, Transfer:CheckExitCooldown; SPEC stage 3 §4.1).</summary>
     public TransferOptions Transfer { get; init; } = new();
 
+    /// <summary>The smugglers' dens and crates (Smugglers:Crates, Smugglers:NetworkMarket; analysis/work/stageR/smugglers/SPEC.md).</summary>
+    public SmugglerOptions Smugglers { get; init; } = new();
+
     /// <summary>The settings of the cluster resolver (Data/ClusterStore).</summary>
-    public ClusterOptions Clusters => new() { EventLayers = new HashSet<string>(EventLayers, StringComparer.Ordinal), BuildingIdOffset = BuildingIdOffset };
+    public ClusterOptions Clusters => new()
+    {
+        EventLayers = new HashSet<string>(EventLayers, StringComparer.Ordinal), BuildingIdOffset = BuildingIdOffset, FactionCamps = FactionWarfare.Camps,
+    };
 
     /// <summary>Load the five required configuration files from a directory.</summary>
     public static ServerConfig Load(string directory, IEnumerable<string> args) =>
@@ -1217,9 +1259,17 @@ public sealed record ServerConfig
             ChestsPoiLimit = Int("Chests:PoiLimit", d.ChestsPoiLimit, -1, 1000),
             TreasureCoffers = Flag("World:TreasureCoffers", d.TreasureCoffers),
             TreasureRespawnMinutes = Number("TreasureCoffers:RespawnMinutes", d.TreasureRespawnMinutes, 0, 1440),
+            DragonAreasEnabled = Flag("DragonAreas:Enabled", d.DragonAreasEnabled),
+            DragonAreaNaturalSpawn = Flag("DragonAreas:NaturalSpawn", d.DragonAreaNaturalSpawn),
+            DragonAreaRedrawMinutes = Number("DragonAreas:RedrawMinutes", d.DragonAreaRedrawMinutes, 0, 1440),
             TreasureSizes = Take("TreasureCoffers:Sizes") is not { } sizes ? d.TreasureSizes : Sizes(sizes),
             TreasureTestAlways = Flag("TreasureCoffers:TestAlways", d.TreasureTestAlways),
             BankShared = Flag("Bank:Shared", d.BankShared),
+            Smugglers = new SmugglerOptions
+            {
+                Crates = Flag("Smugglers:Crates", d.Smugglers.Crates),
+                NetworkMarket = Flag("Smugglers:NetworkMarket", d.Smugglers.NetworkMarket),
+            },
             BmBuyFactor = Number("Bm:BuyFactor", d.BmBuyFactor, 0, 1000),
             BmDailyLimit = (long)Number("Bm:DailyLimit", d.BmDailyLimit, 0, 1e12),
             CraftingReturns = Take("Crafting:Returns") is not { } returns ? true
@@ -1267,6 +1317,8 @@ public sealed record ServerConfig
                 : throw new InvalidDataException($"Guilds:JoinRole: '{joinRole}' is not one of Recruit, Member, Guardsman, Officer, Warmaster, MasterOfCoin, TheRightHand"),
             GuildRejoinCooldownMinutes = Number("Guilds:RejoinCooldownMinutes", d.GuildRejoinCooldownMinutes, 0, 100_000),
             GuildCreateCooldownMinutes = Number("Guilds:CreateCooldownMinutes", 0, 0, 100_000),
+            GuildLogoChangeGold = (long)Number("Guilds:LogoChangeGold", 3000, 0, 1e9),
+            GuildLogoChangeCooldownMinutes = Number("Guilds:LogoChangeCooldownMinutes", 2880, 0, 100_000),
             GuildNoFriendlyFire = Flag("Guilds:NoFriendlyFire", d.GuildNoFriendlyFire),
             GuildXpShare = Number("Guilds:XpShare", d.GuildXpShare, 0, 100),
             GuildClearXp = (long)Number("Guilds:ClearXp", d.GuildClearXp, 0, 1e9),
@@ -1361,6 +1413,7 @@ public sealed record ServerConfig
                 : bool.TryParse(silverDrop, out var sd) ? sd : throw new InvalidDataException($"Pvp:DeathSilverDrop: '{silverDrop}' is not true or false"),
             PartyResendAfterClusterChange = Take("Party:ResendAfterClusterChange") is not { } resend ? false
                 : bool.TryParse(resend, out var rs) ? rs : throw new InvalidDataException($"Party:ResendAfterClusterChange: '{resend}' is not true or false"),
+            PartyFinderEnabled = Flag("Party:Finder", true),
             Visibility = new VisibilityOptions
             {
                 CellSize = Int("Visibility:CellSize", 10, 1, 1000),
@@ -1378,6 +1431,7 @@ public sealed record ServerConfig
             Roads = LoadRoads(values, d.Roads),
             Mists = LoadMists(values, d.Mists),
             Companions = LoadCompanions(values, d.Companions),
+            Modules = ModuleOptions.Load(values, d.Modules, Dir("Modules:Path", "modules")),
             MapIdleUnload = Take("World:MapIdleUnloadMinutes") is not { } idle ? TimeSpan.FromMinutes(5)
                 : double.TryParse(idle, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var min) && min is >= 0 and <= 1440
                     ? TimeSpan.FromMinutes(min) : throw new InvalidDataException($"World:MapIdleUnloadMinutes: '{idle}' is not 0..1440"),
@@ -3203,6 +3257,19 @@ public enum BotGathererFlag
     Zone,
     Blue,
     Red,
+}
+
+/// <summary>
+/// The smugglers (analysis/work/stageR/smugglers/SPEC.md). <see cref="Crates"/> (Smugglers:Crates, true in both presets): the Outlands' crate
+/// piles and Smuggler Stashes, the crates' pickup, carrying and delivery; false = none. <see cref="NetworkMarket"/> (Smugglers:NetworkMarket,
+/// true in both presets, the official rule): every Smuggler's Den market is the one Smuggler's Network order book; false = each den its own
+/// book. The dens' banks are each den's own either way ("Store items locally", as official); the cities' banks and markets are not touched.
+/// </summary>
+public sealed record SmugglerOptions
+{
+    public bool Crates { get; init; } = true;
+
+    public bool NetworkMarket { get; init; } = true;
 }
 
 /// <summary>

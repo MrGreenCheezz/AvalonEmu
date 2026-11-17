@@ -125,14 +125,20 @@ public static class MapSpawner
         objects.AddRange(world.Corrupted.Populate(map, template));
         // StageL hellgates (SPEC §5.3, §5.4): a Hell Den's shrines (400); an instance's REWARD chests, its guardian's points held back, its scaling.
         objects.AddRange(world.Hellgates.Populate(map, template));
+        // StageR safe-portal (SPEC §2): a portal town's S.A.F.E. portal (606) and the return portals (607) of the live bindings here.
+        objects.AddRange(world.SafePortals.Populate(map, template));
         // StageN shrines (SPEC §3): the buff shrines of the active layers (396): a solo dungeon room's, the faction and invisibility shrines.
         objects.AddRange(world.Shrines.Populate(map, template));
         // StageP territories (SPEC §6 P1): a watchtower territory's monolith (109) and a castle territory's castle (112), unowned.
         objects.AddRange(world.Territories.Populate(map, template));
         // StageQ outposts: a faction warfare zone's towers (365, cluster-wide), owned by its duchy's faction at first; their guards stand on the first tick.
         objects.AddRange(world.Outposts.Populate(map, template));
+        // StageR fw-zone: a fortress duchy's fortress tower (652, cluster-wide), owned by its duchy's faction at first; its guards stand on the first tick.
+        objects.AddRange(world.Fortresses.Populate(map, template));
         // StageL mists (SPEC §6.4): a mists world cluster's city entrances (527); a zone's border exits, city entrance and open-world exit, its mob level and treasures.
         objects.AddRange(world.Mists.Populate(map, template));
+        // StageR dragon areas: an instance's exits (695) and mob level; an open-world map's entrances drawn by treasuredistribution (694).
+        objects.AddRange(world.DragonAreas.Populate(map, template));
         // StageH islands (SPEC §1.5): an island instance's island management, owned by the island's owner.
         objects.AddRange(world.Islands.Populate(map, template));
         // StageP hideouts (SPEC §2.5): the hideouts standing in a black zone (419); a hideout instance's management (420) and exit (421).
@@ -174,6 +180,10 @@ public static class MapSpawner
         objects.AddRange(world.WorldChests.Populate(map, template));
         // Public issue #19: the open world's coffers and treasure chests on their treasure spots.
         objects.AddRange(world.TreasureCoffers.Populate(map, template));
+        // StageR smugglers: the Outlands' Smuggler Stashes and crate piles on the resource placement's prefabs.
+        objects.AddRange(world.Smugglers.Populate(map, template));
+        // StageQ camps: the rolled dyn slots' DynamicTemplate 604 objects (the client draws none of their VAR layers without), the faction camps' cycle.
+        objects.AddRange(world.FactionCamps.Populate(map, template));
         map.Populate(template, objects, world.Config.Visibility.CellSize, now);
         world.Dungeons.BossChecks(map); // stageH: a dungeon floor's boss chests with no boss to guard them unlock
         world.Corrupted.Filled(map); // stageL: a corrupted instance's mob fame for the points, its chests with no guard near unlock
@@ -192,6 +202,7 @@ public static class MapSpawner
             + (map.MobSlots.Count > 0 ? $"; {SpawnManager.Summary(map)}" : "")
             + (later.Count > 0 ? $"; not spawned yet: {string.Join(", ", later)}" : ""));
         foreach (var (why, n) in skipped) Log.Warn("world", $"map {map.Cluster}: {n} x {why}, left out (the client would not show it)");
+        world.Modules.MapLoaded(map); // the modules' Maps.OnLoaded
     }
 
     /// <summary>Whether the client binds <paramref name="sent"/> to a tile at <paramref name="tile"/> (|d| &lt; 0.001 per axis, SPEC §1).</summary>

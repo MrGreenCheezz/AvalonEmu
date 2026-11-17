@@ -60,6 +60,24 @@ public sealed record VanityOptions
     /// <summary>Vanity:DuplicateSilver (25000): what a drop pays instead when the player owns every skin of the pool already.</summary>
     public double DuplicateSilver { get; init; } = 25000;
 
+    /// <summary>
+    /// Vanity:KillEmotes (true, official: Features.KillEmotes is on): the equipped victory emote plays (NewVisualEventObject) at a player kill
+    /// and, with the player's knockdown setting, at a knockdown, one charge each (stageR kill-vanity SPEC §1).
+    /// </summary>
+    public bool KillEmotes { get; init; } = true;
+
+    /// <summary>
+    /// Vanity:KillEmoteDropShare (0.2): the share of the cosmetic drops (every Vanity:*Chance source) that is a bundle of a victory emote's
+    /// charges (its bundledchargesamount) instead of a skin. Not official (the official charges come from the gold store and the charge items).
+    /// </summary>
+    public double KillEmoteDropShare { get; init; } = 0.2;
+
+    /// <summary>
+    /// Vanity:KillTrophies (true, official: Features.DropKillTrophies is on): a lethal player kill in a zone with a killtrophy table may give
+    /// the killer a kill trophy (stageR kill-vanity SPEC §2).
+    /// </summary>
+    public bool KillTrophies { get; init; } = true;
+
     /// <summary>The Vanity section out of <paramref name="values"/> over <paramref name="d"/>.</summary>
     internal static VanityOptions Load(Dictionary<string, string> values, VanityOptions d)
     {
@@ -100,6 +118,9 @@ public sealed record VanityOptions
             FameMilestoneChance = Chance("Vanity:FameMilestoneChance", d.FameMilestoneChance),
             ThemeChance = Chance("Vanity:ThemeChance", d.ThemeChance),
             DuplicateSilver = Number("Vanity:DuplicateSilver", d.DuplicateSilver, 0, 1e9),
+            KillEmotes = Flag("Vanity:KillEmotes", d.KillEmotes),
+            KillEmoteDropShare = Chance("Vanity:KillEmoteDropShare", d.KillEmoteDropShare),
+            KillTrophies = Flag("Vanity:KillTrophies", d.KillTrophies),
         };
     }
 }

@@ -20,6 +20,14 @@ public static class LoginWorld
     /// <summary>Login key 79 (string[], c3d+0x368): the event flags of prefabs, dynamic templates and active layers; none (sent as an empty array).</summary>
     public static string[] Flags => [];
 
-    /// <summary>Login key 99, the feature switch table (<see cref="FeatureSwitches"/>); [112] DynamicTemplates is on, the client default.</summary>
-    public static bool[] Features() => FeatureSwitches.Defaults();
+    /// <summary>
+    /// Login key 99, the feature switch table (<see cref="FeatureSwitches"/>): the client defaults ([112] DynamicTemplates on), with
+    /// [171] PartyFinder on as in the official table (Party:Finder, default true; false = the client default, off).
+    /// </summary>
+    public static bool[] Features(bool partyFinder = true)
+    {
+        var flags = FeatureSwitches.Defaults();
+        flags[FeatureSwitches.PartyFinder] = partyFinder;
+        return flags;
+    }
 }

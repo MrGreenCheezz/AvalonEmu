@@ -470,10 +470,10 @@ public static class IslandTest
     }
 
     /// <summary>A level-0 Lymhurst island (…0001a) and its owner standing on it with <paramref name="items"/> and 1000 silver, joined.</summary>
-    private static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
+    internal static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
         OnIsland(params (string Item, int Count)[] items) => OnIsland(new ServerConfig { JoinByCharacterId = true }, items);
 
-    private static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
+    internal static (World World, Island Island, WorldSession Session, FakePeer Peer, Func<AlbionRequest, int, OperationResponse> Call, Action<TimeSpan> Tick)
         OnIsland(ServerConfig config, params (string Item, int Count)[] items)
     {
         var characters = Repository(NewDir());

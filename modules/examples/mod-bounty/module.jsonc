@@ -1,0 +1,9 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-bounty",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Elite bounties with silver and fame rewards and a leaderboard, kept in the module's storage",
+  "api": "1.0",
+  "enabled": false
+}

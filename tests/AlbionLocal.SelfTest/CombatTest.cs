@@ -451,6 +451,11 @@ public static class CombatTest
         Check(batch.Count > 0 && batch[0].Code == EventCodes.PersonalSeasonPointsGained && L(batch[0].P, 0) == 213243,
               $"the kill's PersonalSeasonPointsGained {{0 1.5 x sqrt(202.1) = 213243}} before the UpdateFame (got {Show(batch.Take(1))})");
         batch = [.. batch.Skip(1)];
+        // StageR items SPEC §3: COMBAT_AXES is at its last level, so 20 % of its share turns into combat fame credits (2021000 x 0.5 x 0.2),
+        // sent right after the UpdateFame; taken out of the list for the indices below.
+        Check(batch.Count > 1 && batch[1].Code == EventCodes.UpdateReSpecPoints && L(batch[1].P, 1) == 1 && L(batch[1].P, 2) == 202100,
+              $"the maxed COMBAT_AXES turns 20 % of the kill's fame into credits: UpdateReSpecPoints {{1 combat, 2 20.21}} after the UpdateFame (got {Show(batch.Take(2))})");
+        batch = [.. batch.Where(e => e.Code != EventCodes.UpdateReSpecPoints)];
         // Stage 6a: the silver pile right after UpdateFame (SPEC §5c.1), then taken out of the list for the indices below.
         Check(batch.Count > 1 && batch[1].Code == EventCodes.NewSilverObject, $"the kill's second event after the board is NewSilverObject (got {Show(batch.Take(2))})");
         var silver = batch[1].P;

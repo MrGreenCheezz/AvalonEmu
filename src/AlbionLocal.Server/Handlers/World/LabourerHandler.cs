@@ -69,6 +69,8 @@ public sealed partial class WorldSession
     {
         var (o, why) = world.Islands.CheckFurniturePickup(p, id);
         if (o is not null && !Fits(p.Inventory.Bag, [(o.Item, 1)])) (o, why) = (null, "the inventory is full");
+        // StageR buildings SPEC §4: a chest's items are never dropped with it.
+        if (o is { Item.Container: not null } && ChestItems(p, o.Row.Id) is > 0 and var inside) (o, why) = (null, $"the chest still holds {inside} item(s): empty it first");
         if (o is null)
         {
             Log.Info(Name, $"'{p.Character.Name}' pick-up of furniture {id} refused: {why}");

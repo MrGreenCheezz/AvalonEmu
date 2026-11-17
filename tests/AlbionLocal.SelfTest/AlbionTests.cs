@@ -48,7 +48,7 @@ public static class AlbionTests
         OpcodeTable.Build(typeof(LoginSession), typeof(WorldSession), typeof(ChatSession));
         var login = OpcodeTable.For(typeof(LoginSession));
         var game = OpcodeTable.For(typeof(WorldSession));
-        Check(login.Handlers.Count == 8 && game.Handlers.Count == 243 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
+        Check(login.Handlers.Count == 8 && game.Handlers.Count == 344 && OpcodeTable.For(typeof(ChatSession)).Handlers.Count == 6 && game.Find(OperationCodes.Move) is { Quiet: true, Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.QuestGiverRequest) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.SetNextTutorialState) is { Status: SessionStatus.InWorld }
               && game.Find(OperationCodes.UseFunction) is { Status: SessionStatus.InWorld }
@@ -124,8 +124,9 @@ public static class AlbionTests
         Check(stubs.KindOf(OperationCodes.GetArenaRankings) is null && stubs.KindOf(OperationCodes.BuyPremium) == OpcodeStubs.StubKind.Response
               && stubs.KindOf(OperationCodes.QueryAllianceGuildStats) == OpcodeStubs.StubKind.Silent
               && stubs.KindOf(OperationCodes.CastStart) is null && stubs.KindOf(OperationCodes.RegisterToObject) is null
-              && stubs.KindOf(OperationCodes.GetCharacterStats) == OpcodeStubs.StubKind.Ack && stubs.KindOf(OperationCodes.Move) is null,
-              "the content file loads: filled, silent and ack entries");
+              && stubs.KindOf(OperationCodes.PartyFinderRegisterApplicants) is null && stubs.KindOf(OperationCodes.GetCharacterStats) is null
+              && stubs.KindOf(OperationCodes.Move) is null,
+              "the content file loads: filled and silent entries, none for an operation with a handler");
 
         var peer = new FakePeer();
         var session = new BareSession(peer) { Stubs = stubs };
@@ -139,17 +140,22 @@ public static class AlbionTests
         session.OnRequest(silent, encrypted: false);
         Check(peer.Responses.Count == 1 && table.Stubbed.GetValueOrDefault(OperationCodes.QueryAllianceGuildStats) == 1 && !table.Unhandled.ContainsKey(OperationCodes.QueryAllianceGuildStats),
               "QueryAllianceGuildStats: no answer at all, counted as stubbed");
-        // Ack: the bare rc-0 answer of an operation without a response class, with the request id or, as official for
-        // PartyFinderUnregisterApplicants, without it.
+        // Ack: the bare rc-0 answer of an operation without a response class, with the request id. (The one "ack-no-request-id"
+        // stub, PartyFinderUnregisterApplicants, has a handler since stageR; PartyFinderTest checks its answer without the id.)
         OperationRequest Bare(OperationCodes code, int? id) => new(AlbionSerializer.PhotonOperationCode,
             id is { } rid ? new() { [ReservedKeys.OperationCode] = (short)code, [ReservedKeys.RequestId] = rid } : new() { [ReservedKeys.OperationCode] = (short)code });
-        session.OnRequest(Bare(OperationCodes.GetCharacterStats, 20), encrypted: false);
-        session.OnRequest(Bare(OperationCodes.PartyFinderUnregisterApplicants, 21), encrypted: false);
-        Check(peer.Responses is [_, { ReturnCode: 0 } stats, { ReturnCode: 0 } unregister]
-              && stats.Parameters.Keys.Order().SequenceEqual(new[] { ReservedKeys.OperationCode, ReservedKeys.RequestId }) && stats.Parameters[ReservedKeys.RequestId] is 20
-              && stats.Parameters[ReservedKeys.OperationCode] is (short)OperationCodes.GetCharacterStats
-              && unregister.Parameters.Keys.SequenceEqual(new[] { ReservedKeys.OperationCode }) && stats.DebugMessage is null,
-              "ack: GetCharacterStats gets exactly {253, 255: 20} with RC 0, PartyFinderUnregisterApplicants {253} only");
+        // The content file's former ack entries all have handlers since stageR (GetCharacterStats: StatsHandler; the party finder's
+        // two: PartyFinderHandler), so both ack kinds are checked on a table of their own, with two operations nobody handles.
+        var acks = OpcodeStubs.Parse("{ \"TrackAchievements\": \"ack\", \"ChangeClusterTax\": \"ack-no-request-id\" }", "test.json", HandlerOf);
+        var ackPeer = new FakePeer();
+        var ackSession = new BareSession(ackPeer) { Stubs = acks };
+        ackSession.OnRequest(Bare(OperationCodes.TrackAchievements, 20), encrypted: false);
+        ackSession.OnRequest(Bare(OperationCodes.ChangeClusterTax, 21), encrypted: false);
+        Check(ackPeer.Responses is [{ ReturnCode: 0 } withId, { ReturnCode: 0 } withoutId]
+              && withId.Parameters.Keys.Order().SequenceEqual(new[] { ReservedKeys.OperationCode, ReservedKeys.RequestId }) && withId.Parameters[ReservedKeys.RequestId] is 20
+              && withId.Parameters[ReservedKeys.OperationCode] is (short)OperationCodes.TrackAchievements
+              && withoutId.Parameters.Keys.SequenceEqual(new[] { ReservedKeys.OperationCode }) && withId.DebugMessage is null,
+              "ack: exactly {253, 255: 20} with RC 0; ack-no-request-id: {253} only");
 
         void Refused(string text, params string[] words)
         {
@@ -170,7 +176,7 @@ public static class AlbionTests
         Refused("""{ "BuyPremium": { "ReturnCode": 40000 } }""", "BuyPremium.ReturnCode (short): expected an integer -32768..32767");
         Refused("""{ "Move": {} }""", "Move is handled by WorldSession.");
         Refused("""{ "AcceptPopups": {} }""", "no response class"); // stageM: ReportClientError has its handler now (logged at Info)
-        Refused("""{ "AcceptPopups": "silent", "QueryAllianceGuildStats": "ack", "GetCharacterStats": "loud" }""", "3 problem(s)",
+        Refused("""{ "AcceptPopups": "silent", "QueryAllianceGuildStats": "ack", "TrackAchievements": "loud" }""", "3 problem(s)",
             "AcceptPopups has no response class", "QueryAllianceGuildStats has the response class QueryAllianceGuildStatsResponse", "unknown kind \"loud\"");
         Refused("""{ "CastStart": "silent" }""", "CastStart is handled by WorldSession.");
         Refused("""{ "Move": "silent" }""", "Move is handled by WorldSession.");
@@ -262,7 +268,7 @@ public static class AlbionTests
         int Code(EventData e) => Convert.ToInt32(e.Parameters.GetValueOrDefault(ReservedKeys.EventCode));
         Check(jr.a8b == hero.Id && first.Events.Select(Code).ToArray() is
                   [(int)EventCodes.NewEquipmentItem, (int)EventCodes.NewSimpleItem, (int)EventCodes.UpdateChatSettings, (int)EventCodes.MountCooldownUpdate,
-                   (int)EventCodes.LocalTreasuresUpdate, (int)EventCodes.JoinFinished, (int)EventCodes.NewUnreadMails, (int)EventCodes.MailOperationPossible, (int)EventCodes.MutePlayerUpdate,
+                   (int)EventCodes.LocalTreasuresUpdate, (int)EventCodes.OverChargeStatus, (int)EventCodes.JoinFinished, (int)EventCodes.NewUnreadMails, (int)EventCodes.MailOperationPossible, (int)EventCodes.MutePlayerUpdate,
                    (int)EventCodes.FriendRequestInfos, (int)EventCodes.FriendRequestInfos, (int)EventCodes.FriendInfos]
               && jr.a9q?[0] == Convert.ToInt64(first.Events[0].Parameters[0]) && jr.a9t?[0] == Convert.ToInt64(first.Events[1].Parameters[0]),
               "join returns the character, its items are created and listed in the containers; after JoinFinished the mailbox's 201/202 and the login's mute and friends lists (stageJ)");
@@ -697,11 +703,11 @@ public static class AlbionTests
         var fai = events.FindIndex(p => Code(p) == (int)EventCodes.FullAchievementInfo);
         // Unlock-all has no fame inside a level, so no 153: 150, empty tracking (154), minimal auto-learn (155).
         // Then MountCooldownUpdate, sent at every Join (stageD mounts SPEC §4.8).
-        Check(fai >= 0 && fai == events.Count - 6 && Code(events[^5]) == (int)EventCodes.FullTrackedAchievementInfo
-              && events[^5].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^4]) == (int)EventCodes.FullAutoLearnAchievementInfo
-              && events[^4].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^3]) == (int)EventCodes.MountCooldownUpdate
-              && Code(events[^2]) == (int)EventCodes.LocalTreasuresUpdate && Code(events[^1]) == (int)EventCodes.JoinFinished,
-              "FullAchievementInfo, empty tracking and auto-learn lists, then MountCooldownUpdate and LocalTreasuresUpdate (issue #23) before JoinFinished");
+        Check(fai >= 0 && fai == events.Count - 7 && Code(events[^6]) == (int)EventCodes.FullTrackedAchievementInfo
+              && events[^6].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^5]) == (int)EventCodes.FullAutoLearnAchievementInfo
+              && events[^5].GetValueOrDefault((byte)1) is int[] { Length: 0 } && Code(events[^4]) == (int)EventCodes.MountCooldownUpdate
+              && Code(events[^3]) == (int)EventCodes.LocalTreasuresUpdate && Code(events[^2]) == (int)EventCodes.OverChargeStatus && Code(events[^1]) == (int)EventCodes.JoinFinished,
+              "FullAchievementInfo, empty tracking and auto-learn lists, then MountCooldownUpdate, LocalTreasuresUpdate (issue #23) and OverChargeStatus (stageR) before JoinFinished");
         var ach = new FullAchievementInfoEvent();
         AlbionSerializer.FillFields(ach, events[fai]);
         Check(ach.ddn == jr.a8a && ach.ccy?.Length == 30 && ach.ccz?.Length == 674 && ach.cc0 is { Length: 674 } lv && lv.All(l => l == 100)
@@ -998,16 +1004,17 @@ public static class AlbionTests
         Check(!join.Parameters.ContainsKey(112) && !join.Parameters.ContainsKey(116), "join leaves out arrays the official server never sends");
         // Items go out before the Join response (as on the official server), then the chat tabs and JoinFinished.
         var events = new List<Dictionary<byte, object?>>();
-        while (events.Count < 6 && gameClient.Events.TryTake(out var ie, 5000)) events.Add(ie.Parameters);
+        while (events.Count < 7 && gameClient.Events.TryTake(out var ie, 5000)) events.Add(ie.Parameters);
         SkipLoginLists(gameClient);
         int Code(int i) => Convert.ToInt32(events[i].GetValueOrDefault(ReservedKeys.EventCode));
-        Check(events.Count == 6
+        Check(events.Count == 7
               && Code(0) == (int)EventCodes.NewEquipmentItem && Convert.ToInt32(events[0][1]) == 8610
               && Convert.ToInt64(events[0][8]) == 135_000_000 && events[0].GetValueOrDefault((byte)9) is short[] && events[0].GetValueOrDefault((byte)10) is short[]
               && Code(1) == (int)EventCodes.NewSimpleItem && Convert.ToInt32(events[1][2]) == 10
               && Code(2) == (int)EventCodes.UpdateChatSettings && events[2][0] is string[] { Length: 7 } && events[2][1] is int[][] { Length: 7 }
-              && Code(3) == (int)EventCodes.MountCooldownUpdate && Code(4) == (int)EventCodes.LocalTreasuresUpdate && Code(5) == (int)EventCodes.JoinFinished,
-              "items are created, then the chat tabs (without them the client shows no chat line), MountCooldownUpdate (every Join), LocalTreasuresUpdate (issue #23) and JoinFinished follow the join response");
+              && Code(3) == (int)EventCodes.MountCooldownUpdate && Code(4) == (int)EventCodes.LocalTreasuresUpdate && Code(5) == (int)EventCodes.OverChargeStatus
+              && Code(6) == (int)EventCodes.JoinFinished,
+              "items are created, then the chat tabs (without them the client shows no chat line), MountCooldownUpdate (every Join), LocalTreasuresUpdate (issue #23), OverChargeStatus and JoinFinished follow the join response");
         Check(jr.a9p == second.EquipmentContainer && jr.a9s == second.InventoryContainer
               && jr.a9q?.Length == 10 && jr.a9q[0] == Convert.ToInt64(events[0][0])
               && jr.a9t?.Length == 48 && jr.a9t[0] == Convert.ToInt64(events[1][0]),

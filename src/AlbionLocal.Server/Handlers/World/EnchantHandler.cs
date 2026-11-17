@@ -181,6 +181,8 @@ public sealed partial class WorldSession
             if (player.Inventory.FindItem(id) is not { } item || player.Inventory.Equipment.IndexOf(item) == Mounts.MountSlot)
                 return Refuse(RerollError.ItemNotRerollable, $"object {id} is not the player's");
             if (!item.Template.IsEquipment || item.Template.Kind == "mount") return Refuse(RerollError.ItemNotRerollable, $"{item.Template.Name} is no equipment");
+            // A stack of equal equipment (stageR items SPEC §4) is rolled one item at a time [assume]: the price is per item and one roll would move the whole stack.
+            if (item.Count > 1) return Refuse(RerollError.ItemNotRerollable, $"{item} is a stack of {item.Count}: split one off first");
             if (item.Template.Tier > building.Template.Tier) return Refuse(RerollError.ItemTierToHigh, $"{item.Template.Name} is above the building's tier {building.Template.Tier}");
             if (item.Quality >= item.Template.MaxQuality) return Refuse(RerollError.ItemAlreadyAtMaxQuality, $"{item} is at quality {item.Quality}");
             if (RerollPrice(item) <= 0 || world.Economy.RerollWeights is var table && (item.Quality > table.Count || table[item.Quality - 1].Sum() <= 0))

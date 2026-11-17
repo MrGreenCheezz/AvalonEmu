@@ -68,6 +68,9 @@ public sealed class Guild(Guid id, string name, DateTime created, GuildLogo logo
     /// <summary>The guild goals' seasons, weeks and member logs (stageI guild-goals SPEC §2.8), saved with the contracts.</summary>
     public GuildProgress Progress { get; set; } = new();
 
+    /// <summary>Recruitment info, codex, welcome mail, optional stats, upkeep flag (stageR guild SPEC; the guild_profiles row).</summary>
+    public GuildProfile Profile { get; set; } = new();
+
     /// <summary>The ids of the eight role tags in <see cref="GuildRoles.TagRoles"/> order (GuildFullAccessTagsUpdated key 1).</summary>
     public Guid[] Tags { get; } = tags;
 

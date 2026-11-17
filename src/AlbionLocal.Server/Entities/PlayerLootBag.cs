@@ -62,8 +62,12 @@ public sealed class PlayerLootBag(long id, DeathSpot spot, Player victim, Contai
 
     public override string TypeName => $"of '{VictimName}' ({Items.Count} item(s))";
 
-    /// <summary>Whether <paramref name="p"/> may open it now: anyone after the protection, a looter before.</summary>
-    public override bool MayOpen(Player p) => p.World.GameNow >= ProtectedUntil || Looters.Contains(p.Character.Id);
+    /// <summary>
+    /// Whether <paramref name="p"/> may open it now: anyone after the protection, a looter before; never under a cannotlootplayers effect
+    /// (DISMOUNTED_HOSTILE's 5 s, stageR spell-effects).
+    /// </summary>
+    public override bool MayOpen(Player p) =>
+        (p.World.GameNow >= ProtectedUntil || Looters.Contains(p.Character.Id)) && !Systems.SpellEffects.CannotLootPlayers(p, p.World.GameNow);
 
     /// <summary>
     /// NewLoot (98) with type 1 (the 27 captured player bags of 002835): 0 loot id, 1 template, 2 the victim's object id, 3 its name,

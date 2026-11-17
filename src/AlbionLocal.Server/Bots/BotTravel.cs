@@ -270,7 +270,7 @@ public sealed partial class BotManager
     private bool Passable(ClusterInfo c)
     {
         var id = c.Id;
-        if (DungeonLayout.IsInstance(id) || MistsIds.IsInstance(id) || CorruptedData.IsInstance(id) || HellgateData.IsInstance(id) || ArenaIds.IsInstance(id)
+        if (DungeonLayout.IsInstance(id) || MistsIds.IsInstance(id) || DragonAreaIds.IsInstance(id) || CorruptedData.IsInstance(id) || HellgateData.IsInstance(id) || ArenaIds.IsInstance(id)
             || Settings.Exclude.Contains(id) || c.Type.Contains("NOFURNITURE", StringComparison.Ordinal) || c.Type.Contains("HELLDEN", StringComparison.Ordinal)
             || c.Type.StartsWith("TUNNEL_", StringComparison.Ordinal)) return false;
         if (Options.Zones.Count == 0) return true;

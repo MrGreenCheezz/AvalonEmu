@@ -113,6 +113,7 @@ public sealed partial class WorldSession
             bhk = [.. attachments.Select(_ => "")],
             bhl = [.. attachments.Select(a => a.Item.Count)],
             bhm = [.. attachments.Select(a => (short)Math.Max(1, a.Item.Quality))],
+            bhn = mail.Kind == MailKind.GuildApplication ? world.Guilds.ApplicationStats(mail.Id) : null, // [8] stageR: the applicant's stats
             bho = true,
         }, RequestId, RequestEncrypted);
         if (!mail.Read) Mailer.Notify(world, owner, guild);

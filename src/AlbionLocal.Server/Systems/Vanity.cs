@@ -29,6 +29,15 @@ public sealed class Vanity(World world)
 
     public VanityOptions Options => world.Config.Vanity;
 
+    private KillEmotes? _killEmotes;
+    private KillTrophies? _killTrophies;
+
+    /// <summary>StageR: the victory emotes (their charges, the store's gold purchase, the play at a kill) and their data with the kill trophy tables.</summary>
+    public KillEmotes KillEmotes => _killEmotes ??= new KillEmotes(world);
+
+    /// <summary>StageR: the kill trophies of lethal player kills.</summary>
+    public KillTrophies KillTrophies => _killTrophies ??= new KillTrophies(world);
+
     /// <summary>The drops' random (a test sets its own).</summary>
     public Random Random { get; set; } = new();
 
@@ -150,6 +159,7 @@ public sealed class Vanity(World world)
     {
         if (!Options.Enabled || chance <= 0 || p.Bot is not null) return null;
         if (Random.NextDouble() >= chance * Options.ChanceFactor) return null;
+        if (KillEmotes.DropBundle(p, source) is not null) return null; // stageR: Vanity:KillEmoteDropShare of the drops are victory emote charges
         return Drop(p, source, ThemeOf(themeSource));
     }
 

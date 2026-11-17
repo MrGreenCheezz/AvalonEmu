@@ -58,6 +58,15 @@ public sealed class Party(int id, Guid leader)
     /// <summary>PartyMarkedObjectsUpdated key 1: string[6], "" for an empty slot (a null entry would not serialize).</summary>
     public string[] Marks { get; } = ["", "", "", "", "", ""];
 
+    /// <summary>StageR party: the faction-warfare reinforcements flag of op 235 (PartyJoined key 3, event 246).</summary>
+    public bool FwReinforcements { get; set; }
+
+    /// <summary>StageR party: the leader's party navigation of op 547 (PartyJoined keys 5-7, event 247); null when none.</summary>
+    public PartyNavigation? Navigation { get; set; }
+
+    /// <summary>StageR party: the running or last ready check (op 512/513, event 245); null before the first.</summary>
+    public ReadyCheck? Ready { get; set; }
+
     public PartyMember? Find(Guid id) => Members.FirstOrDefault(m => m.Id == id);
 
     /// <summary>The member called <paramref name="name"/> (case-insensitive); null when none.</summary>
@@ -79,7 +88,7 @@ public sealed record PendingInvite(Guid Inviter, string InviterName, Guid Invite
 /// one accepted from a solo inviter in the middle of one, is answered as if it were gone (9000, 239 busy) [choice].
 /// Touched only under <see cref="World.Sync"/>.
 /// </summary>
-public sealed class Parties(World world)
+public sealed partial class Parties(World world)
 {
     private readonly Dictionary<Guid, Party> _byMember = [];
     private readonly Dictionary<Guid, PendingInvite> _invites = []; // by invitee
@@ -155,14 +164,18 @@ public sealed class Parties(World world)
     /// PartyJoined (230, awg) of <paramref name="party"/> for one member's client: 0 id, 2 loot mode, 4 leader, keys 8-16 one entry
     /// per member incl. the receiver, all non-null and of one length (c3g.k case 0xe6; a null array skips the object link and
     /// the chat line): 8 Guids, 9 names, 10 frame bytes, 11 avatar / 12 ring (Int16 0), 13 flagging (packed byte 0), 14 Int32 0,
-    /// 15 roles (Int16), 16 present (true). Key 1 stays false (true would turn Leave into cast 0x15, SPEC §2), 3/5-7 absent.
+    /// 15 roles (Int16), 16 present (true). Key 1 stays false (true would turn Leave into cast 0x15, SPEC §2). StageR: key 3 the
+    /// FW reinforcements flag, keys 5-7 the party navigation, for a <paramref name="receiver"/> other than the leader only (the
+    /// client starts it on any receiver, c3g.k case 0xe6, but ignores event 247 on the leader's own client).
     /// </summary>
-    public static PartyJoinedEvent Joined(Party party)
+    public static PartyJoinedEvent Joined(Party party, Guid? receiver = null)
     {
         var n = party.Members.Count;
+        var nav = receiver is { } r && r != party.Leader ? party.Navigation : null;
         return new PartyJoinedEvent
         {
-            dif = party.Id, dih = party.LootMode, dij = party.Leader,
+            dif = party.Id, dih = party.LootMode, dij = party.Leader, dii = party.FwReinforcements,
+            dik = nav?.Destination, dil = nav?.Flag1 ?? false, dim = nav?.Flag2 ?? false,
             din = [.. party.Members.Select(m => m.Id)],                 // [8]
             dio = [.. party.Members.Select(m => m.Name)],               // [9]
             dip = [.. party.Members.Select(m => m.Frame)],              // [10] byte[]
@@ -264,30 +277,45 @@ public sealed class Parties(World world)
         _droppedAway.Remove(me);
         // Bot-party: a world bot joins as its inviter's companion member (no client, never offline, never the leader: Companions.Recruit).
         var joiner = invitee.Bot is null ? MemberOf(invitee) : new PartyMember(me, invitee.Character.Name ?? "", (byte)invitee.Character.Template) { Owner = invite.Inviter };
-        if (party is null)
-        {
-            var host = inviter!; // a new party without an inviter player was refused above
-            _droppedAway.Remove(invite.Inviter);
-            party = new Party(++_lastId, invite.Inviter);
-            _parties.Add(party);
-            party.Members.Add(MemberOf(host));
-            _byMember[invite.Inviter] = party;
-            party.Members.Add(joiner);
-            _byMember[me] = party;
-            var joined = Joined(party);
-            host.Session.Send(joined);
-            invitee.Session.Send(joined);
-        }
-        else
-        {
-            SendTo(party, PlayerJoined(party, joiner)); // the old members only: the joiner would add itself twice (SPEC §2)
-            party.Members.Add(joiner);
-            _byMember[me] = party;
-            invitee.Session.Send(Joined(party));
-        }
+        var created = party is null;
+        party = Admit(party, inviter, invitee, joiner); // a new party without an inviter player was refused above
         inviter?.Session.Send(Answer(invite.InviteeName, true, false, NoReason));
         Log.Info("party", $"'{invite.InviteeName}' joins party {party.Id} of '{invite.InviterName}' ({party.Members.Count} members)");
+        // The modules' PartyJoined: a new party's leader first, then the joiner.
+        if (created) world.Modules.Party(true, invite.Inviter, invite.InviterName, party.Id, 2, "created");
+        world.Modules.Party(true, me, invite.InviteeName, party.Id, party.Members.Count, "invited");
         return 0;
+    }
+
+    /// <summary>
+    /// <paramref name="joiner"/> (of player <paramref name="joinerPlayer"/>) joins <paramref name="party"/>: 232 to the old members
+    /// only (the joiner would add itself twice, SPEC §2), then 230 to the joiner. With no party, a new one of <paramref name="host"/>
+    /// (its leader, which must play) and the joiner: 230 to both. Used by an accepted invitation and an accepted join request.
+    /// </summary>
+    private Party Admit(Party? party, Player? host, Player joinerPlayer, PartyMember joiner)
+    {
+        if (party is null)
+        {
+            var lead = host!;
+            _droppedAway.Remove(lead.Character.Id);
+            party = new Party(++_lastId, lead.Character.Id);
+            _parties.Add(party);
+            party.Members.Add(MemberOf(lead));
+            _byMember[lead.Character.Id] = party;
+            party.Members.Add(joiner);
+            _byMember[joiner.Id] = party;
+            var joined = Joined(party);
+            lead.Session.Send(joined);
+            joinerPlayer.Session.Send(joined);
+            Finder.PartyChanged(party); // stageR: its party finder listing shows the joiner, or goes when full
+            return party;
+        }
+        SendTo(party, PlayerJoined(party, joiner));
+        party.Members.Add(joiner);
+        _byMember[joiner.Id] = party;
+        joinerPlayer.Session.Send(Joined(party, joiner.Id));
+        Finder.PartyChanged(party);
+        return party;
     }
 
     /// <summary>Flow 3, PartyLeave (229): not in a party 9161 [choice: "@PARTY_LEAVE_FAILED"]; else out (<see cref="Remove"/>).</summary>
@@ -304,6 +332,8 @@ public sealed class Parties(World world)
     /// </summary>
     public void Disconnected(Guid character)
     {
+        DropJoinRequests(character); // stageR: its open join request, or those waiting for its answer
+        Finder.Disconnected(character); // stageR: its party finder listing, registration, applications and subscription
         if (Of(character) is { } party) Remove(party, party.Find(character)!, kicked: false, "disconnected");
     }
 
@@ -337,6 +367,7 @@ public sealed class Parties(World world)
         if (m.Missed) _droppedAway[m.Id] = party.Id;
         world.Expeditions.PartyLeft(m.Id); // stageH: a registration of the party's expedition group ends with it
         Log.Info("party", $"'{m.Name}' {why}: party {party.Id} has {party.Members.Count} member(s)");
+        if (!m.Companion) world.Modules.Party(false, m.Id, m.Name, party.Id, party.Members.Count, why); // the modules' PartyLeft
         // StageN companions: a companion out of the party (kicked from the party frame, dismissed) goes; a player's companions leave with it.
         if (m.Companion) world.Companions.LeftParty(m.Id);
         else
@@ -359,9 +390,11 @@ public sealed class Parties(World world)
             party.Members.Clear();
             _parties.Remove(party);
             Log.Info("party", $"party {party.Id} disbanded");
+            Finder.PartyGone(party.Leader); // stageR: its party finder listing goes
             return;
         }
         if (party.Leader == m.Id) SetLeader(party, party.Members.FirstOrDefault(x => !x.Companion) ?? party.Members[0]);
+        Finder.PartyChanged(party);
     }
 
     // ---- companions (stageN companions SPEC §2) ----
@@ -405,8 +438,11 @@ public sealed class Parties(World world)
 
     private void SetLeader(Party party, PartyMember m)
     {
+        StopNavigation(party, "the leader changes"); // stageR: a navigation is the leader's [assume]
+        var old = party.Leader;
         party.Leader = m.Id;
         SendTo(party, new PartyLeaderChangedEvent { djj = party.Id, djk = m.Id });
+        Finder.LeaderChanged(party, old); // stageR: the party finder listing moves to the new leader [infer]
         Log.Info("party", $"'{m.Name}' leads party {party.Id}");
     }
 
@@ -506,7 +542,7 @@ public sealed class Parties(World world)
         var missed = member.Missed;
         member.Missed = false;
         if (clusterChange && !missed && !world.Config.PartyResendAfterClusterChange) return;
-        p.Session.Send(Joined(party));
+        p.Session.Send(Joined(party, id));
         Log.Info("party", $"'{p.Character.Name}' gets party {party.Id} again ({(!clusterChange ? "login" : missed ? "missed events" : "cluster change")})");
     }
 
@@ -566,6 +602,7 @@ public sealed class Parties(World world)
                 Online(invite.Inviter)?.Session.Send(Answer(invite.InviteeName, false, true, TimedOut));
                 Log.Info("party", $"the invitation of '{invite.InviteeName}' by '{invite.InviterName}' timed out");
             }
+        ExpireJoinRequests(now); // stageR
         // Members without a joined player: once a second, not every tick (Online scans every map).
         if (_parties.Count == 0 || now < _nextOfflineCheck) return;
         _nextOfflineCheck = now + TimeSpan.FromSeconds(1);

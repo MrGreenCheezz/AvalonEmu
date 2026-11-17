@@ -18,6 +18,13 @@ public static class FeatureSwitches
     public const int DynamicTemplates = 112;
 
     /// <summary>
+    /// Features.PartyFinder: off by default in the client (cdg.a), but on in the official table (FeatureSwitchInfo event, key 0,
+    /// bool[227], [171] = true in captures 20261015_113433, 20261015_114814 and 20261016_002835). Off, PartyFinderGui.OnShow
+    /// (0x180f6ba40) shows "@GUILDFINDER_FEATURE_DISABLED" instead of the window and f8n prints the same for every finder error.
+    /// </summary>
+    public const int PartyFinder = 171;
+
+    /// <summary>
     /// Features the client turns off by default (cdg.a(Features, bool) 0x180885580, which
     /// dew..cctor uses to fill the table before any server data arrives). All others default on.
     /// </summary>

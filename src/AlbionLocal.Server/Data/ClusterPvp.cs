@@ -63,6 +63,14 @@ public sealed record ClusterPvp(PvpRule Rule, bool PlayersAreLethal = true, bool
     public bool AllowMounts { get; init; } = true;
 
     /// <summary>
+    /// StageR kill trophies (kill-vanity SPEC §2): the archetype's killtrophy (a killtrophy.xml table: KILLTROPHY_BLACK in the outlands and roads,
+    /// KILLTROPHY_HELL in the corrupted dungeons and hellgates; none elsewhere) and killtrophydenominator (1), which divides its chance.
+    /// </summary>
+    public string? KillTrophy { get; init; }
+
+    public int KillTrophyDenominator { get; init; } = 1;
+
+    /// <summary>
     /// An archetype with no attributes at all (the client's defaults), as for a cluster type worldsettings.xml does not name:
     /// lethal, but without the full loot of a named lethal zone (<see cref="NoDeathLoss"/>).
     /// </summary>
@@ -100,6 +108,8 @@ public sealed record ClusterPvp(PvpRule Rule, bool PlayersAreLethal = true, bool
             NoDeathLoss = name?.StartsWith("ARENA_", StringComparison.Ordinal) == true,
             AllowTrade = Enum.TryParse<PlayerTradeRule>((string?)archetype.Attribute("allowtrade"), ignoreCase: true, out var t) && Enum.IsDefined(t) ? t : PlayerTradeRule.Allowed,
             AllowEquipmentSwapping = XmlAttr.Bool(archetype, "allowequipmentswapping", true),
+            KillTrophy = (string?)archetype.Attribute("killtrophy") is { Length: > 0 } trophy ? trophy : null,
+            KillTrophyDenominator = Math.Max(1, XmlAttr.Int(archetype, "killtrophydenominator", 1)),
         };
     }
 }

@@ -1,0 +1,9 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-double-loot",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "More loot, more fame, with its factors in its settings: how to use settings, formulas and masks",
+  "api": "1.0",
+  "enabled": false
+}

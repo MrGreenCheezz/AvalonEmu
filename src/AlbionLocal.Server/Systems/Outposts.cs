@@ -36,7 +36,9 @@ namespace AlbionLocal.Server.Systems;
 /// order, key 5 per faction whether a player flagged for it is on the map [infer], key 6 FrontLine 1 / BackLine 2. The world map's
 /// ClusterInfoUpdate keys 19 and 27 carry the towers' contest and owners (<see cref="FillWorldMap"/>).</item>
 /// </list>
-/// Not done: supplies and the campaign, the duchy conflicts (the front line here is a neighbour rule), fortresses, red-zone events, the faction
+/// StageR fw-zone: a fortress fight's keys 9/10 and the red-zone event's 11-13 (<see cref="FactionFortresses"/>, <see cref="RedZoneEvents"/>), the red duchies'
+/// towers handed to Caerleon for an event (<see cref="Force"/>).
+/// Not done: supplies and the campaign, the duchy conflicts (the front line here is a neighbour rule), the faction
 /// points of a capture. Under <see cref="World.Sync"/>.
 /// </summary>
 public sealed class Outposts(World world)
@@ -160,6 +162,7 @@ public sealed class Outposts(World world)
         if (!O.Outposts || template.Outposts.Count == 0 || world.Factions.Data is not { } fw) yield break;
         var duchy = fw.ClusterFaction.GetValueOrDefault(template.Id);
         if (!Pvp.IsFaction(duchy)) yield break;
+        if (_forced.TryGetValue(template.Id, out var forced)) duchy = forced; // stageR fw-zone: a red-zone event holds the zone
         _towers.RemoveAll(t => t.Map is { Unloaded: true } || t.Map == map);
         _zones.TryAdd(template.Id, new Zone(duchy));
         var now = UtcNow;
@@ -415,7 +418,7 @@ public sealed class Outposts(World world)
         }
         if (Build(map) is not { } state) return;
         var key = string.Join(",", state.b7a ?? []) + "|" + string.Join(",", state.b7b ?? []) + "|" + Convert.ToHexString(state.b7c ?? []) + "|" + state.b7d
-            + "|" + string.Join("", (state.b7e ?? []).Select(b => b ? '1' : '0')) + "|" + state.b7f;
+            + "|" + string.Join("", (state.b7e ?? []).Select(b => b ? '1' : '0')) + "|" + state.b7f + "|" + state.b7i + "|" + state.b7j + "|" + state.b7k + "|" + state.b7l + "|" + state.b7m;
         if (key == z.Sent) return;
         z.Sent = key;
         foreach (var p in map.Players.Values) p.Session.Send(state);
@@ -424,7 +427,9 @@ public sealed class Outposts(World world)
     /// <summary>
     /// FactionWarfareClusterState 468 of <paramref name="map"/> (CLIENT.md: keys 1/2 the same length ≤ 6, key 3 one per world.xml outpost, key 5
     /// bool[6], else the client skips the update): the controller with its 1000 points (a rising majority with its share of
-    /// FactionWarfare:ControlSeconds beside it), the towers' owners, the flagged presence, the front line; key 9 the duchy's faction.
+    /// FactionWarfare:ControlSeconds beside it), the towers' owners, the flagged presence, the front line; keys 7 / 9 / 10 the duchy's conflict as
+    /// captured (stageQ camps; 1207, YELLOW_10 at war with YELLOW_15: 7 true, 9 Mountain 4, 10 Forest 2; 0204, no conflict: 9 its duchy's Swamp 5,
+    /// 10 none 0x80; the client only stores them).
     /// Null for a map without towers.
     /// </summary>
     private FactionWarfareClusterStateEvent? Build(Map map)
@@ -445,12 +450,60 @@ public sealed class Outposts(World world)
         var presence = new bool[6];
         foreach (var p in map.Players.Values)
             if (Pvp.IsFaction(p.Flag)) presence[p.Flag - 1] = true;
-        return new FactionWarfareClusterStateEvent
+        var duchy = world.Factions.Data?.ClusterFaction.GetValueOrDefault(map.Cluster) ?? 0;
+        var attackers = world.Factions.Data?.Conflicts.GetValueOrDefault(map.Cluster);
+        var e = new FactionWarfareClusterStateEvent
         {
             b69 = world.GameNow, b7a = [.. factions], b7b = [.. points], b7c = [.. towers.Select(t => t?.Owner ?? z.Controller)], b7d = z.Controller,
-            b7e = presence, b7f = Frontline(map.Cluster) ? FrontLine : BackLine, b7i = world.Factions.Data?.ClusterFaction.GetValueOrDefault(map.Cluster) ?? 0,
+            b7e = presence, b7f = Frontline(map.Cluster) ? FrontLine : BackLine, b7g = attackers is { Length: > 0 },
+            b7i = attackers is [var attacker, ..] ? attacker : duchy, b7j = attackers is { Length: > 0 } ? duchy : (byte)0x80,
         };
+        // StageR fw-zone: a fortress fight in the duchy (key 9 its owner, 10 the attacker) and the red-zone event (keys 11-13).
+        if (world.Fortresses.ZoneOverride(map.Cluster) is { } fortress) (e.b7i, e.b7j) = fortress;
+        world.RedZone.Fill(e, map.Cluster);
+        return e;
     }
+
+    /// <summary>StageR fw-zone: every zone's 468 goes out again on the next tick (a fortress fight or a red-zone phase changed keys 9-13).</summary>
+    public void Refresh()
+    {
+        foreach (var z in _zones.Values) z.Sent = "";
+    }
+
+    /// <summary>
+    /// StageR fw-zone, the red-zone event (<see cref="RedZoneEvents"/>): the towers of <paramref name="clusters"/> go to <paramref name="owner"/>
+    /// (as a capture: 367, the new owner's guards), or with null back to their duchy's faction; towers made later start so.
+    /// </summary>
+    public void Force(IEnumerable<string> clusters, byte? owner)
+    {
+        var set = clusters.ToHashSet(StringComparer.Ordinal);
+        foreach (var c in set)
+            if (owner is { } o) _forced[c] = o;
+            else _forced.Remove(c);
+        var now = UtcNow;
+        foreach (var t in _towers.Where(t => t.Map is not null && set.Contains(t.State.Cluster)))
+        {
+            var target = owner ?? world.Factions.Data?.ClusterFaction.GetValueOrDefault(t.State.Cluster) ?? 0;
+            if (!Pvp.IsFaction(target) || t.State.Owner == target) continue;
+            (t.State.Holder, t.State.Value) = (target, 1000);
+            Captured(t, t.Map!, now, RulesOf(t.State));
+        }
+        foreach (var (cluster, z) in _zones.Where(z => set.Contains(z.Key)))
+            if ((owner ?? world.Factions.Data?.ClusterFaction.GetValueOrDefault(cluster)) is { } c and > 0) (z.Controller, z.Majority, z.MajoritySince) = (c, 0, null);
+        foreach (var s in _states.Values.Where(s => set.Contains(s.Cluster) && !_towers.Any(t => t.State == s && t.Map is not null)))
+        {
+            var target = owner ?? world.Factions.Data?.ClusterFaction.GetValueOrDefault(s.Cluster) ?? s.Owner; // a zone not loaded: set for its next load
+            if (Pvp.IsFaction(target)) (s.Owner, s.Holder, s.Value, s.Rate) = (target, target, 1000, 0);
+        }
+        Refresh();
+    }
+
+    private readonly Dictionary<string, byte> _forced = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// StageR fw-zone: the faction each zone's towers belong to now (the red-zone supply: <see cref="RedZoneEvents"/>), by cluster.
+    /// </summary>
+    public IEnumerable<(string Cluster, byte Owner)> Owners() => _states.Values.Select(s => (s.Cluster, s.Owner));
 
     /// <summary>The world map's ClusterInfoUpdate of a warfare zone (<see cref="Network.WorldSession.ClusterInfo"/>): key 19 the towers' ContestedState, 27 their owners.</summary>
     public void FillWorldMap(ClusterInfoUpdateEvent e, ClusterInfo cluster)

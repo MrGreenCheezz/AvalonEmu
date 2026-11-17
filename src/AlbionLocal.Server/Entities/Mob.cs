@@ -116,7 +116,9 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
     public bool Immune { get; internal set; }
 
     /// <summary>Its active spells (stageD effects SPEC §1): the players' damage over time and debuffs, its return-home buff.</summary>
-    public Systems.EffectList Effects { get; } = new();
+    public Systems.EffectList Effects => _effects ??= new() { Owner = this };
+
+    private Systems.EffectList? _effects;
 
     /// <summary>StageH bosses SPEC §4.1: the world boss slot it stands for (<see cref="Systems.WorldBosses"/>); null for every other mob.</summary>
     public Systems.WorldBosses.Slot? Boss { get; init; }
@@ -147,12 +149,15 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
 
     /// <summary>
     /// Whether attacks and spells may target it: alive, on its map, and a mob players fight (not a guard, decoration or friendly NPC; stageQ: a
-    /// guard with <see cref="Foes"/> is, by those players only, <see cref="FoeOf"/>).
+    /// guard with <see cref="Foes"/>, a tower's or a faction camp's, is, by those players only, <see cref="FoeOf"/>).
     /// </summary>
     public bool Attackable => !Dead && !Removed && Map is not null && (Template.Hostility is NpcHostility.Hostile or NpcHostility.None || Foes is not null);
 
     /// <summary>Whether <paramref name="p"/> may fight it: any player, or for a mob with <see cref="Foes"/> one of them (a tower's guards: another faction's flag).</summary>
     public bool FoeOf(Player p) => Foes is not { } foes || foes(p);
+
+    /// <summary>Whether <paramref name="p"/> may hit it: <see cref="Attackable"/> and <see cref="FoeOf"/> (stageQ).</summary>
+    public bool AttackableBy(Player p) => Attackable && FoeOf(p);
 
     /// <summary>Where it is now: its movement sample extrapolated to the world's GameTimeStamp (the stored target once it has arrived).</summary>
     public override Vector2 Position => Movement.PositionAt(Time);
@@ -220,7 +225,7 @@ public sealed class Mob(long id, MobSpawnPoint spawn, MobTemplate template, byte
             c5w = Energy.RegenPerSecond,                // [21]
             c5x = now,                                  // [22] the energy stamp
             c57 = invisible,                            // [32] just spawned
-            Extra = new() { [2] = Flagging, [6] = "", [30] = (byte)0, [34] = (byte)0 }, // always, also 0 and ""
+            Extra = new() { [2] = Flagging, [6] = Template.Title ?? "", [30] = (byte)0, [34] = (byte)0 }, // always, also 0 and ""
         };
         if (RareState != 0) yield return BuildChangeState();
         if (Systems.SpellEffects.ForNewObserver(this, now) is { } effects) yield return effects;

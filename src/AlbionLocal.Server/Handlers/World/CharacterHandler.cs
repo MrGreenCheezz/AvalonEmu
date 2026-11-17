@@ -42,6 +42,8 @@ public sealed partial class WorldSession
             Log.Warn(Name, $"join into a corrupted dungeon that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.Mists.ReturnIfClosed(c)) // stageL: the same for a mists zone that is gone (mists SPEC §6.6)
             Log.Warn(Name, $"join into a mists zone that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
+        if (world.DragonAreas.ReturnIfClosed(c)) // stageR: the same for a dragon area instance that is gone
+            Log.Warn(Name, $"join into a dragon area that is gone: '{c.Name}' is put back in {c.Cluster}; the client will log out to the character selection");
         if (world.Roads.ThrowOutIfStale(c, atJoin: true)) // stageL roads phase B: offline in a road too long (Roads:ThrowOutAfterMinutes), a Join without a SelectCharacter
             Log.Warn(Name, $"join into a road left too long ago: '{c.Name}' is thrown out to {c.Cluster}; the client will log out to the character selection");
         // One of the account's open connections now: a newer Login of the account closes it (LoginSession.Login).
@@ -86,7 +88,7 @@ public sealed partial class WorldSession
         // A second Join on one connection (never captured): the old player leaves first, so that what its OnLogout
         // changes in the items is in the character the new item objects are made from. The scripts of the new one run
         // after JoinFinished (AfterResponse).
-        if (Player is { } old) Leave(old);
+        if (Player is { } old) Leave(old, clusterChange: false);
         // A reconnect: the player of the old connection (up to its 30 s timeout) shares the
         // live character but has an inventory of its own. A harvest it had under way would finish into that one and save
         // it over the character (FinishHarvest, Player.SaveItems), so it ends here, without an event: its client is gone.
@@ -104,6 +106,7 @@ public sealed partial class WorldSession
             TutorialInstances.Owns(c, world) ? c.Id : null);
         world.LoadTemplate(map);
         Systems.TutorialWorld.Prepare(map, c);
+        world.SafePortals.Arriving(c, map); // stageR: an ended binding goes, a live one's return portal stands (safe-portal SPEC §4)
         // Join key 118: the last PLAYERCITY_* cluster (world.xml type; the bank and market interiors count, captured "1001"
         // in the Lymhurst bank); known when the cluster is resolved, as it normally is by the Join (prefetched at
         // SelectCharacter, resolved at the cluster change).
@@ -207,10 +210,12 @@ public sealed partial class WorldSession
         // Preserve creation choices. Only legacy characters without a stored look use the old default.
         r.a8g = c.Customization.Length > 0 ? [.. c.Customization] : new int[5]; // [6]
         r.a8h = c.Clothes.Length > 0 ? [.. c.Clothes] : new int[5];             // [7]
-        r.a9h = new long[5];                         // [43] a7m per ReSpecFameType (ctp+0x580)
+        r.a9h = [.. c.FameCredits.Take(5)];          // [43] the fame credits (stageR items SPEC §3), a7m per ReSpecFameType (ctp+0x580)
         r.ba7 = new long[6];                         // [105] a7m[6] (ctp.af(a7m[]) → ctp+0x588): the standing by faction (index FlaggingStatus − 1, bcj.a)
         world.Factions.JoinKeys(c, r);               // [104] the currencies by index (faction points, FAVOR), [105] (stageN faction SPEC §2)
         r.bba = Systems.Vanity.Wardrobe(c);          // [108] the wardrobe skin numbers by EquipmentSlot, -1 = none (stageN vanity SPEC §1.4)
+        r.bbl = world.Vanity.KillEmotes.Equipped(c); // [119] the victory emote's consumable id, 0 = none (as captured); cvr.d(ahi) 0x1809D2300
+        r.bbm = c.Vanity?.KillEmoteOnKnockdown ?? false; // [120] it plays on a knockdown too (stageR kill-vanity SPEC §1)
         // StageJ focus-lp (SPEC §5.3): premium (90 the end, 91 the days), the focus bar (27, 28, 30, 31; settled now), the learning points
         // (37-40; paid up to now) and the use flags (32 AutoUseActionFocusForCrafting, 99 AutoUseLearningPoints, 100 the respec silver).
         var gameNow = world.GameNow;
@@ -234,6 +239,8 @@ public sealed partial class WorldSession
         world.Islands.JoinKeys(c, r);
         // Key 67 (StageP hideouts): the home hideout's instance id (the travel window's home, the management's Make/Leave Home button).
         world.Hideouts.JoinKeys(c, r);
+        // Keys 127-131 (stageR safe-portal SPEC §4): the S.A.F.E. portal binding while it lasts.
+        Systems.SafePortals.JoinKeys(c, r, gameNow);
         // No key 251: the official Join has none, and the client takes the compressed-time base only
         // from Login (ci7.a9 -> ce.e_1).
         return r;
@@ -357,10 +364,13 @@ public sealed partial class WorldSession
     /// </summary>
     internal static AlbionEvent CountEvent(Item item) => item.Template switch
     {
+        { IsEquipment: true } => ItemObject(item), // a stack of equipment (stageR items SPEC §4): NewEquipmentItem key 2 = the count
         { IsJournal: true } => new NewJournalItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, c27 = item.JournalFame }.FillEmpty(),
         // Furniture: NewFurnitureItem (33) {0, 1, 2 count, 4 durability a7m, 6 crafter "", 7 0} as captured (103829: key 4 686.98, 7 1350000 for a
         // chest; the beds and tables have no durability: key 4 0); labourers SPEC §1.4.
         { IsFurniture: true } => new NewFurnitureItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, da1 = item.Template.FullDurabilityRaw, c0i = "" }.FillEmpty(),
+        // StageR kill trophies: NewKillTrophyItem (34, aua < atx: the furniture item's keys, nothing of its own) [infer: as NewFurnitureItem].
+        { IsKillTrophy: true } => new NewKillTrophyItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count, da1 = item.Template.FullDurabilityRaw, c0i = "" }.FillEmpty(),
         // A labourer contract: NewLaborerItem (36) {0, 1, 2 count} (the auz base only; SPEC §1.4).
         { IsLabourerContract: true } => new NewLaborerItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count }.FillEmpty(),
         _ => new NewSimpleItemEvent { dax = item.Id, day = item.Template.Index, daz = (short)item.Count }.FillEmpty(),

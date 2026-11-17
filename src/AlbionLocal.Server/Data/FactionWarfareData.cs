@@ -6,7 +6,8 @@ namespace AlbionLocal.Server.Data;
 /// <summary>
 /// factionwarfare.xml and currencies.xml, the PvE side (analysis/work/stageN/faction/SPEC.md, "SPEC" here, §1): the six factions (flagging
 /// name, home city, currency), the enlistment cooldown, the faction point multipliers of PvE / gathering / fishing fame, the standing's
-/// ranks and the clusters of the faction warfare duchies with their cluster types. Read lazily by <see cref="Systems.Factions"/>; immutable.
+/// ranks and the clusters of the faction warfare duchies with their cluster types; stageQ camps: the duchies' initial conflicts and the camp
+/// timers. Read lazily by <see cref="Systems.Factions"/> (and by the cluster store for the camps); immutable.
 /// </summary>
 public sealed class FactionWarfareData
 {
@@ -44,6 +45,35 @@ public sealed class FactionWarfareData
 
     /// <summary>currencies.xml's index of each currency (UpdateCurrency key 2, Join key 104): FACTION_FOREST 1 … FACTION_CAERLEON 6, FAVOR 7.</summary>
     public IReadOnlyDictionary<string, int> CurrencyIndex { get; }
+
+    /// <summary>
+    /// StageQ camps: the clusters of a duchy with an &lt;initialconflict fromduchy&gt; (YELLOW_10 ← YELLOW_15, the red duchies, …) and the
+    /// defaultfaction of each duchy it is in conflict with (1207: Mountain 4, the captured FactionWarfareClusterState key 9).
+    /// </summary>
+    public IReadOnlyDictionary<string, byte[]> Conflicts { get; init; } = new Dictionary<string, byte[]>();
+
+    /// <summary>global dynamictemplatecampsreactivationtimer{small,medium}campsecmin/max: a cleared faction camp's wait before it stands again (420-660, 900-1260 s).</summary>
+    public (double Min, double Max) SmallCampReactivation { get; init; } = (420, 660);
+
+    public (double Min, double Max) MediumCampReactivation { get; init; } = (900, 1260);
+
+    /// <summary>StageR fw-campaign: &lt;factioncampaign&gt;, the daily and the campaign rewards.</summary>
+    public FactionCampaignData Campaign { get; init; } = FactionCampaignData.Empty;
+
+    /// <summary>StageR fw-campaign: &lt;factionpointbonus&gt; group bonusfactor by group size (2 → 1.04 … 20 → 1.40).</summary>
+    public IReadOnlyDictionary<int, double> GroupBonus { get; init; } = new Dictionary<int, double>();
+
+    /// <summary>StageR fw-zone: one &lt;duchy&gt; (uniquename, defaultfaction, islethal, ishome and its include clusters).</summary>
+    public sealed record Duchy(string Name, byte Faction, bool Lethal, bool Home, IReadOnlyList<string> Clusters);
+
+    /// <summary>StageR fw-zone: every &lt;duchy&gt; in file order (6 home, 5 red RED_01-05, 15 yellow).</summary>
+    public IReadOnlyList<Duchy> Duchies { get; init; } = [];
+
+    /// <summary>StageR fw-zone: the duchy <paramref name="cluster"/> belongs to; null outside the duchies.</summary>
+    public Duchy? DuchyOf(string cluster) => Duchies.FirstOrDefault(d => d.Clusters.Contains(cluster));
+
+    /// <summary>StageR fw-zone: supplygeneration/outpost pointspersecond (0.1853), a tower's supply per second.</summary>
+    public double OutpostSupplyPerSecond { get; init; } = 0.1853;
 
     private FactionWarfareData(IReadOnlyList<Faction?> factions, IReadOnlyList<Rank> ranks, long max, double cooldown, double pve, double gathering, double fishing,
         IReadOnlyDictionary<string, string> types, IReadOnlyDictionary<string, byte> clusterFaction, IReadOnlyDictionary<string, int> currencies)
@@ -94,12 +124,31 @@ public sealed class FactionWarfareData
         var clusterFaction = new Dictionary<string, byte>(StringComparer.Ordinal);
         foreach (var d in root.Elements("duchy"))
             foreach (var i in d.Elements("include")) clusterFaction[S(i, "clusterid")] = FlagOf(S(d, "defaultfaction"));
+        var duchyFaction = root.Elements("duchy").GroupBy(d => S(d, "uniquename")).ToDictionary(g => g.Key, g => FlagOf(S(g.First(), "defaultfaction")), StringComparer.Ordinal);
+        var conflicts = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var d in root.Elements("duchy"))
+        {
+            var from = d.Elements("initialconflict").Select(c => duchyFaction.GetValueOrDefault(S(c, "fromduchy"))).Where(f => f > 0).ToArray();
+            if (from.Length > 0) foreach (var i in d.Elements("include")) conflicts[S(i, "clusterid")] = from;
+        }
+        (double, double) Camp(string size, (double, double) fallback) => global is null ? fallback
+            : (D(global, $"dynamictemplatecampsreactivationtimer{size}campsecmin", fallback.Item1), D(global, $"dynamictemplatecampsreactivationtimer{size}campsecmax", fallback.Item2));
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         var n = 0;
         foreach (var c in currencies.Elements("currency")) index[S(c, "uniquename")] = n++;
         return new FactionWarfareData(factions, ranks, standing is null ? 7_500_000 : (long)D(standing, "max", 7_500_000),
             global is null ? 1440 : D(global, "factionenlistmentcooldowninmins", 1440),
             points is null ? 0.007 : D(points, "pve", 0.007), points is null ? 0.1 : D(points, "gathering", 0.1), points is null ? 0.1 : D(points, "fishing", 0.1),
-            types, clusterFaction, index);
+            types, clusterFaction, index)
+        {
+            Conflicts = conflicts, SmallCampReactivation = Camp("small", (420, 660)), MediumCampReactivation = Camp("medium", (900, 1260)),
+            Campaign = FactionCampaignData.Load(root),
+            GroupBonus = (root.Element("factionpointbonus")?.Elements("group") ?? []).GroupBy(g => (int)D(g, "size"))
+                .ToDictionary(g => g.Key, g => D(g.First(), "bonusfactor", 1)),
+            Duchies = [.. root.Elements("duchy").Select(d => new Duchy(S(d, "uniquename"), FlagOf(S(d, "defaultfaction")),
+                S(d, "islethal").Equals("true", StringComparison.OrdinalIgnoreCase), S(d, "ishome").Equals("true", StringComparison.OrdinalIgnoreCase),
+                [.. d.Elements("include").Select(i => S(i, "clusterid"))]))],
+            OutpostSupplyPerSecond = root.Element("supplygeneration")?.Element("outpost") is { } supply ? D(supply, "pointspersecond", 0.1853) : 0.1853,
+        };
     }
 }

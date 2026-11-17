@@ -66,6 +66,16 @@ public sealed record EconomySettings
     /// <summary>FreeCrafting maxTier: no nutrition fee up to this tier.</summary>
     public int FreeCraftingMaxTier { get; init; } = 2;
 
+    /// <summary>BuildingManagement maxuseagefee (1000) and maxnutritionreward (100000), silver per 100 nutrition (stageR buildings SPEC §2).</summary>
+    public double BuildingMaxFee { get; init; } = 1000;
+    public double BuildingMaxReward { get; init; } = 100000;
+
+    /// <summary>BuildingConsumptionBalanceFactor factor (1): × ItemValueToNutrition for a craft's nutrition (bgf+0x4B8).</summary>
+    public double BuildingBalance { get; init; } = 1;
+
+    /// <summary>CraftNutrition minimumpercent (0; bgf+0x488): the share of the storage a craft must leave (cou.aw).</summary>
+    public double CraftNutritionMinimum { get; init; }
+
     /// <summary>FameGainFactors itemvaluetofameprogressionfactor (1.5): bci+0x30, the base of the crafting fame's tier power.</summary>
     public double FameProgressionFactor { get; init; } = 1.5;
 
@@ -75,11 +85,38 @@ public sealed record EconomySettings
     /// <summary>FameGainFactors/CraftItem factor (1).</summary>
     public double CraftFameFactor { get; init; } = 1;
 
+    /// <summary>StudyFame factor (2.75; bgf+0x228): studying an item gives famevalue × destiny factor × count × this (cmm.al 0x180B71CB0).</summary>
+    public double StudyFameFactor { get; init; } = 2.75;
+
+    /// <summary>gamedata OverCharge (stageR items SPEC §2): the token item, the warning time and the stacks.</summary>
+    public OverchargeSettings Overcharge { get; init; } = OverchargeSettings.Default;
+
+    /// <summary>
+    /// gamedata AchievementProgressConversion (stageR items SPEC §3; bgf+0x930/0x938 and the max-level share): silverConversionRatio (1,
+    /// silver per fame credit), fameDecayOnConversion (0.2, lost when levels or, with auto-respec, a maxed node's fame turn into
+    /// credits), fameDecayOnMaxLevel (0.8, lost from a maxed node's fame without auto-respec).
+    /// </summary>
+    public double RespecSilverRatio { get; init; } = 1;
+    public double RespecDecay { get; init; } = 0.2;
+    public double RespecMaxLevelDecay { get; init; } = 0.8;
+
     public int BankSlots { get; init; } = 128;
     public double BankWeightLimit { get; init; } = 100000;
 
+    /// <summary>CityBank DefaultTab Name (@BUILDINGS_T1_BANK): the default vault tab's name, as the Asset Overview lists it (stageR assets SPEC §3).</summary>
+    public string BankTabName { get; init; } = "@BUILDINGS_T1_BANK";
+
+    /// <summary>CityBank DefaultTab Icon (icon_tag_chest).</summary>
+    public string BankTabIcon { get; init; } = "icon_tag_chest";
+
+    /// <summary>CityBank DefaultTab IconColorBg (2B2C29FF) as the client's colour int: RGBA, red in the high byte (drv.e 0x18167D690).</summary>
+    public int BankTabColor { get; init; } = unchecked((int)0x2B2C29FF);
+
     /// <summary>MarketPlace TaxFactor setupfee (0.025): of an order's total, paid when it is created and kept (cfh.a 0x1808A9090).</summary>
     public double MarketSetupFee { get; init; } = 0.025;
+
+    /// <summary>MarketPlace TaxFactor smugglersetupfee (0.015): the setup fee of a Smuggler's Market order (stageR smugglers SPEC §2.3).</summary>
+    public double SmugglerSetupFee { get; init; } = 0.015;
 
     /// <summary>MarketPlace TaxFactor transactiontax (0.08): of a sale's total, kept from the seller (cfh.b 0x1808A9250).</summary>
     public double MarketTax { get; init; } = 0.08;
@@ -142,12 +179,26 @@ public sealed record EconomySettings
             FocusEfficiency = Num(gamedata.Descendants("ActionFocus").FirstOrDefault()?.Element("CraftingEfficiency"), "bonus", d.FocusEfficiency),
             FocusCostConstant = Num(gamedata.Descendants("ActionFocus").FirstOrDefault(), "costreductionconstant", d.FocusCostConstant),
             FreeCraftingMaxTier = (int)Num(gamedata.Descendants("FreeCrafting").FirstOrDefault(), "maxTier", d.FreeCraftingMaxTier),
+            BuildingMaxFee = Num(gamedata.Descendants("BuildingManagement").FirstOrDefault(), "maxuseagefee", d.BuildingMaxFee),
+            BuildingMaxReward = Num(gamedata.Descendants("BuildingManagement").FirstOrDefault(), "maxnutritionreward", d.BuildingMaxReward),
+            BuildingBalance = Num(gamedata.Descendants("BuildingConsumptionBalanceFactor").FirstOrDefault(), "factor", d.BuildingBalance),
+            CraftNutritionMinimum = Num(gamedata.Descendants("CraftNutrition").FirstOrDefault(), "minimumpercent", d.CraftNutritionMinimum),
             FameProgressionFactor = Num(fame, "itemvaluetofameprogressionfactor", d.FameProgressionFactor),
             FameProgressionStartTier = (int)Num(fame, "progressionstarttier", d.FameProgressionStartTier),
             CraftFameFactor = Num(fame?.Element("CraftItem"), "factor", d.CraftFameFactor),
+            StudyFameFactor = Num(gamedata.Descendants("StudyFame").FirstOrDefault(), "factor", d.StudyFameFactor),
+            Overcharge = OverchargeSettings.From(gamedata.Descendants("OverCharge").FirstOrDefault()) ?? d.Overcharge,
+            RespecSilverRatio = Num(gamedata.Descendants("AchievementProgressConversion").FirstOrDefault(), "silverConversionRatio", d.RespecSilverRatio),
+            RespecDecay = Num(gamedata.Descendants("AchievementProgressConversion").FirstOrDefault(), "fameDecayOnConversion", d.RespecDecay),
+            RespecMaxLevelDecay = Num(gamedata.Descendants("AchievementProgressConversion").FirstOrDefault(), "fameDecayOnMaxLevel", d.RespecMaxLevelDecay),
             BankSlots = (int)Num(bank, "size", d.BankSlots),
             BankWeightLimit = Num(bank, "weightlimit", d.BankWeightLimit),
+            BankTabName = (string?)bank?.Element("DefaultTab")?.Attribute("Name") ?? d.BankTabName,
+            BankTabIcon = (string?)bank?.Element("DefaultTab")?.Attribute("Icon") ?? d.BankTabIcon,
+            BankTabColor = uint.TryParse((string?)bank?.Element("DefaultTab")?.Attribute("IconColorBg"), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var color)
+                ? unchecked((int)color) : d.BankTabColor,
             MarketSetupFee = Num(Tax("setupfee"), "value", d.MarketSetupFee),
+            SmugglerSetupFee = Num(Tax("smugglersetupfee"), "value", d.SmugglerSetupFee),
             MarketTax = Num(Tax("transactiontax"), "value", d.MarketTax),
             MarketMinimumTax = Num(Tax("minimumtax"), "value", d.MarketMinimumTax),
             MarketOrderHours = (int)Num(expiration, "value", d.MarketOrderHours),

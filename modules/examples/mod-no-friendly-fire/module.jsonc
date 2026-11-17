@@ -1,0 +1,9 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-no-friendly-fire",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "Party members cannot hurt each other: how to cancel damage",
+  "api": "1.0",
+  "enabled": false
+}

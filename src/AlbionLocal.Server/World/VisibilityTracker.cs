@@ -132,7 +132,7 @@ public sealed class VisibilityTracker(Player player)
 
     /// <summary>
     /// Phase B: the cluster-wide objects (NewBuilding and QuestGiverInfoForPlayer of the faction trader, a warfare zone's towers with their
-    /// OutpostUpdate), once, then the zone's FactionWarfareClusterState (stageQ).
+    /// OutpostUpdate), once, then the zone's FactionWarfareClusterState and its faction camps' open quests (LocalQuestInfos, stageQ).
     /// </summary>
     public void SendClusterWide()
     {
@@ -140,6 +140,9 @@ public sealed class VisibilityTracker(Player player)
         _clusterSent = true;
         foreach (var o in _map.ClusterWide) Enter(o);
         player.World.Outposts.Joined(player);
+        player.World.Fortresses.Joined(player); // stageR fw-zone: a running siege's 659
+        player.World.RedZone.Joined(player); // stageR fw-zone: a running bandit assault's 479
+        player.World.WorldChests.Joined(player);
     }
 
     /// <summary>

@@ -161,7 +161,7 @@ public sealed class RandomDungeons(World world)
     internal IEnumerable<RandomDungeonExit> Populate(Map map, ClusterTemplate template)
     {
         if (!Settings.Enabled || template.DungeonMarkers.Count == 0 || DungeonLayout.IsInstance(map.Cluster) || ExpeditionData.IsInstance(map.Cluster) || CorruptedData.IsInstance(map.Cluster) || HellgateData.IsInstance(map.Cluster)
-            || MistsIds.IsInstance(map.Cluster) || world.Clusters?.DungeonsIfLoaded is not { } data) return [];
+            || MistsIds.IsInstance(map.Cluster) || DragonAreaIds.IsInstance(map.Cluster) || world.Clusters?.DungeonsIfLoaded is not { } data) return [];
         var field = new Field(map, template, data);
         // StageL roads (SPEC §7.1): Roads:FixedDungeons opens the fixed exits of a road map's camps alone, whatever Dungeons:FixedExits says.
         var fixedExits = Settings.FixedExits || world.Config.Roads.FixedDungeons && template.Info.Type.StartsWith("TUNNEL_", StringComparison.Ordinal);
@@ -974,6 +974,7 @@ public sealed class RandomDungeons(World world)
         // Stage I: a player invasion's chest moves its items to its ItemTier and adds its Enchant, and a won ticket is one item more.
         if (chest.ItemTier is not null || chest.Enchant > 0) drops = [.. drops.Select(d => (Shift(world.Items, d.Item, chest.ItemTier, chest.Enchant), d.Amount))];
         if (chest.Bonus.TryGetValue(p.Character.Id, out var bonus)) drops = [.. drops, (bonus, 1)];
+        drops = world.Modules.ChestLootRolled(p, chest, drops); // the modules' Items.OnChestLootRolled
         var items = new List<Item>();
         foreach (var (name, amount) in drops)
         {

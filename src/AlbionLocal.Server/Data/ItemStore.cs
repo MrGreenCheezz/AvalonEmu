@@ -221,6 +221,11 @@ public sealed class ItemStore
                 Farm = r.Name == r.Base ? Farm(r) : null,
                 Animal = r.Name == r.Base ? Animal(r) : null,
                 PlaceIndex = r.Name == r.Base ? placeIndex.GetValueOrDefault(r.Name, -1) : -1,
+                // StageR buildings SPEC §4: a furniture chest's <container capacity weightlimit>.
+                Container = r.Own.Element("container") is { } box
+                    ? ((int)(box.Attribute("capacity") is { } cap ? numbers.Num(cap.Value, "capacity", r.Name) : 0),
+                        box.Attribute("weightlimit") is { } wl ? numbers.Num(wl.Value, "weightlimit", r.Name) : 0)
+                    : null,
             };
         }).ToList();
         // The two variants share the base item's attributes (weight, tier, the shop categories the market filters by); no recipe.

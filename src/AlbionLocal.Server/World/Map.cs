@@ -179,6 +179,7 @@ public sealed class Map(string cluster)
         if (o.Range == AnnounceRange.Cluster) _clusterWide.Add(o);
         else Grid.Add(o);
         foreach (var player in _players.Values) player.Visibility.Show(o);
+        if (o is Mob { World: { } world } mob) world.Modules.MobSpawned(mob); // the modules' MobSpawned
     }
 
     /// <summary>

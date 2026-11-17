@@ -46,6 +46,9 @@ public readonly record struct BoardLevel(long Fame, int TargetMin, int TargetMax
 {
     /// <summary>The learning points this level costs with auto-learn, a7m (§1.2: ceil(row.LP × lpmultiplier) whole points; elite rows and plain nodes 0).</summary>
     public long Lp { get; init; }
+
+    /// <summary>An elite row's SilverPerReSpec (0.33 on COMBAT_SPEC): the silver per fame credit a re-spec into this level costs (stageR items SPEC §3); 0 elsewhere.</summary>
+    public double SilverPerRespec { get; init; }
 }
 
 /// <summary>One destiny board node (id = <see cref="ClientNumbering.Achievements"/> order) with what the fame rules need.</summary>
@@ -81,6 +84,17 @@ public sealed class BoardNode
 
     /// <summary>&lt;overridemasterylevel level="n"&gt;'s own itemuse patterns, by row (GATHER_*: the tool and gatherer head at row 0).</summary>
     public IReadOnlyDictionary<int, string[]> ItemUseAt { get; init; } = new Dictionary<int, string[]>();
+
+    /// <summary>
+    /// re-spectype as bbc.ReSpecFameType (stageR items SPEC §3; b8a+0x38): 1 combat, 2 gathering, 3 crafting, 4 refining; 0 = none (the node
+    /// gives and takes no fame credits). In 345319 only the 267 combat nodes have one.
+    /// </summary>
+    public int RespecType { get; init; }
+
+    /// <summary>Fame → credits, a7m (b8a+0x50 × b8a+0x58): lpmultiplier / famemultiplier, then × respecmodifier (default 1; 0.2 on 18 off-hand nodes).</summary>
+    public long CreditRatio { get; init; } = DestinyBoard.A7m;
+
+    public long RespecModifier { get; init; } = DestinyBoard.A7m;
 
     public override string ToString() => $"{Name} ({Id})";
 }
@@ -198,7 +212,9 @@ public sealed class DestinyBoard
             var baseCount = levels.Count;
             var elite = template?.Element("elitelevels");
             var eliteFame = Array.IndexOf((Attr(elite ?? new XElement("x"), "structure") ?? "").Split(';'), "Fame");
-            foreach (var row in Rows(elite)) levels.Add(new BoardLevel(Fame(row, eliteFame), 0, 99, 0, 99, 0));
+            var eliteSilver = Array.IndexOf((Attr(elite ?? new XElement("x"), "structure") ?? "").Split(';'), "SilverPerReSpec");
+            foreach (var row in Rows(elite))
+                levels.Add(new BoardLevel(Fame(row, eliteFame), 0, 99, 0, 99, 0) { SilverPerRespec = eliteSilver >= 0 && eliteSilver < row.Length ? Num(row[eliteSilver]) : 0 });
             static string[] Patterns(XElement? rewards) =>
                 [.. (rewards?.Elements("unlock") ?? []).Where(u => Attr(u, "type") == "itemuse").Elements("itempattern").Select(p => Attr(p, "pattern") ?? "")];
             nodes.Add(new BoardNode
@@ -206,6 +222,9 @@ public sealed class DestinyBoard
                 Id = id, Name = name, IsTemplate = true, Mission = Attr(el, "missiontype") ?? "",
                 Items = [.. (el.Element("itemlist")?.Elements("itempattern") ?? []).Select(p => Attr(p, "pattern") ?? "")],
                 Levels = [.. levels], BaseLevels = baseCount,
+                RespecType = (Attr(el, "re-spectype") ?? "").ToLowerInvariant() switch { "combat" => 1, "gathering" => 2, "crafting" => 3, "refining" => 4, _ => 0 },
+                CreditRatio = fm == 0 ? 0 : Div(lm, fm),
+                RespecModifier = ToA7m(Attr(el, "respecmodifier") is { } rm ? Num(rm) : 1),
                 ItemUsePatterns = Patterns(el.Element("baserewards")),
                 ItemUseAt = el.Elements("overridemasterylevel")
                     .Select(o => (Row: (int)Num(Attr(o, "level")), Patterns: Patterns(o.Element("baserewards"))))
@@ -247,6 +266,29 @@ public sealed class DestinyBoard
             if (node.Mission != mission) continue;
             var row = node.Levels[level];
             if (ctx.Source != FameSource.Tome && (ctx.TargetTier < row.TargetMin || ctx.TargetTier > row.TargetMax)) continue; // a tome: no mob
+            if (node.Items.Length == 0
+                || ctx.Items.Any(i => i.Tier >= row.ItemMin && i.Tier <= row.ItemMax && node.Items.Any(pattern => Matches(node, pattern, i.BaseName))))
+                list.Add(id);
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// The maxed nodes a gain would feed if they were not maxed (stageR items SPEC §3): templates with a re-spectype at their last level,
+    /// matched as <see cref="Targets"/> does (mission type, items, the last row's tier gates). Their share of the gain turns into fame credits.
+    /// </summary>
+    public List<int> MaxedTargets(Progression p, FameContext ctx)
+    {
+        var list = new List<int>();
+        if (ctx.Only is not null || ctx.Source == FameSource.Tome) return list;
+        var mission = ctx.Source switch { FameSource.Kill => "killmobfame", FameSource.Craft => "craftitemfame", FameSource.Fishing => "fishingfame", FameSource.Farm => "farmharvestfame", _ => "gatherfame" };
+        foreach (var (id, level) in p.Levels)
+        {
+            if (id < 0 || id >= Nodes.Count || level < LevelCount(id)) continue;
+            var node = Nodes[id];
+            if (!node.IsTemplate || node.RespecType == 0 || node.Mission != mission) continue;
+            var row = node.Levels[^1];
+            if (ctx.TargetTier < row.TargetMin || ctx.TargetTier > row.TargetMax) continue;
             if (node.Items.Length == 0
                 || ctx.Items.Any(i => i.Tier >= row.ItemMin && i.Tier <= row.ItemMax && node.Items.Any(pattern => Matches(node, pattern, i.BaseName))))
                 list.Add(id);

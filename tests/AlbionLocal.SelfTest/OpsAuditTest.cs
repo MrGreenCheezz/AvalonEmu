@@ -82,8 +82,8 @@ public static class OpsAuditTest
         Check(Listed.All(o => table.Unhandled.GetValueOrDefault(o) == before[o]), "none of them took the unhandled path (its warning)");
         // Ignore: nothing at all, as before, but counted as stubbed.
         var ignored = Listed.Where(o => stubs.KindOf(o) == OpcodeStubs.StubKind.Ignore).ToList();
-        Check(ignored.Count == 9 && ignored.All(o => table.Stubbed.GetValueOrDefault(o) > 0),
-              "nine ignore stubs; UseFunction now has the opening-tutorial handler, counted as handled");
+        Check(ignored.Count == 6 && ignored.All(o => table.Stubbed.GetValueOrDefault(o) > 0),
+              "six ignore stubs; UseFunction now has the opening-tutorial handler, the three party finder ones the finder's (stageR), counted as handled");
         var answered = peer.Responses.Skip(responses).Select(r => (OperationCodes)Convert.ToInt16(r.Parameters[ReservedKeys.OperationCode])).ToHashSet();
         Check(!answered.Overlaps(ignored) && !answered.Contains(OperationCodes.SubscribeToCluster) && !answered.Contains(OperationCodes.TrackAlbionJournalAchievements)
               && !answered.Contains(OperationCodes.GetPersonalSeasonPastRewardData) && !answered.Contains(OperationCodes.UseFunction),

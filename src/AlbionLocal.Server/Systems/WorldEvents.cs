@@ -205,7 +205,7 @@ public sealed class WorldEvents(World world)
     /// <summary>Whether <paramref name="map"/> may have an event: a loaded open-world map with mob spawn blocks.</summary>
     public static bool Fits(Map map) =>
         map is { Grid: not null, Unloaded: false, Template: not null } && !DungeonLayout.IsInstance(map.Cluster) && !ExpeditionData.IsInstance(map.Cluster)
-        && !CorruptedData.IsInstance(map.Cluster) && !HellgateData.IsInstance(map.Cluster) && !MistsIds.IsInstance(map.Cluster) && map.MobSlots.Any(s => s.Point.Block is not null);
+        && !CorruptedData.IsInstance(map.Cluster) && !HellgateData.IsInstance(map.Cluster) && !MistsIds.IsInstance(map.Cluster) && !DragonAreaIds.IsInstance(map.Cluster) && map.MobSlots.Any(s => s.Point.Block is not null);
 
     /// <summary>
     /// A mob spawn point of <paramref name="map"/> at the kind's Distance from <paramref name="from"/> (a random one in the ring, else the

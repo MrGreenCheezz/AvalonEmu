@@ -45,6 +45,7 @@ public sealed partial class WorldSession
             registered.RegisteredTo = req.zg; // stage 6: ContainerOpen of a bank requires it (BankHandler)
             DetachVaults(registered, v => v.Building != req.zg); // another object: the vault tabs of the bank close
             PushBankVault(registered, req.zg); // a bank: its default tab into the main view (BankHandler)
+            PushChest(registered, req.zg); // stageR buildings: a placed furniture chest opens (FurnitureHandler)
             if (registered.Map?.Objects.GetValueOrDefault(req.zg) is TutorialQuestGiver)
                 OpeningTutorial.Request(registered, req.zg, action: 0, slot: 0, selection: 0);
         }
@@ -172,6 +173,7 @@ public sealed partial class WorldSession
         {
             if (from.Find(ids[i]) is not { } item) continue;
             var want = counts is { } c && i < c.Length && c[i] > 0 ? Math.Min((int)c[i], item.Count) : item.Count;
+            if (world.Modules.BeforeLootTake(player, from, item, want)) continue; // the modules' Items.OnBeforeLootTake (only out of an open loot container)
             if (!VaultTakes(player, to, item.Template, want, from))
             {
                 Log.Info(Name, $"'{player.Character.Name}': {item.Template.Name} x{want} is over the vault's weight limit, not moved");

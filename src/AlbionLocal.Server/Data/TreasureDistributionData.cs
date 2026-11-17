@@ -82,14 +82,47 @@ public sealed class TreasureDistributionData
             }
             distributes.Add(new TreasureDistribute((string?)d.Attribute("continent") ?? "", subtype, (string?)d.Attribute("clustertype"), tiers));
         }
+        // StageR dragon areas: the DRAGONAREA_ENTRANCE distributes, per cluster tier their <Event>s with <TreasureDragonAreaEntrance> and <None> weights.
+        var entrances = new List<DragonEntranceDistribute>();
+        foreach (var d in root.Element("GameobjectDistribution")?.Elements("Distribute") ?? [])
+        {
+            if (!string.Equals((string?)d.Attribute("subtype"), DragonEntranceSubtype, StringComparison.OrdinalIgnoreCase)) continue;
+            var tiers = new Dictionary<int, IReadOnlyList<DragonEntranceEvent>>();
+            foreach (var t in d.Elements("ClusterTier"))
+                tiers.TryAdd((int)D(t, "tier", 0), [.. t.Elements("Event").Select(e => new DragonEntranceEvent((string?)e.Attribute("name") ?? "", (int)D(e, "maxslotsused", 1),
+                    D(e, "activationchance", 1), string.Equals((string?)e.Attribute("neverreschedule"), "true", StringComparison.OrdinalIgnoreCase),
+                    [.. e.Elements("TreasureDragonAreaEntrance").Select(x => ((string?)x.Attribute("name") ?? "", D(x, "weight", 1))).Where(x => x.Item1.Length > 0 && x.Item2 > 0)],
+                    e.Elements("None").Sum(x => D(x, "weight", 0))))]);
+            entrances.Add(new DragonEntranceDistribute((string?)d.Attribute("continent") ?? "", (string?)d.Attribute("clustertype"), tiers));
+        }
         if (chests.Count == 0) throw new InvalidDataException("treasuredistribution.bin: no <TreasureLootchest>");
         var index = new Dictionary<(string, string), int>();
         foreach (var e in root.Descendants().Where(e => ClientKinds.Contains(e.Name.LocalName)))
             if (((string?)e.Attribute("uniquename") ?? (string?)e.Attribute("name")) is { Length: > 0 } name)
                 index.TryAdd((e.Name.LocalName, name), index.Count + 2); // after NONE and HUNTSPOTGENERIC
-        return new TreasureDistributionData { Lootchests = chests, Distributes = distributes, _clientIndex = index };
+        return new TreasureDistributionData { Lootchests = chests, Distributes = distributes, DragonEntrances = entrances, _clientIndex = index };
     }
+
+    /// <summary>The subtype of the dragon area entrances' distributes (group TRACKING).</summary>
+    public const string DragonEntranceSubtype = "DRAGONAREA_ENTRANCE";
+
+    /// <summary>StageR dragon areas: the DRAGONAREA_ENTRANCE &lt;Distribute&gt;s in file order.</summary>
+    public IReadOnlyList<DragonEntranceDistribute> DragonEntrances { get; private init; } = [];
+
+    /// <summary>
+    /// The entrance events of a cluster of <paramref name="continent"/>, world.xml type <paramref name="clusterType"/> and <paramref name="tier"/>: the
+    /// first matching distribute's (a clustertype's own before a continent-wide one) events of that tier; empty = none there.
+    /// </summary>
+    public IReadOnlyList<DragonEntranceEvent> DragonEntranceEventsFor(string continent, string clusterType, int tier) =>
+        DragonEntrances.Where(d => string.Equals(d.Continent, continent, StringComparison.OrdinalIgnoreCase) && (d.ClusterType is null || d.ClusterType == clusterType))
+            .OrderBy(d => d.ClusterType is null).Select(d => d.Tiers.GetValueOrDefault(tier)).FirstOrDefault(t => t is not null) ?? [];
 }
+
+/// <summary>A DRAGONAREA_ENTRANCE &lt;Distribute&gt;: continent, the clustertype it is limited to (null = all), its events by cluster tier.</summary>
+public sealed record DragonEntranceDistribute(string Continent, string? ClusterType, IReadOnlyDictionary<int, IReadOnlyList<DragonEntranceEvent>> Tiers);
+
+/// <summary>An &lt;Event&gt; of it: maxslotsused, activationchance, neverreschedule, the weighted entrance types and the &lt;None&gt; weight.</summary>
+public sealed record DragonEntranceEvent(string Name, int Slots, double Chance, bool NeverReschedule, IReadOnlyList<(string Type, double Weight)> Entries, double NoneWeight);
 
 /// <summary>
 /// A &lt;TreasureLootchest&gt;: its name, the LootChestSpawnpoint of lootchests.xml it spawns, its category (Coffer, Chest) and maxlifetime (seconds an

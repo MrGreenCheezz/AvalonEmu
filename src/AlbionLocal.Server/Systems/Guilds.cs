@@ -63,6 +63,7 @@ public sealed partial class Guilds
             foreach (var m in g.Members) _byMember[m.Id] = g;
         }
         if (_byId.Count > 0) Log.Info("guild", $"{_byId.Count} guild(s) loaded, {_byMember.Count} member(s)");
+        LoadProfiles(); // stageR: recruitment info, codex, welcome mail (Guilds.Finder.cs)
     }
 
     private ServerConfig Config => world.Config;
@@ -188,7 +189,11 @@ public sealed partial class Guilds
             cgg = g.Name, cgh = world.Alliances.PlateOf(alliance), cgi = alliance?.Id ?? Guid.Empty, // [15] [16] [17]
             cgj = tutorial, cgk = [],                                              // [18] [19]
             cgl = logo.Schema, cgm = logo.Symbol, cgn = logo.Color1, cgo = logo.Color2, cgp = logo.SymbolColor, cgq = logo.Scale, cgr = logo.Offset,
-            cgt = "", cgx = "", cgz = "", cg1 = "",                                // [28] [32] [34] [36]
+            cgx = "",                                                              // [32]
+            cge = g.Profile.PayUpkeep,                                             // [13] (stageR SPEC §5)
+            // stageR SPEC §2: [28] the banner's uniquename (c2n+0x128, which GuildBannerModule sets with GuildBannerChange), [34]-[37] the
+            // codex, its editor's Guid and name and its time (c2n+0x138/0x140/0x150/0x130, which GuildCodexModule sets with SetGuildCodex).
+            cgt = g.Banner ?? "", cgz = g.Profile.Codex, cg0 = g.Profile.CodexBy, cg1 = g.Profile.CodexByName, cg2 = g.Profile.CodexAt,
         };
     }
 
@@ -391,6 +396,8 @@ public sealed partial class Guilds
         _byMember[me] = g;
         Save(g);
         Changed(me);
+        Welcome(g, me); // stageR: the guild's welcome mail and the history log (Guilds.Finder.cs, Guilds.Logs.cs)
+        AddLog(g, GuildLogType.Event, GuildLogReason.Invited, invite.InviterName, member.Name);
         guild = g;
         Log.Info("guild", $"'{member.Name}' joins guild '{g.Name}' as {member.Role} ({g.Members.Count} members)");
         return 0;
@@ -439,6 +446,7 @@ public sealed partial class Guilds
             Log.Info("guild", $"'{next.Name}' leads guild '{g.Name}'");
         }
         Remove(g, me, KindLeft, "leaves");
+        if (g.Members.Count > 0) AddLog(g, GuildLogType.Event, GuildLogReason.Left, me.Name, "");
         if (handOver) SendTo(g, Tags(g));
         return 0;
     }
@@ -494,6 +502,7 @@ public sealed partial class Guilds
         var kicked = Online(m.Id);
         kicked?.Session.Send(PlayerUpdate(m, KindLeft, online: true));
         Remove(g, m, KindKicked, $"is kicked by '{me.Name}'");
+        AddLog(g, GuildLogType.Event, GuildLogReason.Kicked, me.Name, m.Name);
         if (kicked is not null) Announce(kicked);
         return 0;
     }
@@ -545,6 +554,8 @@ public sealed partial class Guilds
         }
         SendTo(g, Tags(g));
         Save(g);
+        // stageR: GUILD_HISTORY_LOGS_PLAYER_ASSIGNED_ROLE "{0} to {1}", the parameter split at ';' [infer: target name;role tag loca key]
+        if (GuildRoles.HeldTag(target.Role) is >= 0 and var tag) AddLog(g, GuildLogType.Event, GuildLogReason.AssignedRole, by.Name, $"{target.Name};{GuildRoles.Names[tag]}");
         Log.Info("guild", $"'{by.Name}' makes '{target.Name}' {target.Role} in guild '{g.Name}'");
         return true;
     }

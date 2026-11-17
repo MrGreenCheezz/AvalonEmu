@@ -105,6 +105,9 @@ public static class IslandCommands
         var here = player.PositionAt(DateTime.UtcNow);
         var b = islands.BuildingsOf(Here(ctx, player).Id).Select(b => (b, d: System.Numerics.Vector2.Distance(here, new(b.X, b.Z)))).Where(t => t.d <= 15)
             .OrderBy(t => t.d).Select(t => t.b).FirstOrDefault() ?? throw new CommandError("no player building within 15 m");
+        // StageR buildings SPEC §4: chests keep their owner's items; the building stays until they are picked up.
+        if (islands.FurnitureOf(b.Id).FirstOrDefault(f => ctx.World.Items.Find(f.Item)?.Container is not null) is { } chest)
+            throw new CommandError($"the {b.Name} holds the chest {chest.Item}: pick it up first");
         islands.Demolish(b);
         ctx.Reply($"{b.Name} removed");
     }

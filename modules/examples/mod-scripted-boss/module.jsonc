@@ -1,0 +1,9 @@
+// What the server needs to know about this module (docs/modules/README.md).
+{
+  "id": "mod-scripted-boss",
+  "version": "1.0.0",
+  "author": "AlbionLocal",
+  "description": "A boss of a module's own: its type, phases, servants, a burning circle. How to script a mob like AzerothCore's CreatureScript",
+  "api": "1.0",
+  "enabled": false
+}

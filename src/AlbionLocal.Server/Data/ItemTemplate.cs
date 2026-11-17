@@ -170,6 +170,9 @@ public sealed class ItemTemplate
     /// </summary>
     public int PlaceIndex { get; init; } = -1;
 
+    /// <summary>A furniture chest's &lt;container capacity weightlimit&gt; (stageR buildings SPEC §4); null for every other item.</summary>
+    public (int Capacity, double WeightLimit)? Container { get; init; }
+
     /// <summary>
     /// The hideout kit (hideoutitem UNIQUE_HIDEOUT, stageP hideouts): sent with NewSimpleItem, its descriptor bde (two c4 times, the a4y
     /// hideoutbuilding, two int distances) makes a c1x, which derives from c2i (c10.af 0x180a19ec0, NOTES-protocol "Item kinds").
@@ -177,7 +180,10 @@ public sealed class ItemTemplate
     public bool IsHideoutKit => Kind == "hideoutitem";
 
     /// <summary>Items this server can send (<see cref="IsEquipment"/>, <see cref="IsSimple"/>, <see cref="IsJournal"/>, <see cref="IsFurniture"/>, <see cref="IsLabourerContract"/>, <see cref="IsHideoutKit"/>); the other kinds need their own New*Item event.</summary>
-    public bool CanCreate => IsEquipment || IsSimple || IsJournal || IsFurniture || IsLabourerContract || IsHideoutKit;
+    public bool CanCreate => IsEquipment || IsSimple || IsJournal || IsFurniture || IsLabourerContract || IsHideoutKit || IsKillTrophy;
+
+    /// <summary>StageR kill trophies: a killtrophy (UNIQUE_FURNITUREITEM_KILLTROPHY_*), sent with NewKillTrophyItem (34; aua derives from the furniture item's atx).</summary>
+    public bool IsKillTrophy => Kind == "killtrophy";
 
     /// <summary>Full durability as a7m raw (fixed point, 10000 = 1; NewEquipmentItem key 8, c1r.af(atl)).</summary>
     public long FullDurabilityRaw => (long)Math.Round(MaxDurability * 10000);

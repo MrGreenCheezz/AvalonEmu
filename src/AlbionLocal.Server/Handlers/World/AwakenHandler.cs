@@ -137,6 +137,7 @@ public sealed partial class WorldSession
         AlbionResponse Refuse(AwakenError e, string why) => StationRefused(player, req, StationComponentError, (byte)e, $"awaken: {why}");
         if (data.GroupOf(item.Template) is not { } group) return Refuse(AwakenError.ItemTypeCannotBeAwakened, $"{item.Template.Name} is in no item group");
         if (item.Soul is not null) return Refuse(AwakenError.AlreadyAwakened, $"{item} is awakened");
+        if (item.Count > 1) return Refuse(AwakenError.ItemTypeCannotBeAwakened, $"{item} is a stack of {item.Count}: one soul per item (stageR items SPEC §4)");
         if (item.Template.Tier < data.MinTier) return Refuse(AwakenError.ItemTierTooLow, $"{item.Template.Name} is below tier {data.MinTier}");
         if (item.Template.Enchantment < data.MinEnchant) return Refuse(AwakenError.ItemEnchantmentTooLow, $"{item.Template.Name} is below enchantment {data.MinEnchant}");
         if (item.Template.MaxDurability > 0 && item.DurabilityRaw <= 0) return Refuse(AwakenError.ItemDamaged, $"{item} is broken");

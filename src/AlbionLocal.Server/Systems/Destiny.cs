@@ -71,9 +71,11 @@ public static class Destiny
             d3t = spent,                        // [14] the learning points spent
             d3u = ctx.Source == FameSource.Kill, // [15] kills and tomes; not on harvests
         });
+        FameCredits.OnFame(p, board, ctx); // stageR items SPEC §3: a maxed node's share turns into fame credits (after the UpdateFame [assume])
         if (journals) Journals.OnFame(p, boardGain ?? gain, ctx, source, pvp); // stageH journals SPEC §A.3: after the UpdateFame of the gain
         if (guild && !pvp) p.World.Factions.OnFame(p, gain, ctx.Source); // stageN faction SPEC §2: faction points and standing in a warfare cluster
         if (ctx.Source == FameSource.Kill) Attunement.OnFame(p, gain); // stageN awakening SPEC §5: the awakened weapon in hand gains attunement
+        p.World.Modules.FameGained(p, gain, ctx, source, pvp); // the modules' Players.OnFameGained
         return steps;
     }
 

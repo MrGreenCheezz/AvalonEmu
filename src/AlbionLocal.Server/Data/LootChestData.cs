@@ -267,11 +267,19 @@ public sealed class LocalQuestData
         foreach (var q in root.Elements("localquest"))
         {
             var fame = q.Element("missions")?.Element("killmobfame");
+            var rewards = q.Element("rewards");
+            var killAll = q.Element("missions")?.Element("killallmobsinarea");
+            var swap = rewards?.Element("switchdynamictemplatestate");
             quests.Add(new LocalQuest(quests.Count, (string?)q.Attribute("uniquename") ?? "", (string?)q.Attribute("questtype") == "perplayer",
                 double.TryParse((string?)fame?.Attribute("value"), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0,
-                (string?)fame?.Attribute("faction") ?? "", q.Element("rewards")?.Element("unlockpersonallootchest") is not null)
+                (string?)fame?.Attribute("faction") ?? "", rewards?.Element("unlockpersonallootchest") is not null)
             {
                 PartyKills = (string?)fame?.Attribute("countpartykillsinsamelocalquestarea") == "true",
+                Open = (string?)q.Attribute("questtype") == "open",
+                KillAllMarked = killAll is not null,
+                UnlocksSharedChest = rewards?.Element("unlocksharedlootchest") is not null,
+                SwitchStateSeconds = swap is null ? null
+                    : double.TryParse((string?)swap.Attribute("delaysec"), NumberStyles.Float, CultureInfo.InvariantCulture, out var delay) ? delay : 0,
             });
         }
         if (quests.Count == 0) throw new InvalidDataException("localquests.bin: no <localquest>");
@@ -288,4 +296,19 @@ public sealed record LocalQuest(int Index, string Name, bool PerPlayer, double F
 {
     /// <summary>countpartykillsinsamelocalquestarea: a party member's kill counts for the members in the same area.</summary>
     public bool PartyKills { get; init; }
+
+    /// <summary>
+    /// StageQ camps: questtype open (LocalQuestType Open 1: FACTION_CAMP_OPEN_QUEST_SMALL / _MEDIUM), one quest for everyone, listed at the
+    /// Join (LocalQuestInfos 539, visibleonminimapbeforevisit).
+    /// </summary>
+    public bool Open { get; init; }
+
+    /// <summary>A &lt;killallmobsinarea onlycountmobsmarkedforquest&gt; mission: done when every mob of the camp's isquestmobspawn points is dead.</summary>
+    public bool KillAllMarked { get; init; }
+
+    /// <summary>&lt;unlocksharedlootchest/&gt;: the camp's one chest unlocks for everyone when the quest is done.</summary>
+    public bool UnlocksSharedChest { get; init; }
+
+    /// <summary>&lt;switchdynamictemplatestate delaysec&gt; (300): the camp goes Inactive that long after the quest; null without it.</summary>
+    public double? SwitchStateSeconds { get; init; }
 }

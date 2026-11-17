@@ -34,6 +34,12 @@ namespace AlbionLocal.Server.Systems;
 /// and the chest unopened, the player's chest state and quest are cleared (its open container detached, LocalQuestAreaGone 603 when
 /// its client knows the quest), so the camp can be done again. A camp chest no per-player quest unlocks (none in localquests.xml,
 /// no killmobfame, no unlockpersonallootchest, the file unreadable) is not spawned: it would open with no quest.</item>
+/// <item>StageQ faction camps (the open quest FACTION_CAMP_OPEN_QUEST_SMALL / _MEDIUM of a faction camp's FWARFARE_ACTIVE layer, <see cref="FactionCamps"/>):
+/// one quest for everyone, listed at the Join (LocalQuestInfos 539 after the zone's 468, as captured in 1207: key 4 LocalQuestState Started 1 /
+/// Finished 3, key 6 {"RelevantMobCountInArea":n}); its killallmobsinarea counts the mobs of the camp's isquestmobspawn points, and the last one's
+/// death (LocalQuestProgressUpdate 543 to the map's players after each [infer]) finishes it: the camp's one chest (FACTION_DYNAMIC_CAMP_*_LC, a plain
+/// spawnpoint) goes from LockedByQuest (4) to Unlocked (6) for everyone (unlocksharedlootchest), and the camp's switch is set off. When the camp goes
+/// Inactive the quest goes (LocalQuestAreaGone 603) with its chest; at its reactivation a fresh one comes with the map's full 539 [infer].</item>
 /// <item>StageL road chests (LootChestSpawnpointChestUpgrade, analysis/work/stageL/roads/SPEC.md §5.5, with Roads:Chests): at the fill (before the
 /// mobs, <see cref="Plan"/>) the spot rolls its spawnchance and draws an entry by weight, whose lootchestupgradelevelindex L (BASE 4, CHAMPION 6,
 /// BOSS 8) is the level its camp points (allowUpgradeByChest, the spot's mobupgradefaction, within mobupgraderadius) spawn at; a point near no
@@ -44,7 +50,7 @@ namespace AlbionLocal.Server.Systems;
 /// </list>
 /// Chests roll the cluster's tier (<see cref="RandomDungeons.OpenChest"/>). Respawn and reroll times are ÷ Rates:ChestRespawn. The state
 /// lives with the map [assume: the SPEC keeps it in World, §5]: an unloaded map takes it along, and the next one starts afresh, as
-/// its mob respawn timers do. Not handled (departures): the 11 s re-arm of a camp after its cleanup (the quest restarts at once), the faction warfare chests and open quests,
+/// its mob respawn timers do. Not handled (departures): the 11 s re-arm of a camp after its cleanup (the quest restarts at once), the open-world faction chests,
 /// the maketreasureshrinevisible reward. Touched only under <see cref="World.Sync"/>.
 /// </summary>
 public sealed class WorldChests(World world)
@@ -89,6 +95,21 @@ public sealed class WorldChests(World world)
 
         /// <summary>The killmobfame target: the mission's value × the cluster quest factor (1 [assume], SPEC §4.4).</summary>
         public double Target => Quest.Fame;
+
+        /// <summary>StageQ camps: an open quest (one for everyone, <see cref="LocalQuest.Open"/>): no per-player state, <see cref="Marked"/> decides.</summary>
+        public bool Open => Quest.Open;
+
+        /// <summary>An open quest's points: the camp slot's isquestmobspawn points, all of whose mobs must die (killallmobsinarea onlycountmobsmarkedforquest).</summary>
+        public List<MobSpawnSlot> Marked { get; } = [];
+
+        /// <summary>An open quest done (LocalQuestState Finished).</summary>
+        public bool Finished { get; internal set; }
+
+        /// <summary>The marked points with no living mob (dead, gone or never spawned).</summary>
+        public int Cleared => Marked.Count(s => s.Mob is not { Dead: false, Removed: false });
+
+        /// <summary>An open quest's progress (543 key 3): the share of its marked points cleared.</summary>
+        public float Share => Marked.Count == 0 ? 1 : (float)Cleared / Marked.Count;
 
         public bool Contains(Vector2 at) => Vector2.Distance(at, Spawn.Position) <= Spawn.Radius;
     }
@@ -150,11 +171,17 @@ public sealed class WorldChests(World world)
             return made;
         }
         foreach (var point in template.LootChests)
-            if (point.Behaviour is { } b && (b.IsPoi || b.Kind is ChestSpawnKind.MobUpgrade or ChestSpawnKind.Personal))
+            if (point.Behaviour is { } b && (b.IsPoi || b.Kind is ChestSpawnKind.MobUpgrade or ChestSpawnKind.Personal || OpenCampChest(template, point)))
                 m.Spots.Add(new Spot(point, b));
+        var open = new List<LocalQuestAreaSpawn>();
         foreach (var a in template.LocalQuestAreas)
         {
-            if (a.Quest is not { PerPlayer: true, Fame: > 0 } quest) continue; // the open faction-camp quests are not run [assume]
+            if (a.Quest is { Open: true, KillAllMarked: true }) // stageQ camps: a faction camp's open quest, made after the per-player ones are bound
+            {
+                open.Add(a);
+                continue;
+            }
+            if (a.Quest is not { PerPlayer: true, Fame: > 0 } quest) continue;
             var area = new QuestArea(world.ObjectIds.Next(), a, quest);
             // its camp chest: the nearest personal spot of the same template slot
             area.Chest = m.Spots.Where(s => s.Behaviour.Kind == ChestSpawnKind.Personal && s.Point.Key.Slot == a.Key.Slot && s.Area is null)
@@ -162,6 +189,8 @@ public sealed class WorldChests(World world)
             if (area.Chest is not null && quest.UnlocksChest) area.Chest.Area = area;
             m.Areas.Add(area);
         }
+        foreach (var a in open)
+            if (Open(map, m, a, data) is { Chest: { } chest }) made.Add(chest);
         if (m.Spots.Count == 0 && m.Areas.Count == 0) return made;
         _maps.AddOrUpdate(map, m);
         foreach (var spot in m.Spots.Where(s => s.Behaviour.Kind == ChestSpawnKind.Personal))
@@ -185,7 +214,8 @@ public sealed class WorldChests(World world)
             if (MakePoi(map, spot, data) is { } chest) made.Add(chest);
         }
         Log.Info("world", $"map {map.Cluster}: {m.Spots.Count(s => s.Behaviour.IsPoi)} POI, {m.Spots.Count(s => s.Behaviour.Kind == ChestSpawnKind.MobUpgrade)} mob-upgrade, "
-            + $"{m.Spots.Count(s => s.IsRoad)} road and {m.Spots.Count(s => s.Behaviour.Kind == ChestSpawnKind.Personal)} camp chest spot(s), {m.Areas.Count} camp quest(s); {made.Count} chest(s) now"
+            + $"{m.Spots.Count(s => s.IsRoad)} road and {m.Spots.Count(s => s.Behaviour.Kind == ChestSpawnKind.Personal)} camp chest spot(s), {m.Areas.Count} camp quest(s)"
+            + (open.Count > 0 ? $" ({open.Count} faction camp quest(s))" : "") + $"; {made.Count} chest(s) now"
             + (m.PoiLimit < int.MaxValue ? $" (POI chests at most {m.PoiLimit} at once)" : ""));
         return made;
     }
@@ -194,6 +224,114 @@ public sealed class WorldChests(World world)
     private static bool OpenWorld(Map map, ClusterTemplate template) =>
         !DungeonLayout.IsInstance(map.Cluster) && !ExpeditionData.IsInstance(map.Cluster) && !CorruptedData.IsInstance(map.Cluster) && !HellgateData.IsInstance(map.Cluster)
         && template.LootChests.Count > 0;
+
+    /// <summary>StageQ camps: a plain spawnpoint in the slot of a faction camp's open quest that unlocks a shared chest (SPAWNPOINT_FACTION_DYNAMIC_CAMP_*_LC).</summary>
+    private static bool OpenCampChest(ClusterTemplate template, LootChestSpawn point) =>
+        point.Behaviour is { Kind: ChestSpawnKind.Plain, IsPoi: false }
+        && template.LocalQuestAreas.Any(a => a.Key.Slot == point.Key.Slot && a.Quest is { Open: true, KillAllMarked: true, UnlocksSharedChest: true });
+
+    // ---- the faction camps' open quests (stageQ) ----
+
+    /// <summary>
+    /// A faction camp's open quest on <paramref name="a"/>: its marked points (the slot's isquestmobspawn ones, their mobs standing), and its chest on
+    /// the nearest open-camp spot of the slot, LockedByQuest (4) for everyone; the chest is not on the map yet.
+    /// </summary>
+    private (QuestArea Area, LootChest? Chest) Open(Map map, MapChests m, LocalQuestAreaSpawn a, LootChestData data)
+    {
+        var area = new QuestArea(world.ObjectIds.Next(), a, a.Quest!);
+        area.Marked.AddRange(map.MobSlots.Where(s => s.Point.Key.Slot == a.Key.Slot && s.Point.Block is { IsQuestMobSpawn: true }));
+        m.Areas.Add(area);
+        if (!area.Quest.UnlocksSharedChest) return (area, null);
+        area.Chest = m.Spots.Where(s => s.Point.Key.Slot == a.Key.Slot && s.Area is null && s.Behaviour is { Kind: ChestSpawnKind.Plain, IsPoi: false })
+            .MinBy(s => Vector2.Distance(s.Point.Position, a.Position));
+        if (area.Chest is not { } spot) return (area, null);
+        spot.Area = area;
+        if (Make(map, spot, data, Pick(map, spot.Behaviour.Entries)) is not { } chest) return (area, null);
+        chest.SetState(4, world.GameNow); // LockedByQuest until the camp's last marked mob dies
+        return (area, chest);
+    }
+
+    /// <summary>LocalQuestInfos 539 of the map's open quests (as captured in 1207: keys 1, 4 and 9 as byte arrays); null when it has none.</summary>
+    private static LocalQuestInfosEvent? Infos(MapChests m)
+    {
+        var list = m.Areas.Where(a => a.Open).ToList();
+        if (list.Count == 0) return null;
+        return new LocalQuestInfosEvent
+        {
+            d8p = [.. list.Select(a => a.Id)],                                                    // [0] quest object ids
+            d8r = [.. list.Select(_ => "")],                                                      // [2] ""
+            d8s = [.. list.Select(a => new[] { a.Finished })],                                    // [3] mission done flags
+            d8t = [.. list.Select(a => a.Finished ? (byte)3 : (byte)1)],                          // [4] LocalQuestState Started / Finished
+            d8u = [.. list.Select(a => a.Finished ? 0f : a.Share)],                               // [5] progress (captured 0, the finished one too)
+            d8v = [.. list.Select(a => $"{{\"RelevantMobCountInArea\":{a.Marked.Count}}}")],    // [6] the mission's text arguments
+            d8w = [.. list.Select(_ => false)],                                                   // [7]
+            d8x = [.. list.Select(a => a.Spawn.Position)],                                        // [8] centres
+            d8y = [.. list.Select(_ => (byte)1)],                                                 // [9] LocalQuestAreaType CircleDynamic
+            d8z = [.. list.Select(a => a.Spawn.Radius)],                                          // [10] radii
+            d80 = [.. list.Select(_ => "")],                                                      // [11] ""
+            Extra = new() { [1] = list.Select(a => (byte)a.Quest.Index).ToArray() },             // [1] localquests.xml index, a byte[] on the wire
+        };
+    }
+
+    /// <summary>The Join's phase B after the zone's 468 (<see cref="VisibilityTracker.SendClusterWide"/>): the map's open quests (539).</summary>
+    public void Joined(Player p)
+    {
+        if (!p.IsBot && p.Map is { } map && _maps.TryGetValue(map, out var m) && Infos(m) is { } infos) p.Session.Send(infos);
+    }
+
+    /// <summary>An open quest's progress (543) to the map's players; at the last marked point cleared it is done (<see cref="Finish"/>).</summary>
+    private void Progress(Map map, QuestArea area)
+    {
+        if (area.Finished) return;
+        if (area.Cleared >= area.Marked.Count)
+        {
+            Finish(map, area);
+            return;
+        }
+        var update = new LocalQuestProgressUpdateEvent { d81 = area.Id, d83 = [false], d84 = area.Share };
+        foreach (var p in map.Players.Values) p.Session.Send(update);
+    }
+
+    /// <summary>
+    /// An open quest done: Finished (543 done, 1), its chest Unlocked for everyone (UpdateLootChest to its observers), the camp's switch set off
+    /// (<see cref="FactionCamps.QuestDone"/>).
+    /// </summary>
+    private void Finish(Map map, QuestArea area)
+    {
+        area.Finished = true;
+        var done = new LocalQuestProgressUpdateEvent { d81 = area.Id, d83 = [true], d84 = 1 };
+        foreach (var p in map.Players.Values) p.Session.Send(done);
+        if (area.Chest?.Chest is { LockState: < 6 } chest && chest.Map == map)
+        {
+            chest.SetState(6, world.GameNow);
+            foreach (var o in map.ObserversOf(chest)) o.Session.Send(chest.Update(o));
+        }
+        Log.Info("world", $"map {map.Cluster}: the faction camp quest {area.Quest.Name} of {area.Spawn.Key.Slot} is done ({area.Marked.Count} marked mobs dead), its chest unlocked");
+        world.FactionCamps.QuestDone(map, area);
+    }
+
+    /// <summary>A faction camp gone Inactive (<see cref="FactionCamps"/>): its open quest goes (603 to the map's players) and its chest with it.</summary>
+    public void Close(Map map, QuestArea area)
+    {
+        if (!_maps.TryGetValue(map, out var m) || !m.Areas.Remove(area)) return;
+        if (area.Chest is { } spot && spot.Area == area)
+        {
+            spot.Area = null;
+            if (spot.Chest is { } chest) Combat.RemoveBag(chest, "its faction camp went inactive");
+            spot.Chest = null;
+        }
+        var gone = new LocalQuestAreaGoneEvent { d8n = area.Id };
+        foreach (var p in map.Players.Values) p.Session.Send(gone);
+    }
+
+    /// <summary>A faction camp standing again (<see cref="FactionCamps"/>, its points spawned): a fresh open quest and chest, then the map's 539 to its players.</summary>
+    public void Reopen(Map map, string slot)
+    {
+        if (!_maps.TryGetValue(map, out var m) || map.Template is not { } template || world.Clusters?.LootChestsIfLoaded is not { } data) return;
+        foreach (var a in template.LocalQuestAreas.Where(a => a.Key.Slot == slot && a.Quest is { Open: true, KillAllMarked: true }))
+            if (Open(map, m, a, data) is { Chest: { } chest }) map.AddObject(chest);
+        if (Infos(m) is { } infos) foreach (var p in map.Players.Values) p.Session.Send(infos);
+    }
 
     /// <summary>StageL roads: the road camps' chests run (Roads:Chests).</summary>
     private bool RoadChests => world.Config.Roads.Chests;
@@ -535,11 +673,13 @@ public sealed class WorldChests(World world)
                 Log.Info("world", $"{spot}: {chest} for the kill of {mob} (upgrade level {level})");
             }
         }
+        // StageQ camps: a faction camp's open quest counts its marked points' mobs, whoever killed them.
+        foreach (var area in m.Areas.Where(a => a.Open && mob.Slot is { } s && a.Marked.Contains(s)).ToList()) Progress(map, area);
         // The camp quests (SPEC §4.4): the killer in the circle, and its party members in the same circle with countpartykillsinsamelocalquestarea.
         var utc = DateTime.UtcNow;
         foreach (var area in m.Areas)
         {
-            if (!SameFaction(faction, area.Quest.Faction) || !area.Contains(killer.PositionAt(utc))) continue;
+            if (area.Open || !SameFaction(faction, area.Quest.Faction) || !area.Contains(killer.PositionAt(utc))) continue;
             var party = area.Quest.PartyKills ? world.Parties.Of(killer.Character.Id) : null;
             foreach (var p in map.Players.Values)
             {
@@ -650,11 +790,14 @@ public sealed class WorldChests(World world)
             if (spot.Behaviour.Kind == ChestSpawnKind.MobUpgrade || spot.Behaviour.Respawn == ChestRespawn.Never && !spot.Behaviour.IsPoi) continue;
             Respawn(map, spot, Delay(map, spot.Behaviour.RespawnSeconds));
         }
+        // StageQ camps: an open quest whose last marked mob went without a player's kill (.mob kill, a despawn) is done too.
+        foreach (var area in m.Areas.Where(a => a is { Open: true, Finished: false, Marked.Count: > 0 } && a.Cleared >= a.Marked.Count).ToList()) Finish(map, area);
         if (m.Areas.Count == 0 || map.Players.Count == 0) return;
         var utc = DateTime.UtcNow;
         foreach (var area in m.Areas)
             foreach (var p in map.Players.Values)
             {
+                if (area.Open) break; // known from 539, no per-player state [infer: the captured Joins show no 540-542 for them]
                 var inside = area.Contains(p.PositionAt(utc));
                 area.States.TryGetValue(p.Character.Id, out var st);
                 if (inside && (st is null || st.Known != p))

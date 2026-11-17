@@ -149,8 +149,8 @@ public static class GuildTest
               && u[5] is byte[] and [8] && u[6] is int[] { Length: 1 } && u[7] is int[] { Length: 1 } && u[8] is int[] { Length: 1 } && u[9] is byte[] { Length: 1 }
               && !u.ContainsKey(10) && u[15] is "Iron Wolves" && u[16] is "" && u[18] is true && u[19] is System.Collections.IDictionary { Count: 0 }
               && Convert.ToInt32(u[20]) == 3 && Convert.ToInt32(u[21]) == 86 && Convert.ToInt32(u[22]) == 15 && Convert.ToInt32(u[23]) == 11
-              && Convert.ToInt32(u[24]) == 4416045 && u[25] is 1.4f && u[28] is "" && u[36] is "",
-              "103: kind 0, key 1 = [A], role 8, keys 1-9 of one length, 15 name, 16 \"\", 18 true, 19 {}, 20-25 the crest");
+              && Convert.ToInt32(u[24]) == 4416045 && u[25] is 1.4f && u[28] is "BANNER_X" && u[34] is "" && u[36] is "",
+              "103: kind 0, key 1 = [A], role 8, keys 1-9 of one length, 15 name, 16 \"\", 18 true, 19 {}, 20-25 the crest, 28 the banner, 34/36 \"\"");
         var t = Of(a, EventCodes.GuildFullAccessTagsUpdated, am)[0];
         var ids = Gs(t[1]);
         var gm = Array.IndexOf((string[])t[2]!, "@GUILDROLE_GUILDMASTER");

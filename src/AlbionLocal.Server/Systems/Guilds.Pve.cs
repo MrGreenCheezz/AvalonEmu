@@ -133,6 +133,7 @@ public sealed partial class Guilds
         _accountChanged.Add(g);
         Wallet.Credit(to, a7m, $"guild payout by '{by.Character.Name}'");
         world.GuildGoals.PaidOut(g, m.Id, a7m); // stage I: the Member Logs' SILVERBALANCE
+        AddLog(g, GuildLogType.Silver, GuildLogReason.Withdrawal, m.Name, "", -a7m); // stageR: a payout is a withdrawal for the member [assume]
         world.Saves.SaveNow(to.Character);
         Tell(g, $"[Guild] {by.Character.Name} paid {silver} silver of the guild account to {m.Name}");
         Mailer.GuildNotice(world, g, "Guild account payout", $"{by.Character.Name} paid {silver} silver of the guild account to {m.Name}.");
@@ -160,6 +161,7 @@ public sealed partial class Guilds
         Wallet.TrySpend(p, a7m, $"deposit into the account of guild '{g.Name}'"); // checked above: cannot fail
         world.Saves.SaveNow(p.Character);
         world.GuildGoals.Deposited(g, p.Character.Id, a7m);
+        AddLog(g, GuildLogType.Silver, GuildLogReason.Deposit, p.Character.Name ?? "", "", a7m); // stageR: the account log
         Log.Info("guild", string.Create(CultureInfo.InvariantCulture, $"'{p.Character.Name}' deposits {a7m / 10000.0:0.####} silver into guild '{g.Name}' ({g.SilverA7m / 10000} in the account)"));
         return 0;
     }
@@ -178,6 +180,7 @@ public sealed partial class Guilds
         Wallet.Credit(p, a7m, $"withdrawal from the account of guild '{g.Name}'");
         world.Saves.SaveNow(p.Character);
         world.GuildGoals.PaidOut(g, p.Character.Id, a7m);
+        AddLog(g, GuildLogType.Silver, GuildLogReason.Withdrawal, p.Character.Name ?? "", "", -a7m); // stageR: the account log
         Log.Info("guild", string.Create(CultureInfo.InvariantCulture, $"'{p.Character.Name}' withdraws {a7m / 10000.0:0.####} silver from guild '{g.Name}' ({g.SilverA7m / 10000} left)"));
         return 0;
     }

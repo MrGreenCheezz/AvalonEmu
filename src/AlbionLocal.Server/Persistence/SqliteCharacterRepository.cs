@@ -624,6 +624,88 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         );
         CREATE INDEX IF NOT EXISTS guild_islands_guild ON guild_islands (guild);
         """,
+        // v48 (stageR guild SPEC §4): the guild window's own state, every row going with its guild. guild_profiles: recruitment info, codex,
+        // welcome mail, optional stats, upkeep flag (JSON GuildProfile). guild_applications: an open ApplyToGuild, living in its kind-1 guild
+        // mail (gone with the mail). guild_logs: the history logs of GetGuildAccountLogs (account movements, member events). IF NOT EXISTS:
+        // safe at whichever position a merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS guild_profiles (
+            guild       TEXT PRIMARY KEY REFERENCES guilds (id) ON DELETE CASCADE,
+            data        TEXT NOT NULL                        -- JSON GuildProfile
+        );
+        CREATE TABLE IF NOT EXISTS guild_applications (
+            mail        INTEGER PRIMARY KEY REFERENCES mails (id) ON DELETE CASCADE, -- the kind-1 mail in the guild's mailbox
+            guild       TEXT NOT NULL REFERENCES guilds (id) ON DELETE CASCADE,
+            character   TEXT NOT NULL,                       -- the applicant (no foreign key: a deleted applicant answers 7282)
+            stats       INTEGER NOT NULL,                    -- GuildApplicationStatCategories flags
+            applied     INTEGER NOT NULL                     -- UTC ticks
+        );
+        CREATE INDEX IF NOT EXISTS guild_applications_guild ON guild_applications (guild, character);
+        CREATE TABLE IF NOT EXISTS guild_logs (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            guild       TEXT NOT NULL REFERENCES guilds (id) ON DELETE CASCADE,
+            type        INTEGER NOT NULL,                    -- LogType: 0 silver, 3 just_event
+            reason      INTEGER NOT NULL,                    -- bhv (GuildLogReason)
+            actor       TEXT NOT NULL,
+            parameter   TEXT NOT NULL,
+            amount      INTEGER NOT NULL,                    -- a7m, negative = out of the account
+            at          INTEGER NOT NULL                     -- UTC ticks
+        );
+        CREATE INDEX IF NOT EXISTS guild_logs_guild ON guild_logs (guild, type, at);
+        """,
+        // v49 (analysis/work/stageR/safe-portal/SPEC.md §4): the S.A.F.E. portal uses and binding, one JSON column.
+        """
+        ALTER TABLE characters ADD COLUMN safe_portal TEXT;                          -- JSON SafePortalLog; NULL = never used
+        """,
+        // v50 (analysis/work/stageR/items/SPEC.md §2, §3): the overcharged equipment slots and the fame credits per ReSpecFameType.
+        """
+        ALTER TABLE characters ADD COLUMN overcharge TEXT;                           -- JSON OverchargeSlot[]; NULL = none
+        ALTER TABLE characters ADD COLUMN fame_credits TEXT;                         -- JSON a7m[5]; NULL = all 0
+        """,
+        // v51 (stageR smugglers SPEC §3.5): a character's standings by StandingType (1 Smugglers; MistCity stays in its column), a row going
+        // with its character. IF NOT EXISTS: safe at whichever position a merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS character_standings (
+            character   TEXT NOT NULL REFERENCES characters (id) ON DELETE CASCADE,
+            type        INTEGER NOT NULL,                    -- StandingType (1 Smugglers)
+            standing    INTEGER NOT NULL,                    -- a7m raw (UpdateStanding 87 key 1)
+            PRIMARY KEY (character, type)
+        );
+        """,
+        // v52 (analysis/work/stageR/buildings/SPEC.md §2-§3): the owner's settings, earnings and nutrition of a player's station, keyed by
+        // the building's Guid (NewBuilding key 1; a city plot's real_estate_buildings row). No reference: the owner of the row deletes it with
+        // the building. IF NOT EXISTS: safe at whichever position a merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS building_states (
+            id                   TEXT PRIMARY KEY,           -- the building's Guid
+            friend_fee           INTEGER NOT NULL DEFAULT 0, -- a7m silver per 100 nutrition (CraftBuildingInfo key 1)
+            user_fee             INTEGER NOT NULL DEFAULT 0, -- a7m (key 2)
+            earned               INTEGER NOT NULL DEFAULT 0, -- a7m fees collected, not taken yet (key 4)
+            nutrition            INTEGER NOT NULL,           -- a7m (NewBuilding key 18)
+            reward_storage       INTEGER NOT NULL DEFAULT 0, -- a7m silver deposited for feeding rewards (key 23)
+            reward_per_nutrition INTEGER NOT NULL DEFAULT 0, -- a7m per nutrition point (key 24)
+            preset               INTEGER NOT NULL DEFAULT 2  -- AccessRights Preset: 0 closed, 1 private, 2 public
+        );
+        """,
+        // v53 (analysis/work/stageR/stats/SPEC.md §1): the PvP kills and knockdowns of the stats window's kill history, with their details JSON.
+        // IF NOT EXISTS: safe at whichever position the merge gives it.
+        """
+        CREATE TABLE IF NOT EXISTS kill_history (
+            id          TEXT PRIMARY KEY,                    -- the Guid the client asks the details of
+            at          INTEGER NOT NULL,                    -- GameTimeStamp ticks
+            killer      TEXT NOT NULL,                       -- Character.Id
+            killer_name TEXT NOT NULL,
+            victim      TEXT NOT NULL,                       -- Character.Id
+            victim_name TEXT NOT NULL,
+            knockdown   INTEGER NOT NULL,                    -- 1 = a knockdown, 0 = a death
+            fame        INTEGER NOT NULL,                    -- the killer's fame, a7m
+            killer_ip   INTEGER NOT NULL,                    -- average item power
+            victim_ip   INTEGER NOT NULL,
+            details     TEXT NOT NULL                        -- the client's KillHistoryDetails JSON
+        );
+        CREATE INDEX IF NOT EXISTS kill_history_killer ON kill_history (killer, at);
+        CREATE INDEX IF NOT EXISTS kill_history_victim ON kill_history (victim, at);
+        """,
     ];
 
     private const string AccountColumns = "id, level, name, display_name, password, failed_logins, locked_until, banned_until, ban_reason, created";
@@ -633,7 +715,8 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         + "direction, previous_cluster, last_left_at, last_city, pending_transfer, fame, silver, gold, effects, cooldowns, focus, mounted_since, mount_cooldown, "
         + "flag, faction, reputation, reputation_at, dungeon_return, journal_tracked, expeditions, goals, black_market, "
         + "focus_stamp, learning_points, lp_stamp, use_flags, autolearn, infamy, mist_standing, mist_favor, loadouts, "
-        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening, portal_binding, avatar_ring";
+        + "faction_standing, faction_points, faction_changed_at, vanity, played_ms, tutorial_opening, portal_binding, avatar_ring, safe_portal, "
+        + "overcharge, fame_credits";
 
     private readonly object _sync = new();
     private readonly SqliteConnection _db;
@@ -792,7 +875,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                             $direction, $previous, $left, $city, $transfer, $fame, $silver, $gold, $effects, $cooldowns, $focus, $mounted, $mountcd,
                             $flag, $faction, $reputation, $reputationat, $dungeon, $journal, $expeditions, $goals, $bm,
                             $focusstamp, $lp, $lpstamp, $useflags, $autolearn, $infamy, $miststanding, $mistfavor, $loadouts,
-                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial, $portal, $ring)
+                            $fstanding, $fpoints, $fchanged, $vanity, $played, $tutorial, $portal, $ring, $safeportal, $overcharge, $famecredits)
                         """, tx, [("$account", c.Account.ToString()), .. CharacterValues(c)]))
                     insert.ExecuteNonQuery();
                 WriteContents(c, tx);
@@ -841,7 +924,7 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     infamy = $infamy, mist_standing = $miststanding, mist_favor = $mistfavor, loadouts = $loadouts,
                     faction_standing = $fstanding, faction_points = $fpoints, faction_changed_at = $fchanged,
                     vanity = $vanity, played_ms = $played, tutorial_opening = $tutorial,
-                    portal_binding = $portal, avatar_ring = $ring
+                    portal_binding = $portal, avatar_ring = $ring, safe_portal = $safeportal, overcharge = $overcharge, fame_credits = $famecredits
                 WHERE id = $id
                 """, tx, CharacterValues(c)))
             if (update.ExecuteNonQuery() == 0) return false;
@@ -914,6 +997,9 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         ("$tutorial", c.Tutorial is null ? null : JsonSerializer.Serialize(c.Tutorial)),
         ("$portal", c.PortalBinding is { } portal ? JsonSerializer.Serialize(portal) : null),
         ("$ring", c.AvatarRing),
+        ("$safeportal", c.SafePortal is { } safe ? JsonSerializer.Serialize(safe) : null),
+        ("$overcharge", c.Overcharge.Count > 0 ? JsonSerializer.Serialize(c.Overcharge) : null),
+        ("$famecredits", c.FameCredits.Any(x => x != 0) ? JsonSerializer.Serialize(c.FameCredits) : null),
     ];
 
     /// <summary>Inserts the items and the destiny board state of <paramref name="c"/> (the old rows are gone).</summary>
@@ -972,6 +1058,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                 }
             }
         }
+        // StageR smugglers: the standings of character_standings (the row replaced at every save).
+        using (var standing = Command("INSERT OR REPLACE INTO character_standings (character, type, standing) VALUES ($id, 1, $standing)", tx,
+                   ("$id", c.Id.ToString()), ("$standing", c.SmugglerStanding)))
+            standing.ExecuteNonQuery();
         if (c.Progression is not { } progression) return;
         using var put = Command("INSERT INTO progression (character, completed, levels, progress, tracked) VALUES ($id, $completed, $levels, $progress, $tracked)", tx,
             ("$id", c.Id.ToString()), ("$completed", JsonSerializer.Serialize(progression.Completed)),
@@ -1081,7 +1171,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
                     Tutorial = r.IsDBNull(48) ? null : JsonSerializer.Deserialize<OpeningTutorialProgress>(r.GetString(48)),
                     PortalBinding = r.IsDBNull(49) ? null : JsonSerializer.Deserialize<PortalBinding>(r.GetString(49)),
                     AvatarRing = r.GetInt32(50),
-                    Account = Guid.Parse(r.GetString(51)),
+                    SafePortal = r.IsDBNull(51) ? null : JsonSerializer.Deserialize<SafePortalLog>(r.GetString(51)),
+                    Overcharge = r.IsDBNull(52) ? [] : JsonSerializer.Deserialize<List<OverchargeSlot>>(r.GetString(52)) ?? [],
+                    FameCredits = Five(r, 53),
+                    Account = Guid.Parse(r.GetString(54)),
 
                 });
             }
@@ -1091,6 +1184,15 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
     }
 
     /// <summary>A JSON a7m[6] column (v30 faction standing / points); NULL or another length reads as six zeros.</summary>
+    /// <summary>A JSON a7m[] column as exactly five values (the fame credits, Join key 43), missing ones 0.</summary>
+    private static long[] Five(SqliteDataReader r, int column)
+    {
+        var five = new long[5];
+        if (!r.IsDBNull(column) && JsonSerializer.Deserialize<long[]>(r.GetString(column)) is { } saved)
+            Array.Copy(saved, five, Math.Min(5, saved.Length));
+        return five;
+    }
+
     private static long[] Six(SqliteDataReader r, int column)
     {
         var six = new long[6];
@@ -1128,6 +1230,10 @@ public sealed partial class SqliteCharacterRepository : IGameRepository
         while (equipment.Count < Entities.Inventory.EquipmentSlots) equipment.Add(null);
         c.Equipment = [.. equipment];
         c.Inventory = inventory;
+        using (var standings = Command("SELECT type, standing FROM character_standings WHERE character = $id", null, ("$id", c.Id.ToString())))
+        using (var r = standings.ExecuteReader())
+            while (r.Read())
+                if (r.GetInt32(0) == Systems.Smugglers.StandingType) c.SmugglerStanding = r.GetInt64(1);
         using (var select = Command("""
                    SELECT location, tab, slot, uniquename, count, quality, durability, active, passive, fame, soul
                    FROM bank_items WHERE character = $id ORDER BY location, tab, slot

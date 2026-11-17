@@ -62,6 +62,9 @@ public sealed class ClusterTemplate
     /// <summary>StageQ: the faction warfare towers, the outpost members world.xml criticalObjects names (NewOutpostObject 365).</summary>
     public IReadOnlyList<OutpostSpawn> Outposts { get; init; } = [];
 
+    /// <summary>StageR fw-zone: the faction fortress tower (the factionfortress member of a *_FactionWarfare_Fortress_* template; NewFactionFortressObject 652).</summary>
+    public IReadOnlyList<FortressSpawn> Fortresses { get; init; } = [];
+
     /// <summary>The ground emblems' zone spells (tile &lt;spellzone spell&gt;: the Roads' and the cities' speed buffs, …; <see cref="Systems.SpellZones"/>).</summary>
     public IReadOnlyList<SpellZoneSpot> SpellZones { get; init; } = [];
 
@@ -196,6 +199,12 @@ public sealed class ClusterTemplate
     public const string TreasureChestPrefab = "TreasureSpawnpointLootchest";
 
     /// <summary>
+    /// StageR dragon areas: the resource prefab of a tracking spot (treasuredistribution.xml group TRACKING: the DRAGONAREA_ENTRANCE events stand
+    /// there [infer: the Distribute's group names the prefab, as the comment of the file says]), placed by resourceprefabmappings.xml.
+    /// </summary>
+    public const string TrackingPrefab = "TreasureSpawnpointTracking";
+
+    /// <summary>
     /// The &lt;spawnbuff&gt; buffs of the cluster's worldsettings.xml cluster type with their conditions (<see cref="WorldArchetypes.SpawnBuffsOf"/>;
     /// stageL hellgates phase B: HELL_2V2_ENTER, SPAWN_INVULNERABILITY_HELL, applied under Hellgates:SpawnBuffs); empty without.
     /// </summary>
@@ -309,6 +318,7 @@ public sealed class ClusterTemplate
         // The node sources of the placement (a81.h): per slot (first of an id) the template, its place and its layers as
         // the resourcenode walk counts them (an activelayer with flags only for a flag of Login key 79).
         var sources = new List<(string Slot, TemplateLayout Layout, Placement Place, HashSet<string> Layers)>();
+        bool? campZone = null; // stageQ camps: FactionWarfare:Camps for this cluster, asked with its first faction camp template
 
         foreach (var ti in root.Elements("templateinstance"))
         {
@@ -329,9 +339,18 @@ public sealed class ClusterTemplate
             }
             var roll = rolls.GetValueOrDefault(slot);
             var layout = roll is null ? store.Layout(name.TemplateFolder, reference) : DynamicLayout(store, name.TemplateFolder, roll.Template);
-            // A rolled slot has no activelayer entries: its template's layers are on by the roll's tags.
+            // A rolled slot has no activelayer entries: its template's layers are on by the roll's tags. StageQ camps: a mob camp with
+            // faction warfare layers in a zone FactionWarfare:Camps picks shows them (the client's, by DynamicTemplate 604) instead of the Default ones.
             if (roll is not null && layout is not null)
+            {
+                roll = roll with
+                {
+                    Switched = layout.LayerNames.Values.Any(n => roll.IsVar(n)),
+                    FeatureLayer = layout.LayerNames.Values.Any(n => roll.IsVar(n, DynamicRoll.FactionWarfare)) && (campZone ??= store.FactionCampZone(info.Id))
+                        ? DynamicRoll.FactionWarfare : DynamicRoll.Default,
+                };
                 active = layout.LayerNames.Where(l => roll.LayerOn(l.Value)).Select(l => l.Key).ToHashSet(StringComparer.Ordinal);
+            }
             instances.Add(new TemplateInstance(slot, roll?.Template ?? reference, layout?.Folder, new Vector2((float)px, (float)pz), (float)py, (float)place.Yaw,
                 (string?)ti.Attribute("dyn") == "true", active) { Default = reference, Roll = roll });
             if (layout is null)
@@ -488,6 +507,7 @@ public sealed class ClusterTemplate
         public readonly List<ExitSpawn> Exits = [];
         public readonly List<TravelpointSpawn> Travelpoints = [];
         public readonly List<OutpostSpawn> Outposts = [];
+        public readonly List<FortressSpawn> Fortresses = [];
         public readonly List<SpellZoneSpot> SpellZones = [];
         public readonly List<FactionWarfarePortalSpawn> Portals = [];
         public readonly List<PortalEntranceSpawn> PortalEntrances = [];
@@ -643,6 +663,22 @@ public sealed class ClusterTemplate
                                 var gp = TileMath.V2((string?)g.Attribute("pos")) ?? Vector2.Zero;
                                 var (gx, _, gz) = place.Apply(gp.X, m.Y, gp.Y);
                                 return new OutpostGuardSpot(new Vector2((float)gx, (float)gz), (float)TileMath.Mod360(place.Yaw + TileMath.Float((string?)g.Attribute("roty"))));
+                            })],
+                        });
+                        break;
+                    case "factionfortress" when Of("factionfortress") is { } fort:
+                        // StageR fw-zone: the tower tile (MOUNTAIN_RED_FACTION_TOWER at -15 10 5 of the template = world.xml capturepointposition);
+                        // its 9 factionfortressguardspawnpoints spread around the tower in template coordinates, like the outposts' [infer].
+                        Fortresses.Add(new FortressSpawn
+                        {
+                            Key = key, Tile = m.Tile, Position = pos, Height = (float)y, Direction = dir, Component = fort, Guid = guid,
+                            CaptureRadius = TileMath.Float((string?)fort.Attribute("captureradius") ?? "10"),
+                            Guards = [.. fort.Elements("factionfortressguardspawnpoint").Select(g =>
+                            {
+                                var gp = TileMath.V2((string?)g.Attribute("pos")) ?? Vector2.Zero;
+                                var (gx, _, gz) = place.Apply(gp.X, m.Y, gp.Y);
+                                return new FortressGuardSpot(new Vector2((float)gx, (float)gz), (float)TileMath.Mod360(place.Yaw + TileMath.Float((string?)g.Attribute("roty"))),
+                                    (string?)g.Attribute("guardtype") ?? "");
                             })],
                         });
                         break;
@@ -908,6 +944,16 @@ public sealed class ClusterTemplate
                 }
                 catch (Exception e) when (e is InvalidDataException or IOException) { Problem($"lootchests.xml or treasuredistribution.xml not read, no treasures: {e.Message}"); }
             }
+            // StageR dragon areas: the tracking spots (the dragon area entrances' spots) read treasuredistribution.xml and dragonarea.xml now.
+            if (resources?.Placements.Any(p => p.Name == TrackingPrefab) == true)
+            {
+                try
+                {
+                    _ = store.Treasures;
+                    _ = store.DragonAreas;
+                }
+                catch (Exception e) when (e is InvalidDataException or IOException) { Problem($"treasuredistribution.xml or dragonarea.xml not read, no dragon area entrances: {e.Message}"); }
+            }
             // StageH bosses: the quest areas bound to localquests.xml, read now when the cluster has any; and the POI chest cap.
             if (QuestAreas.Count > 0)
             {
@@ -977,7 +1023,7 @@ public sealed class ClusterTemplate
             var template = new ClusterTemplate
             {
                 Info = info, Name = name, Origin = origin, Size = size, Instances = instances, CriticalObjects = criticalObjects, Critical = Critical,
-                Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, Outposts = Outposts, SpellZones = SpellZones, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
+                Buildings = Buildings, Exits = Exits, Travelpoints = Travelpoints, Outposts = Outposts, Fortresses = Fortresses, SpellZones = SpellZones, FactionWarfarePortals = Portals, IslandAccessPoints = Islands,
                 PortalEntrances = PortalEntrances, PortalExits = PortalExits,
                 ExpeditionAgents = Agents, LocationMarkers = Markers, TutorialBlockers = TutorialBlockers, Harvestables = Harvestables, MobSpawnPoints = Mobs, ResourceNodes = Nodes,
                 RealEstates = Estates, FishingZones = Fishing, RespawnPoints = Respawns, Resources = resources, DungeonMarkers = DungeonMarkers, LootChests = ChestPoints,
@@ -1309,6 +1355,25 @@ public sealed record TravelpointSpawn : ClusterObject
 /// <summary>A guard spot of a faction warfare tower: where one of its guards stands and the way it faces.</summary>
 public readonly record struct OutpostGuardSpot(Vector2 Position, float Direction);
 
+/// <summary>StageR fw-zone: a fortress tower's guard spot and its fortressguards guardtype (T8_MOB_CITY_FORTRESS_SWORD …).</summary>
+public readonly record struct FortressGuardSpot(Vector2 Position, float Direction, string GuardType);
+
+/// <summary>
+/// StageR fw-zone (analysis/work/stageR/fw-zone/SPEC.md §1): the factionfortress member of a fortress template. <see cref="Guid"/> is the
+/// world.xml factionfortress id the client looks its fortress up by (ckc ctor 0x180b34820: aa.bf(guid), else "FactionFortressObject: Fortress…");
+/// <see cref="ClusterObject.Position"/> the tower tile = world.xml capturepointposition.
+/// </summary>
+public sealed record FortressSpawn : ClusterObject
+{
+    public required Guid Guid { get; init; }
+
+    /// <summary>factionfortress captureradius (10 in all 16 templates).</summary>
+    public double CaptureRadius { get; init; } = 10;
+
+    /// <summary>The 9 factionfortressguardspawnpoints (5 sword, 2 crossbow, 2 staff, all T8 types).</summary>
+    public IReadOnlyList<FortressGuardSpot> Guards { get; init; } = [];
+}
+
 /// <summary>A tile's &lt;spellzone&gt;: its world position and its zone spell (SPELLZONE_ROADS_SPEEDBUFF, …).</summary>
 public readonly record struct SpellZoneSpot(Vector2 Position, string Spell);
 
@@ -1614,6 +1679,15 @@ public sealed record LocalQuestAreaSpawn : ClusterObject
     public required string QuestId { get; init; }
     public float Radius { get; init; }
     public LocalQuest? Quest { get; init; }
+}
+
+/// <summary>
+/// StageQ camps: a rolled dyn slot whose template has VAR layers (<see cref="DynamicRoll.Switched"/>), at its template instance's position: what the
+/// DynamicTemplate 604 object of the map stands for (<see cref="Entities.DynamicTemplateObject"/>). Made by the map, not by the resolver; key index −1.
+/// </summary>
+public sealed record DynamicSlotSpawn : ClusterObject
+{
+    public required DynamicRoll Roll { get; init; }
 }
 
 /// <summary>The Guids the client gives the exits of a random dungeon floor (bn5.ue / bn5.uf, SPEC §2.6): the first exit loaded, every later one.</summary>

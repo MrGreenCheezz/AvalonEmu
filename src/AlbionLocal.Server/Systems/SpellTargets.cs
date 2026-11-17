@@ -129,7 +129,8 @@ public static class SpellTargets
             case Mob m when caster.IsBot && !caster.IsCompanion: // stageN companions fight mobs as players do
                 return new Facts(false, false, false, false, false, m.Dead, false, false, false, fc, false);
             case Mob m:
-                return new Facts(false, m.Attackable, false, false, m.Attackable && !SpellEffects.NotTargetable(m, now), m.Dead, false, false,
+                var foe = m.AttackableBy(caster); // stageQ: a tower's or faction camp's guard only for the players it fights
+                return new Facts(false, foe, false, false, foe && !SpellEffects.NotTargetable(m, now), m.Dead, false, false,
                     m.Template.Category is "harmless" or "chest" or "vanity" or "environment", fc, false);
             case Player q:
                 var self = q == caster;

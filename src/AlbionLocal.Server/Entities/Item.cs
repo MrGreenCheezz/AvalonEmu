@@ -46,8 +46,20 @@ public sealed class Item(long id, ItemTemplate template, int count, int quality,
     /// <summary>A journal between empty and full (0 &lt; fame &lt; maxfame): the client does not stack it (bdm.lk 0x22), neither does the server.</summary>
     public bool PartlyFilled => Template.Journal is { } j && JournalFame > 0 && JournalFame < j.MaxFame;
 
-    /// <summary>Whether <paramref name="other"/> may go onto this stack: the same template and, for journals, the same fame and not partly filled (bdm.lk 0x21/0x22).</summary>
-    public bool StacksWith(Item other) => other.Template == Template && other.JournalFame == JournalFame && !PartlyFilled;
+    /// <summary>
+    /// Whether <paramref name="other"/> may go onto this stack: the same template and, for journals, the same fame and not partly filled
+    /// (bdm.lk 0x21/0x22). Equipment (stageR items SPEC §4; the client's bc9.lk 0x180600CD0 checks the item group 29, the enchantment 30,
+    /// the durability in percent steps 31, the quality 32 and no legendary soul 35): here stricter, the exact durability, the same spell
+    /// choices, neither awakened nor overcharged, so that no merge ever changes an item.
+    /// </summary>
+    public bool StacksWith(Item other)
+    {
+        if (other.Template != Template || other.JournalFame != JournalFame || PartlyFilled) return false;
+        if (!Template.IsEquipment) return true;
+        return Network.WorldSession.StackableEquipment(Template) && other.Quality == Quality && other.DurabilityRaw == DurabilityRaw
+            && Soul is null && other.Soul is null && OverchargeBonus == 0 && other.OverchargeBonus == 0
+            && Active.AsSpan().SequenceEqual(other.Active) && Passive.AsSpan().SequenceEqual(other.Passive);
+    }
 
     /// <summary>The fame a new journal of <paramref name="type"/> starts with: maxfame for a _FULL one, else 0 (bdm.a(bdm) 0x18060e620).</summary>
     public static long DefaultFame(ItemTemplate type) => type.Journal is { State: JournalState.Full } j ? j.MaxFame : 0;
@@ -58,8 +70,11 @@ public sealed class Item(long id, ItemTemplate template, int count, int quality,
     /// </summary>
     public InventoryItem? Source { get; } = source;
 
+    /// <summary>The item power an overcharge adds while it lasts (stageR items SPEC §2; set by <see cref="Systems.Overcharge"/>), else 0.</summary>
+    public float OverchargeBonus { get; set; }
+
     /// <summary>The item as the stat calculator takes it.</summary>
-    public EquippedItem ForStats() => new(Template.Index, Quality, DurabilityRaw);
+    public EquippedItem ForStats() => new(Template.Index, Quality, DurabilityRaw, OverchargeBonus);
 
     /// <summary>
     /// The saved form (spells by uniquename via <paramref name="spellName"/>, durability null when full). An item without

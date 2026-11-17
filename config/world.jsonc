@@ -45,8 +45,10 @@
   //   GearArmor: armour, magic and crowd control resistance from the worn items with their item power, as the client shows them (both presets); false = the raw items.xml sum of before (A-B checks only)
   //   "GearDamageBonus": true: a player's spells add the worn items' physical/magic spell damage bonus (cloth chests 0.4-0.5, leather 0.2-0.3, plate 0-0.1; off hands × 1.16^(IP/100)), as official (both presets); false = buffs and passives only, as before
   // "Consumables": { "BatchInterval": 0.5 }, // seconds between two uses of a "use all" from the inventory (captured 0.5)
-  // "Party": { "MaxSize": 20, "ResendAfterClusterChange": false }, // members per party (with open invitations); true = PartyJoined again after every cluster change (if the client loses the party frame there)
+  // "Party": { "MaxSize": 20, "ResendAfterClusterChange": false, "Finder": true }, // members per party (with open invitations); true = PartyJoined again after every cluster change (if the client loses the party frame there);
+  //   Finder: the party finder window (feature switch 171 on, as official); false = the client's default (off, "feature disabled")
   // "Guilds": { "Enabled": true, "CreateCost": 1000000, "MaxMembers": 300, "InviteSeconds": 70, "JoinRole": "Recruit", "RejoinCooldownMinutes": 4320, "CreateCooldownMinutes": 0, // guilds (pve: CreateCost 100000, JoinRole "Member", RejoinCooldownMinutes 0)
+  //   "LogoChangeGold": 3000, "LogoChangeCooldownMinutes": 2880, // a crest change (guild window): its gold price and cooldown (gamedata values)
   //   the PvE guild (README Guilds), off officially (pve: NoFriendlyFire true, XpShare 0.1, ClearXp 2000, ShareWithoutParty true, SilverTax 0.05, Contracts true):
   //   "NoFriendlyFire": false, "XpShare": 0, "ClearXp": 0, "Levels": [0, 50000, 250000, 1000000, 5000000], "FamePerLevel": 0.02, "SilverPerLevel": 0.02, "GatheringPerLevel": 0.01, "RepairPerLevel": 0.05,
   //   "ShareWithoutParty": false, "SilverTax": 0, "Contracts": false, "ContractCount": 3, "ContractPeriod": "Weekly", "ContractXp": 20000, "ContractSilver": 100000,
@@ -88,7 +90,15 @@
   // "FactionWarfare": { "Outposts": true, // the faction warfare towers of the yellow and red zones (README Faction warfare), owned at first by the zone's duchy
   //   "OutpostGuards": true, // each tower's outpost.xml guards (1 boss + 7 of its owner) stand and fight players flagged for another faction
   //   "Claimable": "Frontline", // Frontline = a zone with an exit to a zone or city another faction controls; All = every zone; None = no tower can be taken
-  //   "ControlSeconds": 560 }, // how long a faction must hold most of a zone's towers before it controls the zone (one capture: 557 s)
+  //   "ControlSeconds": 560, // how long a faction must hold most of a zone's towers before it controls the zone (one capture: 557 s)
+  //   "Camps": "Conflict", // faction camps (Caerleon bandits, an open quest, a shared chest) in the rolled camps of: Conflict = the zones of a duchy in conflict (initialconflict),
+  //   All = every warfare zone, None = none (Default camps everywhere); read when a cluster loads, so a change needs a restart
+  //   "CampaignRewardsWithoutPremium": false, // the monthly campaign chests (25000 ... 100000 faction points) are claimable without premium too; official: premium of more than 6 days only
+  //   "Fortresses": true, // the 20 faction fortresses stand (652) and can be besieged (a GM's .fortress siege: what starts a siege officially, the supply war, is not built)
+  //   "FortressGuards": true, // each fortress tower's 9 guards of its owner (factionfortress.xml) stand and fight players flagged for another faction
+  //   "RedZoneEvents": "Scheduled", // the bandit assault in the red duchies: Scheduled = at each start time of factionwarfareredzoneevent.xml, rolled with its chance;
+  //   Always = at every start time; None = only a GM's .redzone start
+  //   "RedZoneRegion": "Default" }, // whose start times: Default = factionwarfareredzoneevent.xml / times.xml, Europe or Asia = their _europe / _asia files
   // "Islands": { "Enabled": true, "StarterIsland": false, "StarterLevel": 0, "PremiumDays": 31, "BuyWithoutPremium": true, "FreeIslands": false, "GrowthSpeed": 1, "FocusSeedReturn": true, "WaterFocusFactor": 1, "StarterBuildings": false },
   //   personal islands (README Personal islands): StarterIsland = a free island at the first island merchant (at level 0-5), StarterBuildings = with a farm and a herb garden,
   //   GrowthSpeed 4 = crops, baby animals and animal products (eggs, milk) grow 4 x as fast (an animal's timer shows the real time left), WaterFocusFactor 0 = watering takes no focus (pve: StarterIsland true, StarterBuildings true, GrowthSpeed 4, WaterFocusFactor 0).
@@ -112,7 +122,13 @@
   // "TreasureCoffers": { "RespawnMinutes": 0, "Sizes": ["coffer", "solo", "veteran", "elite"], "TestAlways": false }, // the open world's coffers and treasure chests
   //   (World:TreasureCoffers true, both presets; README "Open-world treasures"): RespawnMinutes 0 = a free slot draws again after treasuredistribution's
   //   220-660 s (÷ Rates:ChestRespawn), n = after n minutes (a server choice); Sizes = which ones are placed; TestAlways = every open-world cluster, every draw (dev aid)
+  // "DragonAreas": { "Enabled": true, "NaturalSpawn": true, "RedrawMinutes": 0 }, // the Ancient Lands (README "Dragon areas"), both presets: Enabled false = the
+  //   entrances refuse ("disabled"); NaturalSpawn false = only the GM's entrances (.dragon entrance), true = treasuredistribution's DRAGONAREA_ENTRANCE events on the
+  //   tracking spots; RedrawMinutes 0 = each event draws once per map fill (the data's neverreschedule), n = again n minutes after its entrance is gone (a server choice)
   // "Bank": { "Shared": false }, // false = one bank vault per city (both presets); true = one for every city, the other vaults' items move in when a bank opens
+  // "Smugglers": { "Crates": true, "NetworkMarket": true }, // README "Smuggler's dens and crates": Crates = the Outlands' crate piles and Smuggler Stashes
+  //   (pickup, carrying, delivery for the smugglers standing; false = none); NetworkMarket true = every den's Smuggler's Market is one order book (the
+  //   official Smuggler's Network), false = each den its own. The dens' banks are each den's own either way (official); the cities are not touched.
   // "Bm": { "BuyFactor": 0, "DailyLimit": 1000000 }, // the Black Market's NPC buy orders in Caerleon: T4-T8 equipment at item value × BuyFactor (0 = none, as officially: its orders come from players; pve: 5), at most DailyLimit silver per character per day (from 10:00 UTC; 0 = no limit)
   // "Loot": { "BlackMarketChance": 0.1, "BlackMarketSoftCap": 0, "TierCap": false }, // chance that a rolled useblackmarket item (the loot lists' equipment) drops (pve: 0.15; the official server takes them from its Black Market, 1 = every roll);
   //   past BlackMarketSoftCap such items in one roll each further one only with cap / its number (0 = no cap; pve: 4); TierCap true = a common entry gives at most the content's tier + 1 (pve: true)
@@ -148,6 +164,8 @@
   //   "RewardItems": true, "DailyWins": 3, "RewardsWithBots": true, "FallbackCluster": "0000" // arena.bin's unranked items; the daily Royal Sigils
   // },
   // "Vanity": { "Enabled": true }, // cosmetics drop from content (README "Cosmetics"), both presets; the chances are Vanity:*Chance
+  //   Vanity:KillEmotes (true) the victory emotes play on kills (README "Victory emotes"); Vanity:KillEmoteDropShare (0.2) the share of the
+  //   cosmetic drops that are a bundle of victory emote charges instead of a skin; Vanity:KillTrophies (true) kill trophies drop on lethal kills
   // "Pvp": {                  // the official values; pve in the notes
   //   "Mode": "Official",     // Official = by the zone (client table); Consensual = only Red vs Red and duels, a black zone counts as red (pve); Off = duels only
   //   "LethalDeath": true,    // false (pve): the killing hit in orange/red/black zones knocks down (gets up by itself, loses nothing), no execute, no die button

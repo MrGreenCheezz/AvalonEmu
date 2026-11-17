@@ -1,0 +1,12 @@
+{
+  // The defaults of mod-bounty. The server copies this file once to config/modules/mod-bounty.jsonc: change it there, then .modules reload mod-bounty.
+  "IntervalMinutes": 10,          // a new bounty this often (when none is open)
+  "DurationMinutes": 20,          // an open bounty expires after this
+  "Categories": ["Champion", "MiniBoss"], // the mob categories a bounty may name (MobCategory: elites)
+  "MinTier": 3,                   // lowest mob tier
+  "RewardSilver": 10000,          // whole silver, + RewardSilverPerTier × the mob's tier
+  "RewardSilverPerTier": 2500,
+  "RewardFame": 5000,             // whole fame (kill fame of the mob's tier), + RewardFamePerTier × tier
+  "RewardFamePerTier": 1000,
+  "LeaderboardSize": 5
+}

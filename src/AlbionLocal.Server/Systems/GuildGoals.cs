@@ -232,6 +232,7 @@ public sealed class GuildGoals(World world)
     /// </summary>
     public void OnFame(Player p, long gain, FameContext ctx, bool pvp)
     {
+        if (!pvp && gain > 0) Conqueror.OnFame(p, gain, ctx); // stageR stats: the personal might (with or without a guild)
         if (gain <= 0 || GuildOf(p) is not { } g) return;
         if (!pvp && ctx.Source switch { FameSource.Kill => "pve", FameSource.Harvest => "gathering", FameSource.Fishing => "fishing", _ => null } is { } rule)
             FameMight(g, p, rule, gain);
@@ -318,6 +319,7 @@ public sealed class GuildGoals(World world)
     /// </summary>
     public void OnObjective(Player p, string? objective)
     {
+        Conqueror.OnObjective(p, objective); // stageR stats: the personal might (with or without a guild)
         if (MightFactor <= 0 || objective is null || GuildOf(p) is not { } g || !Data.Might.Objectives.TryGetValue(objective, out var o) || o.Might <= 0) return;
         AddMight(g, p.Character.Id, o.Type, o.Might * 10000 * MightFactor);
     }

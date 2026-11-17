@@ -26,6 +26,7 @@ public sealed partial class WorldSession
     {
         if (!IsCommand(req.aa9))
         {
+            if (Player is { } speaker && world.Modules.BeforeChat(speaker, ref req.aa9)) return new SayResponse().FillEmpty(); // the modules' Social.OnBeforeChat
             _say = ChatSay(req);
             return new SayResponse().FillEmpty();
         }

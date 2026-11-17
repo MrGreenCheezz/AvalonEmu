@@ -417,6 +417,12 @@ public sealed class GameData
     [JsonIgnore] public double PveFameSharingRadius { get; init; } = 50;
 
     /// <summary>
+    /// StageR party: gamedata.xml &lt;PartySettings&gt; PartyReadyCheckDuration (60 s, how long a ready check runs) and
+    /// PartyReadyCheckTimeout (60 s, the wait after it before the next one). 60/60 when missing.
+    /// </summary>
+    [JsonIgnore] public (double Duration, double Timeout) PartyReadyCheck { get; init; } = (60, 60);
+
+    /// <summary>
     /// gamedata.xml &lt;Fame&gt;&lt;GroupBonus&gt;&lt;Group size bonusfactor/&gt;: the fame factor of a group of that size (2: 1.1, 3: 1.17,
     /// 4: 1.33, 5-20: 1.4; stageD party SPEC §5). Empty when missing; <see cref="GroupBonus"/> reads it.
     /// </summary>
@@ -642,6 +648,9 @@ public sealed class GameData
             MaxLoad = chars.Num(Attr(dv, "maxload"), "maxload", "<DefaultValues>", 50),
             PveFameSharingRadius = gamedata.Descendants("Fame").FirstOrDefault() is { } fame
                 ? gd.Num(Attr(fame, "pvefamesharingradius"), "pvefamesharingradius", "<Fame>", 50) : 50,
+            PartyReadyCheck = (
+                gamedata.Descendants("PartyReadyCheckDuration").FirstOrDefault() is { } rcd ? gd.Num(Attr(rcd, "value"), "value", "<PartyReadyCheckDuration>", 60) : 60,
+                gamedata.Descendants("PartyReadyCheckTimeout").FirstOrDefault() is { } rct ? gd.Num(Attr(rct, "value"), "value", "<PartyReadyCheckTimeout>", 60) : 60),
             GroupBonuses = gamedata.Descendants("GroupBonus").Elements("Group")
                 .Select((g, i) => (Size: gd.Int(Attr(g, "size"), "size", $"<GroupBonus> {i + 1}"), Factor: gd.Num(Attr(g, "bonusfactor"), "bonusfactor", $"<GroupBonus> {i + 1}", 1)))
                 .GroupBy(g => g.Size).ToDictionary(g => g.Key, g => g.First().Factor),

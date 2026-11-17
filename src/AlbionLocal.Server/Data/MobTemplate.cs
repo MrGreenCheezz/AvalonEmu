@@ -34,6 +34,15 @@ public sealed record MobTemplate
 
     public required string Name { get; init; }
 
+    /// <summary>A module's own type (<c>Server.DefineMob</c>): the mobs.xml name it copies, the one the client knows; null for a mobs.xml type.</summary>
+    public string? BaseName { get; init; }
+
+    /// <summary>The name to send a client.</summary>
+    public string ClientName => BaseName ?? Name;
+
+    /// <summary>NewMob key 6, the owner guild's name; null for none.</summary>
+    public string? Title { get; init; }
+
     public int Tier { get; init; }
 
     /// <summary>faction, as written (UNDEAD, CRITTER, CITY_SWAMP, CITYGUARD; the client lower-cases it).</summary>
@@ -224,6 +233,12 @@ public sealed class MobStore
     public MobTemplate? this[int id] => id - MobTemplate.FirstId is var i && i >= 0 && i < _all.Length ? _all[i] : null;
 
     public MobTemplate? Find(string name) => _byName.GetValueOrDefault(name);
+
+    /// <summary>A module's own type (<c>Server.DefineMob</c>): found by name as the others are, not in <see cref="All"/> nor by id. False when the name is taken.</summary>
+    public bool Define(MobTemplate mob) => _byName.TryAdd(mob.Name, mob);
+
+    /// <summary>Takes a type of <see cref="Define"/> away again.</summary>
+    public void Undefine(string name) => _byName.Remove(name);
 
     /// <summary>Up to <paramref name="count"/> names containing <paramref name="part"/> (ignoring case), shortest first: the hint of an unknown name.</summary>
     public IEnumerable<string> Like(string part, int count = 5) =>

@@ -87,6 +87,7 @@ public sealed class Factions(World world)
         Flagging.Interrupt(p, "the enlistment changed");
         if (Pvp.IsFaction(p.Flag) && p.Flag != faction) Flagging.Set(p, Pvp.Blue);
         p.SendAround(new FactionEnlistmentChangedEvent { ddn = p.Id, b6r = faction });
+        SendRank(p); // stageR fw-campaign: the nameplate rank of the new faction's standing
         Log.Info("faction", $"'{c.Name}' enlisted to {Name(faction)} (was {Name(before)}){(force ? " by a GM" : "")}");
         return (now + Cooldown.Ticks, null);
     }
@@ -113,7 +114,68 @@ public sealed class Factions(World world)
             _ => 0,
         };
         if (factor <= 0) return;
-        Earn(p, (long)Math.Floor(gain * factor), map.Cluster);
+        Earn(p, (long)Math.Floor(gain * factor * GroupFactor(p)), map.Cluster);
+    }
+
+    /// <summary>
+    /// StageR fw-campaign: &lt;factionpointbonus&gt;'s bonusfactor for <paramref name="p"/>'s group (2 → 1.04 … 20 → 1.40; 1 alone): the party members
+    /// on its map that are enlisted to and flagged for its faction, itself included [assume: who counts as the group is not known].
+    /// </summary>
+    public double GroupFactor(Player p)
+    {
+        if (Data is not { GroupBonus.Count: > 0 } data || p.Map is not { } map || world.Parties.Of(p.Character.Id) is not { } party) return 1;
+        var size = party.Members.Count(m => !m.Companion && (m.Id == p.Character.Id
+            || world.Parties.Online(m.Id) is { } o && o.Map == map && o.Faction == p.Faction && o.Flag == p.Faction));
+        size = Math.Min(size, data.GroupBonus.Keys.Max());
+        return data.GroupBonus.TryGetValue(size, out var f) ? f : 1;
+    }
+
+    // ---- the campaign's tally and the nameplate rank (stageR fw-campaign SPEC §1.4, §3) ----
+
+    private readonly Dictionary<Guid, (byte Faction, int Month, long Points)> _tally = [];
+
+    /// <summary>A character's points of <paramref name="month"/> for <paramref name="faction"/> (its latest), for the campaign's per-faction totals.</summary>
+    public void Tally(Guid character, byte faction, int month, long points)
+    {
+        if (faction is >= 1 and <= 6) _tally[character] = (faction, month, points);
+    }
+
+    /// <summary>GetFactionWarfareCampaignData key 5: the points of each faction (index faction − 1) in <paramref name="month"/>, over the characters this server saw.</summary>
+    public long[] TallyOf(int month)
+    {
+        var sums = new long[6];
+        foreach (var (faction, m, points) in _tally.Values)
+            if (m == month) sums[faction - 1] += points;
+        return sums;
+    }
+
+    /// <summary>
+    /// The nameplate rank (NewCharacter key 57, UpdateFactionRank 483 key 1): the 0-based rank of the enlisted faction's standing (the captures
+    /// show 0-20; cp0.af 0x180bd9380 indexes bcg's rank list with it); 0 when not enlisted.
+    /// </summary>
+    public int RankIndex(Character c) => Data is { } data && c.Faction is >= 1 and <= 6 ? data.RankOf(c.FactionStanding[c.Faction - 1]) - 1 : 0;
+
+    /// <summary>UpdateFactionRank (483) {0 the player, 1 <see cref="RankIndex"/>} to <paramref name="p"/> and its observers (cp0.ajv 0x180bda020).</summary>
+    public void SendRank(Player p)
+    {
+        if (p.IsBot) return;
+        p.SendAround(new UpdateFactionRankEvent { ddn = p.Id, d3a = RankIndex(p.Character) });
+    }
+
+    /// <summary>
+    /// <paramref name="raw"/> standing (a7m) to <paramref name="faction"/> up to the max (a daily campaign reward): UpdateFactionStanding 86 and,
+    /// when the enlisted faction's rank changes, 483.
+    /// </summary>
+    public void GrantStanding(Player p, byte faction, long raw)
+    {
+        if (raw <= 0 || Data is not { } data || faction is < 1 or > 6) return;
+        var c = p.Character;
+        var rank = RankIndex(c);
+        var before = c.FactionStanding[faction - 1];
+        c.FactionStanding[faction - 1] = Math.Min(data.MaxStanding * 10000, before + raw);
+        world.Saves.MarkChanged(c);
+        if (c.FactionStanding[faction - 1] > before) SendStanding(p, faction, c.FactionStanding[faction - 1] - before);
+        if (RankIndex(c) != rank) SendRank(p);
     }
 
     /// <summary>
@@ -137,7 +199,11 @@ public sealed class Factions(World world)
         if (points > 0) SendCurrency(p, p.Faction, points, cluster is null ? General : FromCluster, cluster);
         if (c.FactionStanding[i] > before) SendStanding(p, p.Faction, c.FactionStanding[i] - before);
         if (data.RankOf(c.FactionStanding[i]) > rankBefore)
+        {
             Log.Info("faction", $"'{c.Name}' reached {faction.Name} rank {data.RankOf(c.FactionStanding[i])}");
+            SendRank(p); // stageR fw-campaign: the nameplate rank
+        }
+        FactionCampaign.OnPoints(p, points); // stageR fw-campaign: the day's, month's and week's points and their rewards
     }
 
     /// <summary>UpdateCurrency (85) for the FACTION_* currency of <paramref name="faction"/>: {0 reason, 1 the cluster, 2 the index, 3 the gain, 9 the total}.</summary>
@@ -158,6 +224,7 @@ public sealed class Factions(World world)
     public void JoinKeys(Character c, JoinResponse r)
     {
         r.ba7 = [.. c.FactionStanding];
+        if (c.Goals?.FactionCampaign is { } log) Tally(c.Id, c.Faction, log.Month, log.MonthPoints); // stageR fw-campaign: the saved month's points
         if (Data is not { } data) return;
         var currencies = new Dictionary<int, long>();
         for (byte f = 1; f <= 6; f++)

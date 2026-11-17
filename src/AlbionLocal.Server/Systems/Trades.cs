@@ -252,7 +252,7 @@ public sealed class Trades(World world)
             var max = WorldSession.MaxStack(type);
             var fame = type.IsJournal ? record.Fame ?? Item.DefaultFame(type) : 0;
             var alone = type.Journal is { } j && fame > 0 && fame < j.MaxFame;
-            var stack = max > 1 && !alone ? Array.FindIndex(slots, x => x is { } v && v.Type == type && v.Fame == fame && !v.Alone && v.Count + count <= max) : -1;
+            var stack = max > 1 && !alone && !type.IsEquipment ? Array.FindIndex(slots, x => x is { } v && v.Type == type && v.Fame == fame && !v.Alone && v.Count + count <= max) : -1;
             if (stack >= 0)
             {
                 var v = slots[stack]!.Value;

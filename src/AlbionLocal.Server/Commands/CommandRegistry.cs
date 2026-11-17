@@ -161,6 +161,9 @@ public sealed class CommandRegistry
     /// </summary>
     public void Execute(CommandContext ctx, string line)
     {
+        if (ctx.World.Modules.BeforeCommand(ctx, line)) return; // the modules' Players.OnBeforeCommand
+        // A module's command (docs/modules/README.md) when its path is longer than any built-in one the line starts with.
+        if (ctx.World.Modules.TryRun(ctx, line)) return;
         try
         {
             var (command, args) = Parse(ctx, line);

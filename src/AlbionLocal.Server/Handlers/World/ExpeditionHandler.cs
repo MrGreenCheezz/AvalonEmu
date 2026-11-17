@@ -114,6 +114,17 @@ public sealed partial class WorldSession
             }
             return null; // accepted: the 4 s bar runs until 255 or 254
         }
+        // StageR dragon areas: an instance's exit (695, DragonAreaExitObjectView.EnterExit → c32.q), Systems/DragonAreas.
+        if (player.Map is { } da && da.Objects.TryGetValue(req.kq, out var dx) && dx is DragonAreaExit dragonExit)
+        {
+            if (world.DragonAreas.StartExit(player, dragonExit) is { } no)
+            {
+                Log.Info(Name, $"'{player.Character.Name}' dragon area exit {req.kq} refused: {no}");
+                SendEvent(new ExitEnterCancelEvent { ddn = player.Id });
+                return new GenericResponse();
+            }
+            return null; // accepted: the bar runs until 255 or 254
+        }
         if (world.Expeditions.StartExit(player, req.kq) is { } why)
         {
             Log.Info(Name, $"'{player.Character.Name}' exit object {req.kq} refused: {why}");
@@ -127,7 +138,8 @@ public sealed partial class WorldSession
     [Handles(OperationCodes.ExitEnterCancel, Status = SessionStatus.InWorld)]
     private AlbionResponse? ExitEnterCancel(ExitEnterCancelRequest req)
     {
-        if (Player is { } player && !world.Dungeons.CancelExit(player, "cancelled by the client") && !world.Hideouts.CancelChannel(player, "cancelled by the client"))
+        if (Player is { } player && !world.Dungeons.CancelExit(player, "cancelled by the client") && !world.Hideouts.CancelChannel(player, "cancelled by the client")
+            && !world.DragonAreas.CancelExit(player, "cancelled by the client"))
             world.Expeditions.CancelExit(player, "cancelled by the client");
         return new GenericResponse();
     }

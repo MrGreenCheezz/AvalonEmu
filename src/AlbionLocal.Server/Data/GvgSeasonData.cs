@@ -65,7 +65,24 @@ public sealed record MightFameRule(string Objective, double Factor, double SoloD
 public sealed record MightRules(IReadOnlyDictionary<string, MightFameRule> Fame, IReadOnlyDictionary<string, (string Type, double Might)> Objectives)
 {
     public static readonly MightRules None = new(new Dictionary<string, MightFameRule>(), new Dictionary<string, (string, double)>());
+
+    /// <summary>
+    /// StageR stats: the personaltype of a fame rule (by its element: gathering GATHERING, fishing FISHING) or an objective (by uniquename:
+    /// PVPCHALLENGE_CORRUPTED_SLAYER CORRUPTED_SLAYER); none = the season's category of its type (pve: PVE), as the client's bep.b.ab.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Personal { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>The Conqueror's Challenge's weeklychallenge (stageR stats SPEC §3); null without the file.</summary>
+    public WeeklyChallenge? Weekly { get; init; }
 }
+
+/// <summary>
+/// pvpchallenge's weeklychallenge: the chest (itemreward) at its mightrequirement and the favor rewards on the way (all a7m raw).
+/// </summary>
+public sealed record WeeklyChallenge(string Item, long Might, IReadOnlyList<WeeklyReward> Rewards);
+
+/// <summary>A weeklychallenge reward: favor at a weekly might (a7m raw); who gets it (nonpremium, premium).</summary>
+public sealed record WeeklyReward(long Might, long Favor, bool NonPremium, bool Premium);
 
 /// <summary>
 /// One guild season (stageI guild-goals SPEC §1.2, §2.1): a season of the client's gvgseasons file (<see cref="Index"/> = its 0-based
@@ -271,6 +288,7 @@ public sealed class GvgSeasonData
     {
         var fame = new Dictionary<string, MightFameRule>(StringComparer.Ordinal);
         var objectives = new Dictionary<string, (string, double)>(StringComparer.Ordinal);
+        var personal = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var e in pvpchallenge.Element("pvpchallengeobjectives")?.Elements() ?? [])
         {
             if (e.Name.LocalName == "objective")
@@ -279,8 +297,16 @@ public sealed class GvgSeasonData
                 fame[e.Name.LocalName] = new MightFameRule(XmlAttr.Str(e, "objectivetype"), D(e, "fametomightfactor", 0), D(e, "solorandomdungeonfactor", 1),
                     e.Elements("dangerbonustypemultiplier").GroupBy(m => XmlAttr.Str(m, "pvpwarningtype"), StringComparer.OrdinalIgnoreCase)
                         .ToDictionary(m => m.Key, m => D(m.First(), "mightandfavormultiplier", 1), StringComparer.OrdinalIgnoreCase));
+            // stageR stats: the personaltype the personal might list shows (bep.b.ab: personaltype, else the season's category of the type).
+            if (XmlAttr.Str(e, "personaltype") is { Length: > 0 } type)
+                personal[e.Name.LocalName == "objective" ? XmlAttr.Str(e, "uniquename") : e.Name.LocalName] = type;
         }
-        return new MightRules(fame, objectives);
+        var weekly = pvpchallenge.Element("weeklychallenge") is { } w
+            ? new WeeklyChallenge(XmlAttr.Str(w, "itemreward"), (long)Math.Round(D(w, "mightrequirement", 0) * 10000),
+                [.. w.Elements("reward").Select(r => new WeeklyReward((long)Math.Round(D(r, "mightrequirement", 0) * 10000), (long)Math.Round(D(r, "favor", 0) * 10000),
+                    XmlAttr.Str(r, "nonpremium") == "true", XmlAttr.Str(r, "premium") == "true"))])
+            : null;
+        return new MightRules(fame, objectives) { Personal = personal, Weekly = weekly };
     }
 
     /// <summary>

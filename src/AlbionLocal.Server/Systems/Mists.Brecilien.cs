@@ -183,12 +183,15 @@ public sealed partial class Mists
         var c = p.Character;
         if (recipe.Standing is { } st)
         {
-            if (!st.Type.Equals("mistcity", StringComparison.OrdinalIgnoreCase)) return $"the {st.Type} standing is not kept on this server";
-            if (c.MistStanding < (long)Math.Round(st.Min * 10000))
+            // stageR smugglers: the den trader's smugglers standing gates as the City Trader's mistcity ones
+            long? held = st.Type.Equals("mistcity", StringComparison.OrdinalIgnoreCase) ? c.MistStanding
+                : st.Type.Equals("smugglers", StringComparison.OrdinalIgnoreCase) ? c.SmugglerStanding : null;
+            if (held is not { } have) return $"the {st.Type} standing is not kept on this server";
+            if (have < (long)Math.Round(st.Min * 10000))
             {
                 Expeditions.Tell(p, Settings.Text("StandingTooLow", ("need", st.Min.ToString("N0", CultureInfo.InvariantCulture)),
-                    ("have", (c.MistStanding / 10000).ToString("N0", CultureInfo.InvariantCulture))));
-                return string.Create(CultureInfo.InvariantCulture, $"standing {c.MistStanding / 10000} of {st.Min:0}");
+                    ("have", (have / 10000).ToString("N0", CultureInfo.InvariantCulture))));
+                return string.Create(CultureInfo.InvariantCulture, $"{st.Type} standing {have / 10000} of {st.Min:0}");
             }
         }
         foreach (var (name, amount) in recipe.Currencies)

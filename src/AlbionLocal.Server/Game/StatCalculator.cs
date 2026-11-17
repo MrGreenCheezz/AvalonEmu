@@ -4,7 +4,8 @@ namespace AlbionLocal.Server.Game;
 /// An item in an equipment slot: type id, quality (NewEquipmentItem key 7; 0 = 1) and durability as
 /// a7m raw (key 8, 10000 = 1 items.xml durability point).
 /// </summary>
-public sealed record EquippedItem(short TypeIndex, int Quality, long DurabilityRaw);
+/// <see cref="Bonus"/>: item power on top (an overcharge, stageR items SPEC §2).
+public sealed record EquippedItem(short TypeIndex, int Quality, long DurabilityRaw, float Bonus = 0);
 
 /// <summary>
 /// Player bars as the server sends them: Join keys 12/14, 17/19, 22/24 and
@@ -156,7 +157,7 @@ public sealed class StatCalculator(GameData data)
         if (Data.Item(e.TypeIndex) is not { } item) return 0;
         var basePower = (float)item.ItemPower + (float)Data.QualityItemPower.GetValueOrDefault(e.Quality);
         var bonus = (1f + (float)item.MasteryModifier) * DestinyBonus(e.TypeIndex, levels);
-        return basePower + (bonus - (float)Data.DurabilityPenalty(item, e.DurabilityRaw));
+        return basePower + (bonus - (float)Data.DurabilityPenalty(item, e.DurabilityRaw)) + e.Bonus;
     }
 
     /// <summary>
